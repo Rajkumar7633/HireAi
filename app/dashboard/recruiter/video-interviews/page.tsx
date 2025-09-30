@@ -6,13 +6,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { InterviewPipelineDashboard } from "@/components/interview-pipeline-dashboard";
 import { InterviewNotificationSystem } from "@/components/interview-notification-system";
 import {
   Video,
-  Calendar,
+  CalendarIcon,
   Clock,
   Plus,
   Search,
@@ -54,6 +56,7 @@ export default function VideoInterviewsPage() {
   const [selectedFilter, setSelectedFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
   const [showPipeline, setShowPipeline] = useState(false);
   const [showRescheduleModal, setShowRescheduleModal] = useState<null | { id: string; current: VideoInterview }>(null);
   const [rescheduling, setRescheduling] = useState(false);
@@ -65,6 +68,9 @@ export default function VideoInterviewsPage() {
     duration: 60,
     notes: "",
   });
+  // Calendar + time for Schedule modal
+  const [schedDate, setSchedDate] = useState<Date | undefined>(undefined);
+  const [schedTime, setSchedTime] = useState<string>("");
   const router = useRouter();
   const { toast } = useToast();
 
@@ -124,16 +130,38 @@ export default function VideoInterviewsPage() {
   };
 
   const handleScheduleInterview = async () => {
+    // Basic validation
+    const emailOk = /.+@.+\..+/.test(scheduleForm.candidateEmail.trim());
+    if (!scheduleForm.candidateName.trim()) return toast({ title: "Candidate name required", variant: "destructive" });
+    if (!emailOk) return toast({ title: "Valid email required", variant: "destructive" });
+    if (!scheduleForm.position.trim()) return toast({ title: "Position required", variant: "destructive" });
+    // Build datetime from calendar + time
+    if (!schedDate) return toast({ title: "Pick a date", variant: "destructive" });
+    if (!schedTime) return toast({ title: "Pick a time", variant: "destructive" });
+    const [hh, mm] = schedTime.split(":").map((v) => parseInt(v || "0", 10));
+    const when = new Date(schedDate);
+    when.setHours(hh || 0, mm || 0, 0, 0);
+    if (Number.isNaN(when.getTime())) return toast({ title: "Invalid date/time", variant: "destructive" });
+    if (when.getTime() < Date.now() - 60_000) return toast({ title: "Date must be in the future", variant: "destructive" });
+
     try {
+      setScheduling(true);
+      const payload = {
+        ...scheduleForm,
+        candidateEmail: scheduleForm.candidateEmail.trim(),
+        candidateName: scheduleForm.candidateName.trim(),
+        position: scheduleForm.position.trim(),
+        scheduledDate: when.toISOString(),
+      };
+
       const response = await fetch("/api/video-interviews", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(scheduleForm),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {
+        toast({ title: "Scheduled", description: "Invite created and saved." });
         setShowScheduleModal(false);
         setScheduleForm({
           candidateEmail: "",
@@ -143,11 +171,18 @@ export default function VideoInterviewsPage() {
           duration: 60,
           notes: "",
         });
+        setSchedDate(undefined);
+        setSchedTime("");
         fetchInterviews();
+      } else {
+        const t = await response.text();
+        toast({ title: "Failed to schedule", description: t || "Please try again.", variant: "destructive" });
       }
     } catch (error) {
       console.error("Error scheduling interview:", error);
+      toast({ title: "Schedule error", description: String(error), variant: "destructive" });
     }
+    setScheduling(false);
   };
 
   const handleJoinInterview = async (interviewId: string) => {
@@ -285,7 +320,7 @@ export default function VideoInterviewsPage() {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "scheduled":
-        return <Calendar className="w-4 h-4" />;
+        return <CalendarIcon className="w-4 h-4" />;
       case "in-progress":
         return <Play className="w-4 h-4" />;
       case "completed":
@@ -393,7 +428,7 @@ export default function VideoInterviewsPage() {
                   {stats.scheduled}
                 </p>
               </div>
-              <Calendar className="w-8 h-8 text-blue-600" />
+              <CalendarIcon className="w-8 h-8 text-blue-600" />
             </div>
           </CardContent>
         </Card>
@@ -620,101 +655,84 @@ export default function VideoInterviewsPage() {
 
       {/* Schedule Modal */}
       {showScheduleModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <Card className="w-full max-w-md">
-            <CardHeader>
-              <CardTitle>Schedule Video Interview</CardTitle>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-2xl shadow-2xl border-0">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-2xl">Schedule Video Interview</CardTitle>
+              <p className="text-sm text-gray-500">Send a calendar invite and meeting link to the candidate.</p>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <label className="text-sm font-medium">Candidate Name</label>
-                <Input
-                  placeholder="John Doe"
-                  value={scheduleForm.candidateName}
-                  onChange={(e) =>
-                    setScheduleForm({
-                      ...scheduleForm,
-                      candidateName: e.target.value,
-                    })
-                  }
-                />
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium">Candidate Name<span className="text-red-500"> *</span></label>
+                  <Input
+                    placeholder="John Doe"
+                    value={scheduleForm.candidateName}
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, candidateName: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Candidate Email<span className="text-red-500"> *</span></label>
+                  <Input
+                    type="email"
+                    placeholder="candidate@example.com"
+                    value={scheduleForm.candidateEmail}
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, candidateEmail: e.target.value })}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-sm font-medium">Position<span className="text-red-500"> *</span></label>
+                  <Input
+                    placeholder="Senior Developer"
+                    value={scheduleForm.position}
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, position: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Date<span className="text-red-500"> *</span></label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-start text-left font-normal">
+                        {schedDate ? new Date(schedDate).toLocaleDateString() : "Pick a date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="p-0" align="start">
+                      <Calendar mode="single" selected={schedDate} onSelect={setSchedDate} disabled={(d) => d < new Date(new Date().setHours(0,0,0,0))} />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Time<span className="text-red-500"> *</span></label>
+                  <Input type="time" step={300} value={schedTime} onChange={(e) => setSchedTime(e.target.value)} />
+                  <p className="text-xs text-gray-500 mt-1">Timezone: {Intl.DateTimeFormat().resolvedOptions().timeZone}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Duration (minutes)</label>
+                  <Input
+                    type="number"
+                    min={15}
+                    step={15}
+                    placeholder="60"
+                    value={scheduleForm.duration}
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, duration: Number.parseInt(e.target.value || "60") })}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-sm font-medium">Notes</label>
+                  <Textarea
+                    placeholder="Interview notes, topics, panel, etc."
+                    value={scheduleForm.notes}
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, notes: e.target.value })}
+                  />
+                </div>
               </div>
-              <div>
-                <label className="text-sm font-medium">Candidate Email</label>
-                <Input
-                  placeholder="candidate@example.com"
-                  value={scheduleForm.candidateEmail}
-                  onChange={(e) =>
-                    setScheduleForm({
-                      ...scheduleForm,
-                      candidateEmail: e.target.value,
-                    })
-                  }
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Position</label>
-                <Input
-                  placeholder="Senior Developer"
-                  value={scheduleForm.position}
-                  onChange={(e) =>
-                    setScheduleForm({
-                      ...scheduleForm,
-                      position: e.target.value,
-                    })
-                  }
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Date & Time</label>
-                <Input
-                  type="datetime-local"
-                  value={scheduleForm.scheduledDate}
-                  onChange={(e) =>
-                    setScheduleForm({
-                      ...scheduleForm,
-                      scheduledDate: e.target.value,
-                    })
-                  }
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium">
-                  Duration (minutes)
-                </label>
-                <Input
-                  type="number"
-                  placeholder="60"
-                  value={scheduleForm.duration}
-                  onChange={(e) =>
-                    setScheduleForm({
-                      ...scheduleForm,
-                      duration: Number.parseInt(e.target.value),
-                    })
-                  }
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Notes</label>
-                <Textarea
-                  placeholder="Interview notes..."
-                  value={scheduleForm.notes}
-                  onChange={(e) =>
-                    setScheduleForm({
-                      ...scheduleForm,
-                      notes: e.target.value,
-                    })
-                  }
-                />
-              </div>
-              <div className="flex justify-end space-x-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowScheduleModal(false)}
-                >
-                  Cancel
-                </Button>
-                <Button onClick={handleScheduleInterview}>Schedule</Button>
+
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-gray-500">A calendar invite will be emailed to the candidate.</p>
+                <div className="space-x-2">
+                  <Button variant="outline" onClick={() => setShowScheduleModal(false)} disabled={scheduling}>Cancel</Button>
+                  <Button onClick={handleScheduleInterview} disabled={scheduling}>{scheduling ? "Scheduling..." : "Schedule"}</Button>
+                </div>
               </div>
             </CardContent>
           </Card>

@@ -20,14 +20,32 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // Allow access to public paths
+  // Read token once for potential smart redirects
+  const cookieToken = request.cookies.get("auth-token")?.value
+
+  // If user is already authenticated, redirect away from landing/login/signup to role dashboard
   if (publicPaths.includes(pathname)) {
+    try {
+      if (cookieToken) {
+        const session = await verifyTokenEdge(cookieToken)
+        if (session?.userId) {
+          const url = new URL("/dashboard", request.url)
+          if (session.role === "recruiter") url.pathname = "/dashboard/recruiter"
+          else if (session.role === "job_seeker") url.pathname = "/dashboard/job-seeker"
+          else if (session.role === "admin") url.pathname = "/dashboard/admin"
+          console.log("➡️ Authenticated user on public page, redirecting to:", url.pathname)
+          return NextResponse.redirect(url)
+        }
+      }
+    } catch (e) {
+      console.log("⚠️ Smart redirect check failed:", e)
+    }
     console.log("✅ Public path, allowing access")
     return NextResponse.next()
   }
 
-  // Check for authentication token
-  const token = request.cookies.get("auth-token")?.value
+  // Check for authentication token for protected routes
+  const token = cookieToken || request.cookies.get("auth-token")?.value
   console.log("🍪 Token from cookies:", token ? `${token.substring(0, 20)}...` : "NOT FOUND")
 
   if (!token) {

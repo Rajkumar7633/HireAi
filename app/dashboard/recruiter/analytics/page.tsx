@@ -14,10 +14,12 @@ import {
   Filter,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
-  SelectContent,
+  SelectContent,  
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -28,7 +30,7 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
+  Tooltip as RechartsTooltip,
   ResponsiveContainer,
   PieChart,
   Pie,
@@ -112,6 +114,7 @@ export default function RecruiterAnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState("6months");
+  const [normalizeFunnel, setNormalizeFunnel] = useState(true);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -175,35 +178,60 @@ export default function RecruiterAnalyticsPage() {
     }
   };
 
-  const funnelData = advancedMetrics
+  // Normalize funnel to avoid increasing values downstream
+  const rawFunnel = advancedMetrics
     ? [
-        {
-          name: "Applied",
-          value: advancedMetrics.hiringFunnel.applied,
-          fill: COLORS[0],
-        },
-        {
-          name: "Screened",
-          value: advancedMetrics.hiringFunnel.screened,
-          fill: COLORS[1],
-        },
-        {
-          name: "Interviewed",
-          value: advancedMetrics.hiringFunnel.interviewed,
-          fill: COLORS[2],
-        },
-        {
-          name: "Offered",
-          value: advancedMetrics.hiringFunnel.offered,
-          fill: COLORS[3],
-        },
-        {
-          name: "Hired",
-          value: advancedMetrics.hiringFunnel.hired,
-          fill: COLORS[4],
-        },
+        { name: "Applied", value: advancedMetrics.hiringFunnel.applied, fill: COLORS[0] },
+        { name: "Screened", value: advancedMetrics.hiringFunnel.screened, fill: COLORS[1] },
+        { name: "Interviewed", value: advancedMetrics.hiringFunnel.interviewed, fill: COLORS[2] },
+        { name: "Offered", value: advancedMetrics.hiringFunnel.offered, fill: COLORS[3] },
+        { name: "Hired", value: advancedMetrics.hiringFunnel.hired, fill: COLORS[4] },
       ]
     : [];
+  const normalized = rawFunnel.reduce((acc: any[], stage) => {
+    const prev = acc.length ? acc[acc.length - 1].value : stage.value;
+    acc.push({ ...stage, value: Math.min(stage.value, prev) });
+    return acc;
+  }, [] as any[]);
+  const funnelData = normalizeFunnel ? normalized : rawFunnel;
+
+  // Simple targets for each step (percent of previous stage)
+  const TARGETS: Record<string, number> = {
+    Screened: 80,
+    Interviewed: 60,
+    Offered: 30,
+    Hired: 20,
+  };
+
+  const downloadFunnelCsv = () => {
+    const rows = [
+      ["Stage", "Raw", "Normalized", "% from Prev", "% from Applied"],
+      ...rawFunnel.map((stage, idx) => {
+        const prevRaw = idx > 0 ? rawFunnel[idx - 1].value : stage.value;
+        const fromPrev = prevRaw > 0 ? (stage.value / prevRaw) * 100 : 0;
+        const applied = rawFunnel[0]?.value || 0;
+        const fromApplied = applied > 0 ? (stage.value / applied) * 100 : 0;
+        const normVal = funnelData[idx]?.value ?? stage.value;
+        return [
+          stage.name,
+          String(stage.value),
+          String(normVal),
+          fromPrev.toFixed(1),
+          fromApplied.toFixed(1),
+        ];
+      }),
+    ];
+    const csv = rows.map((r) => r.join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `hiring_funnel_${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   const costBreakdownData = advancedMetrics
     ? [
@@ -245,7 +273,11 @@ export default function RecruiterAnalyticsPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold">Advanced Analytics</h1>
-        <div className="flex gap-2">
+        <div className="flex gap-4 items-center">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Normalize Funnel</span>
+            <Switch checked={normalizeFunnel} onCheckedChange={setNormalizeFunnel} />
+          </div>
           <Select value={timeRange} onValueChange={setTimeRange}>
             <SelectTrigger className="w-40">
               <Filter className="h-4 w-4 mr-2" />
@@ -268,6 +300,9 @@ export default function RecruiterAnalyticsPage() {
           >
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
+          </Button>
+          <Button onClick={downloadFunnelCsv} size="sm">
+            Download CSV
           </Button>
         </div>
       </div>
@@ -342,9 +377,10 @@ export default function RecruiterAnalyticsPage() {
                 <div className="text-2xl font-bold">
                   {advancedMetrics
                     ? (
-                        (advancedMetrics.hiringFunnel.hired /
-                          advancedMetrics.hiringFunnel.applied) *
-                        100
+                        (advancedMetrics.hiringFunnel.applied > 0
+                          ? (advancedMetrics.hiringFunnel.hired /
+                              advancedMetrics.hiringFunnel.applied) * 100
+                          : 0)
                       ).toFixed(1)
                     : 0}
                   %
@@ -371,7 +407,7 @@ export default function RecruiterAnalyticsPage() {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="month" />
                       <YAxis />
-                      <Tooltip />
+                      <RechartsTooltip />
                       <Legend />
                       <Line
                         type="monotone"
@@ -443,7 +479,19 @@ export default function RecruiterAnalyticsPage() {
         <TabsContent value="funnel" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Hiring Funnel Analysis</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle>Hiring Funnel Analysis</CardTitle>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Target className="h-4 w-4 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="max-w-xs text-sm">Toggle “Normalize Funnel” to enforce a decreasing funnel (each stage cannot exceed the previous). Turn off to see raw counts.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
               <CardDescription>
                 Track candidate progression through your hiring process
               </CardDescription>
@@ -476,15 +524,24 @@ export default function RecruiterAnalyticsPage() {
                         {index > 0 && (
                           <div className="text-xs text-muted-foreground mt-1">
                             {(
-                              (stage.value / funnelData[index - 1].value) *
-                              100
+                              funnelData[index - 1].value > 0
+                                ? (stage.value / funnelData[index - 1].value) * 100
+                                : 0
                             ).toFixed(1)}
                             % conversion
+                          </div>
+                        )}
+                        {index > 0 && TARGETS[stage.name] !== undefined && (
+                          <div className="text-[11px] text-gray-500 mt-0.5">
+                            Target: {TARGETS[stage.name]}% of previous
                           </div>
                         )}
                       </div>
                     ))}
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Status mapping used: applied → screened("screening") → interviewed("interview") → offered("offered") → hired("hired").
+                  </p>
                 </div>
               ) : (
                 <div className="flex items-center justify-center h-[400px] text-muted-foreground">
@@ -579,7 +636,7 @@ export default function RecruiterAnalyticsPage() {
                           <Cell key={`cell-${index}`} fill={entry.fill} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(value) => `$${value}`} />
+                      <RechartsTooltip formatter={(value) => `$${value}`} />
                       <Legend />
                     </PieChart>
                   </ResponsiveContainer>
