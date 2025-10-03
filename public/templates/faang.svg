@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800" viewBox="0 0 600 800">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#2563eb"/>
+    </linearGradient>
+  </defs>
+  <rect width="100%" height="100%" fill="#f8fafc"/>
+  <rect x="40" y="40" width="520" height="60" rx="8" fill="url(#g)"/>
+  <rect x="40" y="120" width="520" height="14" rx="3" fill="#0f172a"/>
+  <rect x="40" y="144" width="420" height="10" rx="3" fill="#334155"/>
+  <rect x="40" y="190" width="520" height="12" rx="3" fill="#0f172a"/>
+  <g fill="#e2e8f0">
+    <rect x="40" y="214" width="90" height="20" rx="4"/>
+    <rect x="136" y="214" width="90" height="20" rx="4"/>
+    <rect x="232" y="214" width="90" height="20" rx="4"/>
+    <rect x="328" y="214" width="90" height="20" rx="4"/>
+    <rect x="424" y="214" width="90" height="20" rx="4"/>
+  </g>
+  <g fill="#111827">
+    <rect x="40" y="270" width="280" height="12" rx="3"/>
+    <rect x="40" y="292" width="200" height="10" rx="3"/>
+    <rect x="40" y="314" width="400" height="8" rx="3"/>
+    <rect x="40" y="334" width="360" height="8" rx="3"/>
+  </g>
+  <g fill="#111827" opacity="0.9">
+    <rect x="40" y="390" width="300" height="12" rx="3"/>
+    <rect x="40" y="412" width="440" height="8" rx="3"/>
+    <rect x="40" y="430" width="420" height="8" rx="3"/>
+    <rect x="40" y="448" width="410" height="8" rx="3"/>
+  </g>
+  <g fill="#111827" opacity="0.9">
+    <rect x="40" y="510" width="300" height="12" rx="3"/>
+    <rect x="40" y="532" width="440" height="8" rx="3"/>
+    <rect x="40" y="550" width="420" height="8" rx="3"/>
+  </g>
+  <text x="50" y="80" font-size="20" font-family="Arial" fill="#fff">FAANG Optimized</text>
+</svg>

@@ -27,7 +27,7 @@ const templates: Template[] = [
     name: "FAANG Optimized",
     description:
       "Designed specifically for top tech companies like Google, Apple, Facebook, Amazon, Netflix",
-    preview: "/api/placeholder/300/400?text=FAANG+Template",
+    preview: "/templates/faang.svg",
     recommended: true,
     features: [
       "ATS-friendly format",
@@ -41,7 +41,7 @@ const templates: Template[] = [
     id: "minimal",
     name: "Minimal Professional",
     description: "Clean and simple design that works for any industry",
-    preview: "/api/placeholder/300/400?text=Minimal+Template",
+    preview: "/templates/minimal.svg",
     recommended: false,
     features: [
       "Simple, clean design",
@@ -54,7 +54,7 @@ const templates: Template[] = [
     id: "modern",
     name: "Modern Creative",
     description: "Contemporary design with subtle visual elements",
-    preview: "/api/placeholder/300/400?text=Modern+Template",
+    preview: "/templates/modern.svg",
     recommended: false,
     features: [
       "Modern typography",

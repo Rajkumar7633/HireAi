@@ -23,13 +23,20 @@ import {
   Download,
   Eye,
   EyeOff,
+  Wand2,
+  ArrowUp,
+  ArrowDown,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Badge } from "@/components/ui/badge";
 import { ResumePreview } from "@/components/resume-preview";
 import { TemplateSelector } from "@/components/template-selector";
 import { exportToPDF, exportToHTML } from "@/utils/pdf-export";
+import { exportToDoc } from "@/utils/doc-export";
 import { format, parseISO } from "date-fns";
+import { Switch } from "@/components/ui/switch";
 
 interface PersonalInfo {
   name: string;
@@ -190,11 +197,62 @@ export default function ResumeBuilderPage() {
   const [showPreview, setShowPreview] = useState(true);
   const [showFAANGTips, setShowFAANGTips] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [fontScale, setFontScale] = useState(1);
+  const [themeAccent, setThemeAccent] = useState<string>("#7c3aed");
+  const [themeFont, setThemeFont] = useState<string>("");
+  const [jobDesc, setJobDesc] = useState<string>("");
+  const [sections, setSections] = useState({
+    summary: true,
+    skills: true,
+    experience: true,
+    projects: true,
+    education: true,
+    certifications: true,
+    awards: true,
+    languages: true,
+    interests: true,
+  });
   const { toast } = useToast();
 
   useEffect(() => {
+    // Try restore from localStorage first
+    const saved = typeof window !== "undefined" ? localStorage.getItem("resumeBuilderData") : null;
+    const savedTemplate = typeof window !== "undefined" ? localStorage.getItem("resumeBuilderTemplate") : null;
+    const savedScale = typeof window !== "undefined" ? localStorage.getItem("resumeBuilderScale") : null;
+    const savedSections = typeof window !== "undefined" ? localStorage.getItem("resumeBuilderSections") : null;
+    const savedAccent = typeof window !== "undefined" ? localStorage.getItem("resumeBuilderAccent") : null;
+    const savedFont = typeof window !== "undefined" ? localStorage.getItem("resumeBuilderFont") : null;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setResume(parsed);
+        if (savedTemplate) setSelectedTemplate(savedTemplate);
+        if (savedScale) setFontScale(parseFloat(savedScale));
+        if (savedSections) setSections(JSON.parse(savedSections));
+        if (savedAccent) setThemeAccent(savedAccent);
+        if (savedFont) setThemeFont(savedFont);
+        setLoading(false);
+        return;
+      } catch {}
+    }
     fetchResume();
   }, []);
+
+  // Autosave (debounced)
+  useEffect(() => {
+    if (loading) return;
+    const t = setTimeout(() => {
+      try {
+        localStorage.setItem("resumeBuilderData", JSON.stringify(resume));
+        localStorage.setItem("resumeBuilderTemplate", selectedTemplate);
+        localStorage.setItem("resumeBuilderScale", String(fontScale));
+        localStorage.setItem("resumeBuilderSections", JSON.stringify(sections));
+        localStorage.setItem("resumeBuilderAccent", themeAccent);
+        localStorage.setItem("resumeBuilderFont", themeFont);
+      } catch {}
+    }, 800);
+    return () => clearTimeout(t);
+  }, [resume, selectedTemplate, fontScale, sections, themeAccent, themeFont, loading]);
 
   const fetchResume = async () => {
     setLoading(true);
@@ -241,6 +299,49 @@ export default function ResumeBuilderPage() {
                 : "",
             })) || [],
         };
+
+  const tailorBulletsFromJD = (index: number) => {
+    const jd = jobDesc.toLowerCase();
+    const want = (kw: string) => jd.includes(kw.toLowerCase());
+    const exp = resume.experience[index];
+    const tech = resume.skills.slice(0, 8);
+    const picked = tech.filter((t) => want(t));
+    const techLine = (picked.length ? picked : tech).slice(0, 5).join(", ");
+    const role = exp.title || "Engineer";
+    const bullets = [
+      `${role} experience aligning with JD: ${techLine}.` ,
+      want("scale") || want("scalable")
+        ? "Designed and scaled services to handle high traffic with robust monitoring and alerting."
+        : "Delivered reliable features with strong testing and review practices.",
+      want("performance")
+        ? "Optimized performance (p95 latency and throughput), improving user experience measurably."
+        : "Streamlined workflows to improve developer velocity and quality.",
+      want("lead") || want("leadership")
+        ? "Led cross-functional collaboration and mentored teammates to hit deadlines."
+        : "Collaborated with PM/Design to deliver on-time releases.",
+    ];
+    setResume((prev) => {
+      const next = [...prev.experience];
+      next[index] = { ...next[index], description: bullets } as Experience;
+      return { ...prev, experience: next };
+    });
+  };
+
+  const getValidationIssues = (): string[] => {
+    const issues: string[] = [];
+    if (!resume.personalInfo.name?.trim()) issues.push("Full Name is required");
+    if (!resume.personalInfo.email?.trim()) issues.push("Email is required");
+    resume.experience.forEach((e, i) => {
+      if (!e.title?.trim()) issues.push(`Experience #${i + 1}: title`);
+      if (!e.company?.trim()) issues.push(`Experience #${i + 1}: company`);
+      if (!e.startDate?.trim()) issues.push(`Experience #${i + 1}: start date`);
+    });
+    resume.education.forEach((e, i) => {
+      if (!e.degree?.trim()) issues.push(`Education #${i + 1}: degree`);
+      if (!e.institution?.trim()) issues.push(`Education #${i + 1}: institution`);
+    });
+    return issues;
+  };
         setResume(formattedData);
       } else if (response.status === 404) {
         setResume(defaultResume);
@@ -256,6 +357,14 @@ export default function ResumeBuilderPage() {
   const handleSaveResume = async () => {
     setSaving(true);
     try {
+      const issues = getValidationIssues();
+      if (issues.length) {
+        toast({
+          title: "Some required info is missing",
+          description: issues.join("; "),
+          variant: "destructive",
+        });
+      }
       // Simulated API call
       await new Promise((resolve) => setTimeout(resolve, 1000));
       toast({
@@ -276,6 +385,14 @@ export default function ResumeBuilderPage() {
   const handleExportPDF = async () => {
     setExporting(true);
     try {
+      const issues = getValidationIssues();
+      if (issues.length) {
+        toast({
+          title: "Validation warnings",
+          description: "Fix required fields before applying to jobs: " + issues.slice(0, 3).join("; ") + (issues.length > 3 ? " …" : ""),
+          variant: "destructive",
+        });
+      }
       const success = await exportToPDF(
         "resume-preview",
         `${resume.personalInfo.name || "resume"}.pdf`
@@ -303,6 +420,14 @@ export default function ResumeBuilderPage() {
 
   const handleExportHTML = async () => {
     try {
+      const issues = getValidationIssues();
+      if (issues.length) {
+        toast({
+          title: "Validation warnings",
+          description: "Some required fields are missing: " + issues.join(", "),
+          variant: "destructive",
+        });
+      }
       const success = exportToHTML(
         "resume-preview",
         `${resume.personalInfo.name || "resume"}.html`
@@ -358,6 +483,61 @@ export default function ResumeBuilderPage() {
         (newExperience[index] as any)[field] = value;
       }
       return { ...prev, experience: newExperience };
+    });
+  };
+
+  // Reorder helpers
+  const moveItem = <T,>(arr: T[], from: number, to: number) => {
+    const copy = [...arr];
+    if (to < 0 || to >= copy.length) return copy;
+    const [it] = copy.splice(from, 1);
+    copy.splice(to, 0, it);
+    return copy;
+  };
+  const moveExperience = (from: number, to: number) =>
+    setResume((prev) => ({ ...prev, experience: moveItem(prev.experience, from, to) }));
+  const moveProject = (from: number, to: number) =>
+    setResume((prev) => ({ ...prev, projects: moveItem(prev.projects, from, to) }));
+  const moveEducation = (from: number, to: number) =>
+    setResume((prev) => ({ ...prev, education: moveItem(prev.education, from, to) }));
+
+  // Smart bullet generator (heuristic, local)
+  const generateBulletsForExperience = (index: number) => {
+    const exp = resume.experience[index];
+    const techHint = resume.skills.slice(0, 6).join(", ");
+    const company = exp.company || "the company";
+    const role = exp.title || "Engineer";
+    const bullets = [
+      `Built and shipped features in ${role} role using ${techHint}, improving key KPIs by 15-30%.`,
+      `Led cross-functional collaboration with product/design to deliver on-time releases across ${company}.`,
+      `Optimized performance and reliability (p95 latency, error rate), cutting costs and boosting UX.`,
+      `Implemented automated testing/CI, raising coverage to 85%+ and reducing regressions.`,
+    ];
+    setResume((prev) => {
+      const next = [...prev.experience];
+      next[index] = { ...next[index], description: bullets } as Experience;
+      return { ...prev, experience: next };
+    });
+  };
+
+  const refineBulletsForExperience = (index: number) => {
+    const exp = resume.experience[index];
+    const verbs = ["Built", "Led", "Implemented", "Optimized", "Designed", "Automated", "Migrated", "Improved", "Launched"];
+    const ensureVerb = (s: string) => {
+      const t = s.trim().replace(/^[-•\s]+/, "");
+      const cap = t.charAt(0).toUpperCase() + t.slice(1);
+      const hasVerb = verbs.some((v) => cap.startsWith(v + " "));
+      return hasVerb ? cap : `${verbs[0]} ${cap}`;
+    };
+    const quantified = exp.description.map((d) => {
+      const base = ensureVerb(d).replace(/\.+$/g, "");
+      const hasNumber = /\d/.test(base);
+      return hasNumber ? `${base}.` : `${base} (result: +20% perf / -30% costs).`;
+    });
+    setResume((prev) => {
+      const next = [...prev.experience];
+      next[index] = { ...next[index], description: quantified } as Experience;
+      return { ...prev, experience: next };
     });
   };
 
@@ -525,6 +705,16 @@ export default function ResumeBuilderPage() {
                 <Zap className="h-4 w-4" />
                 FAANG Tips
               </Button>
+              {/* Zoom controls */}
+              <div className="hidden sm:flex items-center gap-1">
+                <Button variant="outline" size="icon" onClick={() => setFontScale((s) => Math.max(0.85, parseFloat((s - 0.05).toFixed(2))))}>
+                  <ZoomOut className="h-4 w-4" />
+                </Button>
+                <span className="text-xs w-10 text-center">{Math.round(fontScale * 100)}%</span>
+                <Button variant="outline" size="icon" onClick={() => setFontScale((s) => Math.min(1.25, parseFloat((s + 0.05).toFixed(2))))}>
+                  <ZoomIn className="h-4 w-4" />
+                </Button>
+              </div>
               <Button
                 onClick={handleExportPDF}
                 disabled={exporting}
@@ -537,6 +727,10 @@ export default function ResumeBuilderPage() {
               <Button onClick={handleExportHTML} variant="outline">
                 <Download className="mr-2 h-4 w-4" />
                 Export HTML
+              </Button>
+              <Button onClick={() => exportToDoc("resume-preview", `${resume.personalInfo.name || "resume"}.doc`)} variant="outline">
+                <Download className="mr-2 h-4 w-4" />
+                Export DOC
               </Button>
               <Button onClick={handleSaveResume} disabled={saving}>
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -559,6 +753,50 @@ export default function ResumeBuilderPage() {
                 selectedTemplate={selectedTemplate}
                 onTemplateSelect={setSelectedTemplate}
               />
+            </CardContent>
+          </Card>
+
+          {/* Theme */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Theme</CardTitle>
+              <CardDescription>Customize accent color and font family</CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+              <div>
+                <Label className="mb-1 block">Accent Color</Label>
+                <Input type="color" value={themeAccent} onChange={(e) => setThemeAccent(e.target.value)} />
+              </div>
+              <div className="md:col-span-2">
+                <Label className="mb-1 block">Font Family</Label>
+                <select
+                  value={themeFont}
+                  onChange={(e) => setThemeFont(e.target.value)}
+                  className="w-full border rounded-md h-9 px-3 text-sm bg-white"
+                >
+                  <option value="">System Default</option>
+                  <option value="Inter, ui-sans-serif, system-ui, -apple-system">Inter</option>
+                  <option value="Georgia, 'Times New Roman', serif">Serif (Georgia)</option>
+                  <option value="'Segoe UI', Roboto, Helvetica, Arial, sans-serif">Segoe/Roboto</option>
+                  <option value="'Source Sans Pro', Arial, sans-serif">Source Sans</option>
+                </select>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Section Toggles */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Sections</CardTitle>
+              <CardDescription>Show or hide sections in your resume and preview</CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {Object.entries(sections).map(([key, val]) => (
+                <div key={key} className="flex items-center justify-between border rounded-md p-2">
+                  <span className="capitalize text-sm">{key}</span>
+                  <Switch checked={val as boolean} onCheckedChange={(v) => setSections((s) => ({ ...s, [key]: v }))} />
+                </div>
+              ))}
             </CardContent>
           </Card>
 
@@ -670,6 +908,7 @@ export default function ResumeBuilderPage() {
           </Card>
 
           {/* Professional Summary */}
+          {sections.summary && (
           <Card>
             <CardHeader>
               <CardTitle>Professional Summary</CardTitle>
@@ -689,8 +928,10 @@ export default function ResumeBuilderPage() {
               />
             </CardContent>
           </Card>
+          )}
 
           {/* Technical Skills */}
+          {sections.skills && (
           <Card>
             <CardHeader>
               <CardTitle>Technical Skills</CardTitle>
@@ -714,8 +955,10 @@ export default function ResumeBuilderPage() {
               </p>
             </CardContent>
           </Card>
+          )}
 
           {/* Experience */}
+          {sections.experience && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
@@ -745,14 +988,32 @@ export default function ResumeBuilderPage() {
                 >
                   <div className="flex justify-between items-start">
                     <Badge variant="secondary">Experience {index + 1}</Badge>
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => removeExperience(index)}
-                    >
-                      <Minus className="mr-2 h-4 w-4" /> Remove
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button type="button" variant="secondary" size="icon" onClick={() => moveExperience(index, index - 1)} title="Move up">
+                        <ArrowUp className="h-4 w-4" />
+                      </Button>
+                      <Button type="button" variant="secondary" size="icon" onClick={() => moveExperience(index, index + 1)} title="Move down">
+                        <ArrowDown className="h-4 w-4" />
+                      </Button>
+                      <Button type="button" variant="outline" size="sm" onClick={() => generateBulletsForExperience(index)}>
+                        <Wand2 className="mr-2 h-4 w-4" /> Generate bullets
+                      </Button>
+                      <Button type="button" variant="outline" size="sm" onClick={() => refineBulletsForExperience(index)}>
+                        Refine
+                      </Button>
+                      <Button type="button" variant="outline" size="sm" onClick={() => tailorBulletsFromJD(index)}
+                        title="Tailor bullets using the job description below">
+                        Tailor to JD
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => removeExperience(index)}
+                      >
+                        <Minus className="mr-2 h-4 w-4" /> Remove
+                      </Button>
+                    </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -848,8 +1109,10 @@ export default function ResumeBuilderPage() {
               ))}
             </CardContent>
           </Card>
+          )}
 
           {/* Projects */}
+          {sections.projects && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
@@ -881,12 +1144,20 @@ export default function ResumeBuilderPage() {
                     <Badge variant="secondary">Project {index + 1}</Badge>
                     <Button
                       type="button"
-                      variant="destructive"
+                      variant="ghost"
                       size="sm"
-                      onClick={() => removeProject(index)}
+                      onClick={() => moveProject(index, index - 1)}
                     >
-                      <Minus className="mr-2 h-4 w-4" /> Remove
+                      <ArrowUp className="mr-2 h-4 w-4" /> Up
                     </Button>
+                    <div className="flex gap-2">
+                      <Button type="button" variant="ghost" size="sm" onClick={() => moveProject(index, index + 1)}>
+                        <ArrowDown className="mr-2 h-4 w-4" /> Down
+                      </Button>
+                      <Button type="button" variant="destructive" size="sm" onClick={() => removeProject(index)}>
+                        <Minus className="mr-2 h-4 w-4" /> Remove
+                      </Button>
+                    </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -952,8 +1223,10 @@ export default function ResumeBuilderPage() {
               ))}
             </CardContent>
           </Card>
+          )}
 
           {/* Education */}
+          {sections.education && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
@@ -980,14 +1253,17 @@ export default function ResumeBuilderPage() {
                 >
                   <div className="flex justify-between items-start">
                     <Badge variant="secondary">Education {index + 1}</Badge>
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => removeEducation(index)}
-                    >
-                      <Minus className="mr-2 h-4 w-4" /> Remove
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button type="button" variant="ghost" size="sm" onClick={() => moveEducation(index, index - 1)}>
+                        <ArrowUp className="mr-2 h-4 w-4" /> Up
+                      </Button>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => moveEducation(index, index + 1)}>
+                        <ArrowDown className="mr-2 h-4 w-4" /> Down
+                      </Button>
+                      <Button type="button" variant="destructive" size="sm" onClick={() => removeEducation(index)}>
+                        <Minus className="mr-2 h-4 w-4" /> Remove
+                      </Button>
+                    </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -1076,8 +1352,10 @@ export default function ResumeBuilderPage() {
               ))}
             </CardContent>
           </Card>
+          )}
 
           {/* Certifications */}
+          {sections.certifications && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
@@ -1161,8 +1439,10 @@ export default function ResumeBuilderPage() {
               ))}
             </CardContent>
           </Card>
+          )}
 
           {/* Awards */}
+          {sections.awards && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
@@ -1241,9 +1521,11 @@ export default function ResumeBuilderPage() {
               ))}
             </CardContent>
           </Card>
+          )}
 
           {/* Additional Sections */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {sections.languages && (
             <Card>
               <CardHeader>
                 <CardTitle>Languages</CardTitle>
@@ -1265,7 +1547,9 @@ export default function ResumeBuilderPage() {
                 />
               </CardContent>
             </Card>
+            )}
 
+            {sections.interests && (
             <Card>
               <CardHeader>
                 <CardTitle>Interests</CardTitle>
@@ -1289,6 +1573,7 @@ export default function ResumeBuilderPage() {
                 />
               </CardContent>
             </Card>
+            )}
           </div>
 
           {/* Save Button */}
@@ -1313,6 +1598,15 @@ export default function ResumeBuilderPage() {
               <div className="flex justify-between items-center">
                 <h2 className="text-lg font-semibold">Live Preview</h2>
                 <div className="flex gap-2">
+                  <div className="hidden sm:flex items-center gap-1 mr-2">
+                    <Button variant="outline" size="icon" onClick={() => setFontScale((s) => Math.max(0.85, parseFloat((s - 0.05).toFixed(2))))}>
+                      <ZoomOut className="h-4 w-4" />
+                    </Button>
+                    <span className="text-xs w-10 text-center">{Math.round(fontScale * 100)}%</span>
+                    <Button variant="outline" size="icon" onClick={() => setFontScale((s) => Math.min(1.25, parseFloat((s + 0.05).toFixed(2))))}>
+                      <ZoomIn className="h-4 w-4" />
+                    </Button>
+                  </div>
                   <Button
                     onClick={handleExportPDF}
                     disabled={exporting}
@@ -1337,10 +1631,13 @@ export default function ResumeBuilderPage() {
             </div>
             <div className="p-4">
               <div id="resume-preview" className="bg-white">
-                <ResumePreview
-                  data={resume}
-                  template={selectedTemplate as any}
-                />
+                <div style={{ transform: `scale(${fontScale})`, transformOrigin: "top left" }}>
+                  <ResumePreview
+                    data={resume}
+                    template={selectedTemplate as any}
+                    theme={{ accentColor: themeAccent, fontFamily: themeFont }}
+                  />
+                </div>
               </div>
             </div>
           </div>
