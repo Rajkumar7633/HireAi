@@ -44,6 +44,16 @@ export const navigationByRole: Record<Role, NavItem[]> = {
     },
     { title: "Messages", url: "/dashboard/messages", icon: MessageSquare },
     { title: "Notifications", url: "/dashboard/notifications", icon: Bell },
+    {
+      title: "Social",
+      url: "#",
+      icon: Users,
+      items: [
+        { title: "Feed", url: "/dashboard/job-seeker/social/feed" },
+        { title: "Search", url: "/dashboard/job-seeker/social/search" },
+        { title: "Chat", url: "/dashboard/job-seeker/social/chat" },
+      ],
+    },
   ],
   recruiter: [
     { title: "Dashboard", url: "/dashboard/recruiter", icon: BarChart3 },

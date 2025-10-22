@@ -559,32 +559,32 @@ export default function JobSeekerProfilePage() {
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Header Section */}
-        <Card className="border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+        <Card className="border-teal-200 bg-gradient-to-r from-teal-50 to-cyan-50">
           <CardContent className="p-6">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-6">
-                <div className="w-24 h-24 rounded-full bg-blue-600 flex items-center justify-center text-white text-2xl font-bold">
+                <div className="w-24 h-24 rounded-full bg-teal-600 flex items-center justify-center text-white text-2xl font-bold">
                   {headerInitials}
                 </div>
-                <div>
+                <div className="min-w-0">
                   <h1 className="text-3xl font-bold text-gray-900">
                     {profile.firstName} {profile.lastName}
                   </h1>
-                  <p className="text-xl text-blue-700 font-medium">
+                  <p className="text-xl text-teal-700 font-medium">
                     {profile.currentTitle}
                   </p>
-                  <div className="flex items-center gap-4 mt-2 text-gray-600">
-                    <div className="flex items-center gap-1">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-gray-600">
+                    <div className="flex items-center gap-1 min-w-0">
                       <MapPin className="h-4 w-4" />
-                      {profile.location}
+                      <span className="break-words">{profile.location}</span>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 min-w-0">
                       <Mail className="h-4 w-4" />
-                      {profile.email}
+                      <span className="break-words">{profile.email}</span>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 min-w-0">
                       <Phone className="h-4 w-4" />
-                      {profile.phone}
+                      <span className="break-words">{profile.phone}</span>
                     </div>
                   </div>
                 </div>
@@ -691,7 +691,7 @@ export default function JobSeekerProfilePage() {
                     <div className="md:col-span-2"><span className="text-muted-foreground">Current Title:</span> <span className="font-medium text-teal-900">{profile.currentTitle || "—"}</span></div>
                   </div>
                   {profile.summary ? (
-                    <p className="mt-3 text-sm text-gray-800 leading-relaxed line-clamp-6">{profile.summary}</p>
+                    <p className="mt-3 text-[15px] text-gray-800 leading-7 whitespace-pre-wrap break-words line-clamp-[10]">{profile.summary}</p>
                   ) : (
                     <p className="mt-3 text-sm text-muted-foreground">Add a short professional summary.</p>
                   )}
