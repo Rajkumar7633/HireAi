@@ -178,6 +178,119 @@ export default function JobSeekerProfilePage() {
     }
   }, [profile?.lastUpdated]);
 
+  // ATS scoring state should be declared before the scoring callback
+  const [ats, setAts] = useState<any | null>(null);
+  const [jdText, setJdText] = useState<string>("");
+  const [scoring, setScoring] = useState<boolean>(false);
+  const [resumeUploading, setResumeUploading] = useState<boolean>(false);
+  const [uploadedResumeName, setUploadedResumeName] = useState<string>("");
+  const [showStrengths, setShowStrengths] = useState(false);
+  const [showImprovements, setShowImprovements] = useState(false);
+  const [copying, setCopying] = useState(false);
+  const [pendingExtractedSkills, setPendingExtractedSkills] = useState<string[]>([]);
+
+  const getBandColor = (s: number) => (s >= 90 ? "#16a34a" : s >= 75 ? "#22c55e" : s >= 60 ? "#f59e0b" : "#ef4444");
+  const bandLabel = (s: number) => (s >= 90 ? "Excellent" : s >= 75 ? "Good" : s >= 60 ? "Fair" : "Needs work");
+
+  const copyKeywords = async () => {
+    try {
+      const arr = Array.isArray((ats as any)?.keywordMatches) ? (ats as any).keywordMatches : [];
+      const list = arr.map((k: any) => k.keyword).join(", ");
+      if (!list) return;
+      setCopying(true);
+      await navigator.clipboard.writeText(list);
+    } finally {
+      setTimeout(() => setCopying(false), 800);
+    }
+  };
+
+  // Load any persisted ATS analysis and filename from profile
+  useEffect(() => {
+    const la = (profile as any)?.lastAtsAnalysis;
+    if (la && !ats) setAts(la);
+    const fname = (profile as any)?.lastResumeFileName;
+    if (fname && !uploadedResumeName) setUploadedResumeName(String(fname));
+  }, [profile, ats, uploadedResumeName]);
+
+  const buildResumeText = useCallback(() => {
+    const parts: string[] = [];
+    parts.push(`${profile.firstName || ''} ${profile.lastName || ''}`.trim());
+    parts.push(profile.email || "");
+    if (profile.phone) parts.push(profile.phone);
+    if (profile.linkedinUrl) parts.push(`LinkedIn: ${profile.linkedinUrl}`);
+    if (profile.githubUrl) parts.push(`GitHub: ${profile.githubUrl}`);
+    if (profile.summary) parts.push(`Summary: ${profile.summary}`);
+    if (Array.isArray(profile.skills) && profile.skills.length) parts.push(`Skills: ${profile.skills.join(', ')}`);
+    const exps = profile.experiences || [];
+    for (const e of exps as any[]) {
+      parts.push(`Experience: ${e.role} at ${e.company} ${e.startDate || ''} - ${e.current ? 'Present' : (e.endDate || '')}. ${e.description || ''}`);
+    }
+    const projs = profile.projects || [];
+    for (const p of projs as any[]) {
+      parts.push(`Project: ${p.title}. ${p.description || ''}. Tags: ${(p.tags || []).join(', ')}`);
+    }
+    if (profile.university) parts.push(`Education: ${profile.university}`);
+    return parts.filter(Boolean).join("\n");
+  }, [profile]);
+
+  const scoreResume = useCallback(async () => {
+    try {
+      setScoring(true);
+      const resumeText = buildResumeText();
+      const res = await fetch('/api/resume/ats-analysis', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resumeText, jobDescription: jdText })
+      });
+      if (!res.ok) throw new Error('Failed to score');
+      const j = await res.json();
+      const analysis = j.analysis || j;
+      setAts(analysis);
+      if (typeof analysis?.atsScore === 'number') {
+        // update local profile and persist in background
+        setProfile((p) => ({ ...p, atsScore: analysis.atsScore, lastAtsAnalysis: analysis } as any));
+        try {
+          await fetch('/api/job-seeker/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...profile, atsScore: analysis.atsScore, lastAtsAnalysis: analysis }) });
+        } catch {}
+      }
+    } catch (e) {
+      toast({ title: 'Scoring failed', description: 'Could not compute ATS score', variant: 'destructive' });
+    } finally {
+      setScoring(false);
+    }
+  }, [buildResumeText, jdText, toast]);
+
+  const handleResumeUpload = async (file: File | null) => {
+    if (!file) return;
+    setResumeUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('resume', file);
+      const res = await fetch('/api/resume/upload', { method: 'POST', body: fd });
+      if (!res.ok) throw new Error('Upload failed');
+      const j = await res.json();
+      setUploadedResumeName(j?.resume?.originalName || file.name);
+      const analysis = j?.resume?.analysis || j?.analysis;
+      if (analysis) setAts(analysis);
+      // Stash extracted skills for confirmation instead of auto-merging
+      const extracted = j?.resume?.extractedData;
+      if (extracted && Array.isArray(extracted.skills) && extracted.skills.length) {
+        setPendingExtractedSkills(Array.from(new Set(extracted.skills.map((s: any) => String(s)))));
+      } else {
+        setPendingExtractedSkills([]);
+      }
+      if (typeof j?.resume?.atsScore === 'number') {
+        setProfile((p) => ({ ...p, atsScore: j.resume.atsScore, lastResumeFileName: j?.resume?.originalName || file.name, lastAtsAnalysis: analysis } as any));
+        try {
+          await fetch('/api/job-seeker/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ atsScore: j.resume.atsScore, lastResumeFileName: j?.resume?.originalName || file.name, lastAtsAnalysis: analysis }) });
+        } catch {}
+      }
+    } catch (e) {
+      toast({ title: 'Upload failed', description: 'Could not parse resume', variant: 'destructive' });
+    } finally {
+      setResumeUploading(false);
+    }
+  };
+
   const [editingSection, setEditingSection] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [newSkill, setNewSkill] = useState("");
@@ -197,6 +310,10 @@ export default function JobSeekerProfilePage() {
     current: false,
     description: "",
   });
+  const [socialSummary, setSocialSummary] = useState<{ postsCount: number; connectionsCount: number; pendingCount: number; recentPosts: any[] } | null>(null);
+  const [composer, setComposer] = useState<{ text: string; images: string[]; busy: boolean; err: string | null }>({ text: "", images: [], busy: false, err: null });
+  const [topProfiles, setTopProfiles] = useState<any[]>([]);
+  const [media, setMedia] = useState<string[]>([]);
 
   // Handlers (use new names to avoid any scope/hoisting issues)
   const addProjectHandler = useCallback(() => {
@@ -336,6 +453,55 @@ export default function JobSeekerProfilePage() {
       }
     };
 
+  const handleBannerFile = async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    const file = fileList[0];
+    const toWideDataUrl = (file: File) =>
+      new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement("canvas");
+            const targetW = 1600;
+            const targetH = 400;
+            let { width, height } = img as HTMLImageElement;
+            const aspect = targetW / targetH;
+            let newW = width;
+            let newH = Math.round(width / aspect);
+            if (newH > height) {
+              newH = height;
+              newW = Math.round(height * aspect);
+            }
+            const sx = Math.max(0, Math.floor((width - newW) / 2));
+            const sy = Math.max(0, Math.floor((height - newH) / 2));
+            canvas.width = targetW; canvas.height = targetH;
+            const ctx = canvas.getContext("2d"); if (!ctx) return reject(new Error("canvas error"));
+            ctx.drawImage(img, sx, sy, newW, newH, 0, 0, targetW, targetH);
+            const out = canvas.toDataURL("image/jpeg", 0.9);
+            resolve(out);
+          };
+          img.onerror = () => reject(new Error("image decode error"));
+          img.src = reader.result as string;
+        };
+        reader.onerror = () => reject(new Error("read error"));
+        reader.readAsDataURL(file);
+      });
+    try {
+      const dataUrl = await toWideDataUrl(file);
+      setProfile((prev: any) => ({ ...prev, bannerImage: dataUrl }));
+      // Auto-save banner
+      try {
+        await fetch("/api/job-seeker/profile", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...profile, bannerImage: dataUrl }),
+        });
+        toast({ title: "Banner updated" });
+      } catch {}
+    } catch {}
+  };
+
   const addProject = () => {
     if (!newProject.title.trim()) return;
     const tagsArr = newProject.tags
@@ -395,6 +561,103 @@ export default function JobSeekerProfilePage() {
       fetchProfile();
     }
   }, [session?.user?.id, isLoading, toast]);
+
+  // Load social overview for dashboard counters and recent posts
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch("/api/social/me/summary", { cache: "no-store" });
+        if (res.ok) {
+          const j = await res.json();
+          setSocialSummary({
+            postsCount: Number(j.postsCount || 0),
+            connectionsCount: Number(j.connectionsCount || 0),
+            pendingCount: Number(j.pendingCount || 0),
+            recentPosts: Array.isArray(j.recentPosts) ? j.recentPosts : [],
+          });
+          const imgs: string[] = [];
+          for (const p of Array.isArray(j.recentPosts) ? j.recentPosts : []) {
+            if (Array.isArray(p.images)) for (const u of p.images) imgs.push(String(u));
+          }
+          setMedia(imgs.slice(0, 12));
+        }
+      } catch {}
+    };
+    load();
+  }, []);
+
+  // Load accepted connections and hydrate profiles (top 6)
+  useEffect(() => {
+    const run = async () => {
+      try {
+        const res = await fetch("/api/social/connections", { cache: "no-store" });
+        const j = res.ok ? await res.json() : { me: "", accepted: [] };
+        const meId = String(j.me || "");
+        const peers: string[] = [];
+        for (const c of Array.isArray(j.accepted) ? j.accepted : []) {
+          const a = String(c.requesterId), b = String(c.addresseeId);
+          peers.push(a === meId ? b : a);
+        }
+        const uniq: string[] = [];
+        const seen: Record<string, 1> = {};
+        for (const id of peers) if (!seen[id]) { seen[id] = 1; uniq.push(id); }
+        if (uniq.length === 0) { setTopProfiles([]); return; }
+        const profRes = await fetch(`/api/social/profiles?ids=${encodeURIComponent(uniq.slice(0, 12).join(","))}`);
+        const pj = await profRes.json();
+        setTopProfiles(Array.isArray(pj.items) ? pj.items.slice(0, 6) : []);
+      } catch {}
+    };
+    run();
+  }, []);
+
+  const handleComposerFiles = async (files: FileList | null) => {
+    if (!files) return;
+    setComposer((c) => ({ ...c, err: null }));
+    const arr = Array.from(files).slice(0, 4);
+    const toCompressedDataUrl = (file: File) =>
+      new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement("canvas");
+            const maxDim = 1280;
+            let { width, height } = img as HTMLImageElement;
+            if (width > height && width > maxDim) { height = (height * maxDim) / width; width = maxDim; }
+            else if (height > width && height > maxDim) { width = (width * maxDim) / height; height = maxDim; }
+            canvas.width = Math.round(width); canvas.height = Math.round(height);
+            const ctx = canvas.getContext("2d"); if (!ctx) return reject(new Error("canvas error"));
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            const out = canvas.toDataURL("image/jpeg", 0.82);
+            resolve(out);
+          };
+          img.onerror = () => reject(new Error("image decode error"));
+          img.src = reader.result as string;
+        };
+        reader.onerror = () => reject(new Error("read error"));
+        reader.readAsDataURL(file);
+      });
+    try {
+      const dataUrls = await Promise.all(arr.map(toCompressedDataUrl));
+      setComposer((c) => ({ ...c, images: dataUrls }));
+    } catch (e: any) {
+      setComposer((c) => ({ ...c, err: e?.message || "Unable to process images" }));
+    }
+  };
+
+  const submitComposer = async () => {
+    const text = (composer.text || "").trim();
+    if (!text && composer.images.length === 0) return;
+    setComposer((c) => ({ ...c, busy: true, err: null }));
+    try {
+      const res = await fetch("/api/social/posts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: text, images: composer.images }) });
+      if (!res.ok) throw new Error("Failed to post");
+      setComposer({ text: "", images: [], busy: false, err: null });
+      toast({ title: "Posted" });
+    } catch (e: any) {
+      setComposer((c) => ({ ...c, busy: false, err: e?.message || "Post failed" }));
+    }
+  };
 
   const handleSaveSection = async (section: string) => {
     setLoading(true);
@@ -604,6 +867,288 @@ export default function JobSeekerProfilePage() {
                   </p>
                 </div>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Profile banner */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle>Profile banner</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="rounded border overflow-hidden">
+              {(profile as any)?.bannerImage ? (
+                <img src={(profile as any).bannerImage} className="w-full h-40 object-cover" />
+              ) : (
+                <div className="w-full h-40 bg-gradient-to-r from-slate-100 to-slate-200" />
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <Input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const files = e.target.files; if (!files || files.length === 0) return;
+                  const file = files[0];
+                  const reader = new FileReader();
+                  reader.onload = async () => {
+                    const url = String(reader.result || "");
+                    setProfile((prev: any) => ({ ...prev, bannerImage: url }));
+                    try {
+                      await fetch("/api/job-seeker/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...(profile as any), bannerImage: url }) });
+                    } catch {}
+                  };
+                  reader.readAsDataURL(file);
+                }}
+                className="max-w-sm"
+              />
+              <div className="text-xs text-muted-foreground">Recommended 1600×400</div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Social overview */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle>Social overview</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Quick post */}
+            <div className="rounded border p-3 bg-white">
+              <div className="text-sm mb-2">Share something</div>
+              <Textarea rows={3} placeholder="I just shipped a new feature..." value={composer.text} onChange={(e) => setComposer((c) => ({ ...c, text: e.target.value }))} />
+              <div className="flex items-center gap-3 mt-2">
+                <Input type="file" accept="image/*" multiple onChange={(e) => handleComposerFiles(e.target.files)} className="max-w-xs" />
+                <span className="text-xs text-muted-foreground">Up to 4 images</span>
+                <Button onClick={submitComposer} disabled={composer.busy || (!composer.text.trim() && composer.images.length === 0)} className="ml-auto">Post</Button>
+              </div>
+              {composer.err && <div className="text-xs text-red-600 mt-1">{composer.err}</div>}
+              {composer.images.length > 0 && (
+                <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {composer.images.map((src, i) => (
+                    <div key={i} className="w-full rounded border bg-slate-50 flex items-center justify-center">
+                      <img src={src} className="w-full max-h-40 object-contain rounded" />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+      {/* ATS Resume Score */}
+      <div className="bg-white rounded border p-6 mt-6">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="font-semibold">ATS Resume Score</div>
+            <div className="text-sm text-muted-foreground">Analyze your resume against best practices and an optional Job Description.</div>
+          </div>
+          <button className="px-3 py-1.5 border rounded text-sm" onClick={scoreResume} disabled={scoring}>{scoring ? 'Scoring…' : 'Re-score'}</button>
+        </div>
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="md:col-span-2 space-y-3">
+            <div>
+              <label className="text-xs text-muted-foreground">Upload Resume (PDF/DOC)</label>
+              <div className="mt-1 flex items-center gap-2">
+                <input type="file" accept=".pdf,.doc,.docx,image/pdf,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e) => handleResumeUpload(e.target.files?.[0] || null)} />
+                {resumeUploading && <span className="text-xs text-muted-foreground animate-pulse">Uploading…</span>}
+                {uploadedResumeName && !resumeUploading && <span className="text-xs text-muted-foreground truncate">{uploadedResumeName}</span>}
+              </div>
+            </div>
+            {pendingExtractedSkills.length > 0 && (
+              <div className="border rounded p-2 bg-amber-50 text-amber-800 text-xs flex items-center justify-between">
+                <div>
+                  Extracted skills detected: {pendingExtractedSkills.slice(0,8).join(', ')}{pendingExtractedSkills.length>8?'…':''}
+                </div>
+                <button
+                  className="ml-2 px-2 py-1 border rounded bg-white"
+                  onClick={async () => {
+                    const merged = Array.from(new Set([...(profile.skills||[]), ...pendingExtractedSkills]));
+                    setProfile((p) => ({ ...p, skills: merged }));
+                    try { await fetch('/api/job-seeker/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ skills: merged }) }); } catch {}
+                    setPendingExtractedSkills([]);
+                  }}
+                >Insert to profile</button>
+              </div>
+            )}
+            <label className="text-xs text-muted-foreground">Paste Job Description (optional)</label>
+            <textarea
+              className="w-full mt-1 border rounded p-2 text-sm min-h-[90px]"
+              placeholder="Paste JD to get a match score and keyword gaps"
+              value={jdText}
+              onChange={(e) => setJdText(e.target.value)}
+            />
+          </div>
+          <div className="border rounded p-3 bg-white">
+            <div className="flex items-center gap-4">
+              <div className="relative w-24 h-24 rounded-full grid place-items-center"
+                   style={{ background: `conic-gradient(${getBandColor(Number(ats?.atsScore||0))} ${(Number(ats?.atsScore||0)*3.6)}deg, #e5e7eb 0deg)` }}>
+                <div className="w-18 h-18 bg-white rounded-full grid place-items-center">
+                  <div className="text-2xl font-semibold">{ats?.atsScore ?? '--'}</div>
+                </div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs text-muted-foreground">ATS Score</div>
+                <div className="text-sm font-medium">{typeof ats?.atsScore === 'number' ? bandLabel(Number(ats.atsScore)) : '—'}</div>
+                {typeof ats?.matchScore === 'number' && (
+                  <div className="mt-1 text-xs">Match score: <span className="font-medium">{ats.matchScore}%</span></div>
+                )}
+              </div>
+            </div>
+            {ats?.sections && (
+              <div className="mt-3 space-y-2">
+                {[
+                  { k: 'Contact', v: ats.sections.contact?.score },
+                  { k: 'Skills', v: ats.sections.skills?.score },
+                  { k: 'Experience', v: ats.sections.experience?.score },
+                  { k: 'Education', v: ats.sections.education?.score },
+                  { k: 'Format', v: ats.formatting?.score },
+                ].map((row, i) => (
+                  <div key={i} className="text-xs">
+                    <div className="flex justify-between"><span>{row.k}</span><span>{row.v ?? '--'}</span></div>
+                    <div className="h-2 rounded bg-slate-100 overflow-hidden">
+                      <div className="h-full" style={{ width: `${Math.min(100, Number(row.v||0))}%`, background: getBandColor(Number(row.v||0)) }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          {Array.isArray(ats?.strengths) && ats.strengths.length > 0 && (
+            <div className="border rounded p-3 bg-white">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-medium">Strengths</div>
+                <button className="text-xs text-teal-700" onClick={() => setShowStrengths((s) => !s)}>{showStrengths ? 'Show less' : 'Show more'}</button>
+              </div>
+              <ul className="mt-2 list-disc pl-5 text-sm space-y-1">
+                {(showStrengths ? ats.strengths : ats.strengths.slice(0,4)).map((s: string, i: number) => (
+                  <li key={`st-${i}`}>{s}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {Array.isArray(ats?.improvements) && ats.improvements.length > 0 && (
+            <div className="border rounded p-3 bg-white">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-medium">Improvements</div>
+                <button className="text-xs text-teal-700" onClick={() => setShowImprovements((s) => !s)}>{showImprovements ? 'Show less' : 'Show more'}</button>
+              </div>
+              <ul className="mt-2 list-disc pl-5 text-sm space-y-1">
+                {(showImprovements ? ats.improvements : ats.improvements.slice(0,6)).map((s: string, i: number) => (
+                  <li key={`imp-${i}`}>{s}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+        {Array.isArray(ats?.keywordMatches) && ats.keywordMatches.length > 0 && (
+          <div className="mt-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-medium">Keywords</div>
+              <button onClick={copyKeywords} className="text-xs text-teal-700">{copying ? 'Copied' : 'Copy'}</button>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {ats.keywordMatches.slice(0,24).map((k: any, i: number) => (
+                <span key={i} className={`text-xs px-2 py-0.5 border rounded ${k.found ? 'bg-emerald-50 border-emerald-300' : 'bg-slate-50'}`}>{k.keyword}{k.frequency ? ` (${k.frequency})` : ''}</span>
+              ))}
+            </div>
+            {/* Missing keywords */}
+            {ats.keywordMatches.filter((k: any) => !k.found).length > 0 && (
+              <div className="mt-3">
+                <div className="text-xs text-muted-foreground mb-1">Missing keywords</div>
+                <div className="flex flex-wrap gap-1">
+                  {ats.keywordMatches.filter((k: any) => !k.found).slice(0,24).map((k: any, i: number) => (
+                    <span key={`miss-${i}`} className="text-xs px-2 py-0.5 border rounded bg-rose-50 border-rose-300">{k.keyword}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {(scoring || resumeUploading) && (
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            <div className="h-3 rounded bg-slate-200 animate-pulse" />
+            <div className="h-3 rounded bg-slate-200 animate-pulse" />
+            <div className="h-3 rounded bg-slate-200 animate-pulse" />
+          </div>
+        )}
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <a href="/dashboard/job-seeker/resume-builder" className="text-sm px-3 py-2 border rounded bg-white hover:bg-slate-50 text-center">Build Resume</a>
+          <a href="/dashboard/jobs" className="text-sm px-3 py-2 border rounded bg-white hover:bg-slate-50 text-center">Browse Jobs</a>
+          <a href="/dashboard/ai-assistant" className="text-sm px-3 py-2 border rounded bg-white hover:bg-slate-50 text-center">Start AI Chat</a>
+        </div>
+      </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="rounded border p-3 bg-slate-50">
+                <div className="text-xs text-muted-foreground">Posts</div>
+                <div className="text-2xl font-semibold">{socialSummary?.postsCount ?? 0}</div>
+              </div>
+              <div className="rounded border p-3 bg-slate-50">
+                <div className="text-xs text-muted-foreground">Connections</div>
+                <div className="text-2xl font-semibold">{socialSummary?.connectionsCount ?? 0}</div>
+              </div>
+              <div className="rounded border p-3 bg-slate-50">
+                <div className="text-xs text-muted-foreground">Pending requests</div>
+                <div className="text-2xl font-semibold">{socialSummary?.pendingCount ?? 0}</div>
+              </div>
+            </div>
+            {socialSummary && Array.isArray(socialSummary.recentPosts) && socialSummary.recentPosts.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-sm font-medium">Recent posts</div>
+                <div className="space-y-2">
+                  {socialSummary.recentPosts.map((p: any) => (
+                    <div key={p._id} className="border rounded p-3 bg-white">
+                      <div className="text-xs text-muted-foreground mb-1">{new Date(p.createdAt).toLocaleString()}</div>
+                      <div className="text-sm line-clamp-2 whitespace-pre-wrap">{p.content}</div>
+                      <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+                        <span>👍 {p.likes || 0}</span>
+                        <span>💬 {p.commentsCount || 0}</span>
+                        <a href={`/dashboard/job-seeker/social/posts/${p._id}`} className="text-teal-700 hover:underline ml-auto">Open</a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Top connections */}
+            <div className="space-y-2">
+              <div className="text-sm font-medium">Top connections</div>
+              {topProfiles.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No connections yet.</div>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {topProfiles.map((p) => {
+                    const name = `${p.firstName || ''} ${p.lastName || ''}`.trim();
+                    return (
+                      <a key={String(p.userId)} href={`/dashboard/job-seeker/profile/${p.userId}`} className="border rounded p-3 bg-white flex items-center gap-3 hover:bg-slate-50">
+                        <img src={p.profileImage || `https://api.dicebear.com/8.x/initials/svg?seed=${encodeURIComponent(name)}`} className="w-9 h-9 rounded-full border object-cover" />
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium truncate">{name || p.email || p.userId}</div>
+                          <div className="text-xs text-muted-foreground truncate">{p.currentTitle}{p.location?` • ${p.location}`:''}</div>
+                        </div>
+                      </a>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* My media */}
+            <div className="space-y-2">
+              <div className="text-sm font-medium">My media</div>
+              {media.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No images yet.</div>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {media.map((src, i) => (
+                    <div key={i} className="rounded border bg-slate-50 flex items-center justify-center">
+                      <img src={src} className="w-full h-[140px] object-contain rounded" />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

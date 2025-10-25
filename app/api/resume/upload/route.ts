@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import Resume from "@/models/Resume"
+import JobSeekerProfile from "@/models/JobSeekerProfile"
 import { writeFile, mkdir } from "fs/promises"
 import { join } from "path"
 import { existsSync } from "fs"
@@ -197,6 +198,22 @@ export async function POST(req: NextRequest) {
     })
 
     await resume.save()
+
+    // Persist quick access fields into JobSeekerProfile
+    try {
+      await JobSeekerProfile.findOneAndUpdate(
+        { userId: session.userId },
+        {
+          $set: {
+            atsScore: Number(processedData.atsScore || 0),
+            lastAtsAnalysis: processedData.analysis,
+            lastResumeFileName: resumeFile.name,
+            lastUpdated: new Date(),
+          },
+        },
+        { upsert: true }
+      )
+    } catch {}
 
     return NextResponse.json(
       {

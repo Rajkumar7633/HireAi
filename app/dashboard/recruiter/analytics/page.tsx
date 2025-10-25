@@ -113,14 +113,55 @@ export default function RecruiterAnalyticsPage() {
     useState<AdvancedMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [timeRange, setTimeRange] = useState("6months");
-  const [normalizeFunnel, setNormalizeFunnel] = useState(true);
+  const [timeRange, setTimeRange] = useState(() => typeof window !== 'undefined' ? (localStorage.getItem('recruiter:analytics:range') || '6months') : '6months');
+  const [normalizeFunnel, setNormalizeFunnel] = useState<boolean>(() => typeof window !== 'undefined' ? (localStorage.getItem('recruiter:analytics:norm') === '0' ? false : true) : true);
+  const [drill, setDrill] = useState<{ title: string; items: Array<{ label: string; value: number; query?: Record<string,string> }> } | null>(null);
+  const [compare, setCompare] = useState<boolean>(() => typeof window !== 'undefined' ? (localStorage.getItem('recruiter:analytics:compare') === '1') : false);
+  const [views, setViews] = useState<Array<{ name: string; payload: { timeRange: string; normalizeFunnel: boolean } }>>(() => {
+    try { return JSON.parse(localStorage.getItem('recruiter:analytics:savedViews') || '[]'); } catch { return []; }
+  });
+  const [newViewName, setNewViewName] = useState<string>("");
   const { toast } = useToast();
+
+  const saveCurrentView = () => {
+    const name = (newViewName || '').trim();
+    if (!name) return;
+    const updated = [...views.filter(v => v.name !== name), { name, payload: { timeRange, normalizeFunnel } }];
+    setViews(updated);
+    try { localStorage.setItem('recruiter:analytics:savedViews', JSON.stringify(updated)); } catch {}
+    // Persist to server (fire-and-forget)
+    fetch('/api/social/prefs', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ analyticsSavedViews: updated }) }).catch(()=>{});
+    setNewViewName("");
+  };
 
   useEffect(() => {
     fetchAnalytics();
     fetchAdvancedMetrics();
+    // Load server-synced views (merge with local)
+    (async () => {
+      try {
+        const res = await fetch('/api/social/prefs', { cache: 'no-store' });
+        if (res.ok) {
+          const j = await res.json();
+          if (Array.isArray(j.analyticsSavedViews) && j.analyticsSavedViews.length) {
+            const merged = [...views];
+            for (const v of j.analyticsSavedViews) {
+              if (!merged.find((m) => m.name === v.name)) merged.push(v);
+            }
+            setViews(merged);
+          }
+        }
+      } catch {}
+    })();
   }, [timeRange]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('recruiter:analytics:range', String(timeRange));
+      localStorage.setItem('recruiter:analytics:norm', normalizeFunnel ? '1' : '0');
+      localStorage.setItem('recruiter:analytics:compare', compare ? '1' : '0');
+    } catch {}
+  }, [timeRange, normalizeFunnel, compare]);
 
   const fetchAnalytics = async () => {
     setLoading(true);
@@ -188,6 +229,28 @@ export default function RecruiterAnalyticsPage() {
         { name: "Hired", value: advancedMetrics.hiringFunnel.hired, fill: COLORS[4] },
       ]
     : [];
+
+  // KPI deltas (vs previous month)
+  const trends = advancedMetrics?.monthlyTrends || [];
+  const last = trends.length > 0 ? trends[trends.length - 1] : null;
+  const prev = trends.length > 1 ? trends[trends.length - 2] : null;
+  const pct = (a: number, b: number) => {
+    if (!b) return 0;
+    return ((a - b) / b) * 100;
+  };
+  const appsDelta = last && prev ? pct(last.applications, prev.applications) : 0;
+  const convNow = last && last.applications > 0 ? (last.hires / last.applications) * 100 : 0;
+  const convPrev = prev && prev.applications > 0 ? (prev.hires / prev.applications) * 100 : 0;
+  const convDelta = pct(convNow, convPrev || 0.0001);
+  // Estimate monthly cost per hire same way as API total estimation
+  const cphNow = last ? (last.hires > 0 ? Math.round((last.applications * 50) / last.hires) : 0) : 0;
+  const cphPrev = prev ? (prev.hires > 0 ? Math.round((prev.applications * 50) / prev.hires) : 0) : 0;
+  const cphDelta = cphPrev ? pct(cphNow, cphPrev) : 0;
+  const deltaLabel = (v: number, unit = "%") => `${v >= 0 ? "+" : ""}${v.toFixed(1)}${unit}`;
+  const deltaClass = (v: number, inverse = false) => {
+    const pos = inverse ? v < 0 : v > 0;
+    return pos ? "text-emerald-600" : v === 0 ? "text-slate-500" : "text-rose-600";
+  };
   const normalized = rawFunnel.reduce((acc: any[], stage) => {
     const prev = acc.length ? acc[acc.length - 1].value : stage.value;
     acc.push({ ...stage, value: Math.min(stage.value, prev) });
@@ -271,9 +334,13 @@ export default function RecruiterAnalyticsPage() {
 
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="sticky top-14 z-10 bg-white/80 backdrop-blur border-b -mx-6 px-6 py-3 mb-6 flex items-center justify-between">
         <h1 className="text-3xl font-bold">Advanced Analytics</h1>
         <div className="flex gap-4 items-center">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Compare</span>
+            <Switch checked={compare} onCheckedChange={setCompare} />
+          </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Normalize Funnel</span>
             <Switch checked={normalizeFunnel} onCheckedChange={setNormalizeFunnel} />
@@ -290,6 +357,15 @@ export default function RecruiterAnalyticsPage() {
               <SelectItem value="1year">Last Year</SelectItem>
             </SelectContent>
           </Select>
+          {/* Saved Views inline */}
+          <div className="hidden md:flex items-center gap-2">
+            <select className="border rounded px-2 py-1 text-sm" onChange={(e)=>{ const v = views.find(x=>x.name===e.target.value); if (v) loadView(v); }}>
+              <option value="">Views</option>
+              {views.map(v=> (<option key={v.name} value={v.name}>{v.name}</option>))}
+            </select>
+            <input className="border rounded px-2 py-1 text-sm w-32" placeholder="Save as…" value={newViewName} onChange={(e)=>setNewViewName(e.target.value)} />
+            <Button variant="outline" size="sm" onClick={saveCurrentView}>Save</Button>
+          </div>
           <Button
             onClick={() => {
               fetchAnalytics();
@@ -304,6 +380,7 @@ export default function RecruiterAnalyticsPage() {
           <Button onClick={downloadFunnelCsv} size="sm">
             Download CSV
           </Button>
+          <Button onClick={() => window.print()} variant="outline" size="sm">Export PDF</Button>
         </div>
       </div>
 
@@ -332,6 +409,15 @@ export default function RecruiterAnalyticsPage() {
                 <p className="text-xs text-muted-foreground">
                   +12% from last month
                 </p>
+                {advancedMetrics?.monthlyTrends && (
+                  <div className="mt-2 h-10">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={advancedMetrics.monthlyTrends}>
+                        <Line type="monotone" dataKey="applications" stroke={COLORS[0]} strokeWidth={2} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
               </CardContent>
             </Card>
             <Card>
@@ -348,6 +434,15 @@ export default function RecruiterAnalyticsPage() {
                 <p className="text-xs text-muted-foreground">
                   -3 days from last month
                 </p>
+                {advancedMetrics?.timeToHire.byPosition && (
+                  <div className="mt-2 h-10">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={advancedMetrics.timeToHire.byPosition.slice(0,6)}>
+                        <Bar dataKey="days" fill={COLORS[2]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
               </CardContent>
             </Card>
             <Card>
@@ -364,6 +459,17 @@ export default function RecruiterAnalyticsPage() {
                 <p className="text-xs text-muted-foreground">
                   -8% from last month
                 </p>
+                <div className="mt-2 h-10">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={costBreakdownData} dataKey="value" cx="50%" cy="50%" innerRadius={16} outerRadius={20}>
+                        {costBreakdownData.map((entry, index) => (
+                          <Cell key={`mini-${index}`} fill={entry.fill} />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
               </CardContent>
             </Card>
             <Card>
@@ -388,6 +494,13 @@ export default function RecruiterAnalyticsPage() {
                 <p className="text-xs text-muted-foreground">
                   +2.1% from last month
                 </p>
+                <div className="mt-2 h-10">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={advancedMetrics?.monthlyTrends || []}>
+                      <Line type="monotone" dataKey="hires" stroke={COLORS[1]} strokeWidth={2} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -427,11 +540,20 @@ export default function RecruiterAnalyticsPage() {
                         stroke={COLORS[2]}
                         strokeWidth={2}
                       />
+                      {compare && (
+                        <>
+                          <Line type="monotone" dataKey="applications" stroke="#94a3b8" strokeDasharray="4 4" dot={false} />
+                          <Line type="monotone" dataKey="interviews" stroke="#a3e635" strokeDasharray="4 4" dot={false} />
+                          <Line type="monotone" dataKey="hires" stroke="#f87171" strokeDasharray="4 4" dot={false} />
+                        </>
+                      )}
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-                    No trend data available
+                  <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground gap-2">
+                    <div>No trend data available</div>
+                    <div className="text-xs">Tip: Post a job to start collecting analytics.</div>
+                    <a href="/dashboard/recruiter/job/new" className="text-xs px-3 py-1.5 border rounded">Create Job</a>
                   </div>
                 )}
               </CardContent>
@@ -460,6 +582,12 @@ export default function RecruiterAnalyticsPage() {
                         cy="50%"
                         outerRadius={80}
                         dataKey="value"
+                        onClick={(data) => {
+                          const p = data?.payload as any;
+                          if (p?.name && typeof p.value === 'number') {
+                            setDrill({ title: `Status: ${p.name}`, items: [{ label: p.name, value: p.value, query: { status: p.name } }] });
+                          }
+                        }}
                       >
                         <LabelList dataKey="name" position="outside" />
                       </Pie>
@@ -467,8 +595,10 @@ export default function RecruiterAnalyticsPage() {
                     </PieChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-                    No application data available
+                  <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground gap-2">
+                    <div>No application data available</div>
+                    <div className="text-xs">Connect a source or invite candidates.</div>
+                    <a href="/dashboard/recruiter/candidates" className="text-xs px-3 py-1.5 border rounded">Open Candidates</a>
                   </div>
                 )}
               </CardContent>
@@ -691,6 +821,50 @@ export default function RecruiterAnalyticsPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {drill && (
+        <div className="fixed inset-0 bg-black/30 z-20" onClick={() => setDrill(null)}>
+          <div className="absolute right-0 top-0 h-full w-full sm:w-[420px] bg-white shadow-xl p-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-lg font-semibold">{drill.title}</div>
+              <button className="text-sm px-2 py-1 border rounded" onClick={() => setDrill(null)}>Close</button>
+            </div>
+            <div className="space-y-2">
+              {drill.items.map((it, i) => (
+                <div key={i} className="flex items-center justify-between border rounded p-2">
+                  <div className="text-sm">{it.label}</div>
+                  <div className="text-sm font-medium">{it.value}</div>
+                </div>
+              ))}
+              <div className="flex items-center justify-between mt-2">
+                <div className="text-xs text-muted-foreground">Tip: Click segments in charts to drill down here.</div>
+                {drill.items[0]?.query && (
+                  <a className="text-xs px-2 py-1 border rounded" href={`/dashboard/recruiter/candidates?${new URLSearchParams(drill.items[0].query as any).toString()}`}>Open in Candidates</a>
+                )}
+              </div>
+              <div className="mt-3 border-t pt-2">
+                <div className="text-sm font-medium mb-1">Saved Views</div>
+                <div className="flex gap-2 items-center mb-2">
+                  <input className="border rounded px-2 py-1 text-sm flex-1" placeholder="View name" value={newViewName} onChange={(e)=>setNewViewName(e.target.value)} />
+                  <button className="text-xs px-2 py-1 border rounded" onClick={saveCurrentView}>Save</button>
+                </div>
+                <div className="space-y-1 max-h-40 overflow-auto">
+                  {views.length === 0 && <div className="text-xs text-muted-foreground">No saved views yet.</div>}
+                  {views.map((v) => (
+                    <div key={v.name} className="flex items-center justify-between text-sm border rounded p-2">
+                      <div>{v.name}</div>
+                      <div className="flex gap-2">
+                        <button className="text-xs px-2 py-0.5 border rounded" onClick={()=>loadView(v)}>Load</button>
+                        <button className="text-xs px-2 py-0.5 border rounded" onClick={()=>deleteView(v.name)}>Delete</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

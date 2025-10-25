@@ -10,6 +10,7 @@ export interface IJobSeekerProfile extends Document {
   phone?: string
   location: string
   profileImage?: string
+  bannerImage?: string
 
   // Professional Information
   currentTitle: string
@@ -60,6 +61,10 @@ export interface IJobSeekerProfile extends Document {
   skillsVerified: number
   lastUpdated: Date
 
+  // ATS persistence
+  lastAtsAnalysis?: any
+  lastResumeFileName?: string
+
   createdAt: Date
   updatedAt: Date
 }
@@ -97,6 +102,7 @@ const JobSeekerProfileSchema = new Schema<IJobSeekerProfile>(
       trim: true,
     },
     profileImage: String,
+    bannerImage: String,
 
     // Professional Information
     currentTitle: {
@@ -233,6 +239,9 @@ const JobSeekerProfileSchema = new Schema<IJobSeekerProfile>(
       type: Date,
       default: Date.now,
     },
+    // ATS persistence
+    lastAtsAnalysis: { type: Schema.Types.Mixed, default: undefined },
+    lastResumeFileName: { type: String, trim: true },
   },
   {
     timestamps: true,

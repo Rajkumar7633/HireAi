@@ -118,14 +118,14 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
     }
 
-    const profileData = await req.json()
-    console.log("[v0] Profile data received:", profileData)
+    const body = await req.json()
+    console.log("[v0] Profile data received:", body)
 
     console.log("[v0] Connecting to database...")
     await connectDB()
     console.log("[v0] Database connected successfully")
 
-    const cleanedData = Object.entries(profileData).reduce((acc, [key, value]) => {
+    const cleanedData = Object.entries(body).reduce((acc, [key, value]) => {
       // Keep all values including empty strings, but exclude null and undefined
       if (value !== null && value !== undefined) {
         acc[key] = value
@@ -203,6 +203,9 @@ export async function PUT(req: NextRequest) {
     if (!Array.isArray(cleanedData.achievements)) cleanedData.achievements = []
     if (!Array.isArray(cleanedData.experiences)) cleanedData.experiences = []
 
+    // Load existing profile for safe fallback
+    const existing = await JobSeekerProfile.findOne({ userId: session.userId }).lean()
+
     const derivedYears = deriveYearsFromExperiences(cleanedData.experiences)
 
     const updatedData = {
@@ -213,6 +216,15 @@ export async function PUT(req: NextRequest) {
         : derivedYears,
       profileCompleteness: calculateCompleteness(cleanedData),
       lastUpdated: new Date(),
+      atsScore: typeof body.atsScore === "number"
+        ? Math.max(0, Math.min(100, body.atsScore))
+        : (existing?.atsScore ?? 0),
+      lastAtsAnalysis: body.lastAtsAnalysis !== undefined
+        ? body.lastAtsAnalysis
+        : (existing as any)?.lastAtsAnalysis,
+      lastResumeFileName: typeof body.lastResumeFileName === 'string'
+        ? body.lastResumeFileName
+        : (existing as any)?.lastResumeFileName,
     }
 
     console.log("[v0] Updating profile for user:", session.userId)
