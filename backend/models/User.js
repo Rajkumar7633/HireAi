@@ -8,7 +8,7 @@ const UserSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: true,
+    required: false,
   },
   passwordHash: {
     type: String,
@@ -69,6 +69,17 @@ const UserSchema = new mongoose.Schema({
   createdAt: {
     type: Date,
     default: Date.now,
+  },
+  // Email verification and OTP for secure login
+  emailVerified: {
+    type: Boolean,
+    default: false,
+  },
+  loginOtp: {
+    codeHash: { type: String },
+    expiresAt: { type: Date },
+    attempts: { type: Number, default: 0 },
+    devPlain: { type: String },
   },
   // Billing fields
   stripeCustomerId: {
