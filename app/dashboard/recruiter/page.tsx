@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -14,7 +14,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
   Briefcase,
-  Users,
+  Users,  
   BarChart3,
   ClipboardList,
   MessageSquare,
@@ -61,6 +61,7 @@ export default function RecruiterDashboard() {
   const { session } = useSession();
   const { toast } = useToast();
   const router = useRouter();
+  const params = useSearchParams();
   const [profile, setProfile] = useState<RecruiterProfile | null>(null);
   const [stats, setStats] = useState<DashboardStats>({
     activeJobs: 0,
@@ -71,6 +72,44 @@ export default function RecruiterDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [redirecting, setRedirecting] = useState(false);
+  // Feature gating: merge entitlements from profile and session
+  const mergedFeatures = {
+    ...(((profile as any)?.features || {}) as Record<string, boolean>),
+    ...((((session as any)?.features) || {}) as Record<string, boolean>),
+  }
+  const [provisionalActive, setProvisionalActive] = useState(false)
+  const subscriptionActive = ((profile as any)?.subscription?.status === 'active') || ((session as any)?.subscription?.status === 'active') || provisionalActive
+  const hasFeature = (k: string) => !!mergedFeatures[k] || !!subscriptionActive
+  const [shownUpgradeToast, setShownUpgradeToast] = useState(false)
+  const [didSync, setDidSync] = useState(false)
+
+  useEffect(() => {
+    // Read provisional activation window from localStorage (recruiter only)
+    try {
+      if (typeof window !== 'undefined') {
+        const until = Number(localStorage.getItem('provisional_active_until') || '0')
+        const roleGuess = localStorage.getItem('provisional_role')
+        const active = until > Date.now() && roleGuess === 'recruiter'
+        setProvisionalActive(active)
+        if (!active) {
+          localStorage.removeItem('provisional_active_until')
+          localStorage.removeItem('provisional_role')
+        }
+      }
+    } catch {}
+  }, [params])
+
+  useEffect(() => {
+    // If real subscription becomes active, clear provisional flags
+    const realActive = ((profile as any)?.subscription?.status === 'active') || ((session as any)?.subscription?.status === 'active')
+    if (realActive && typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('provisional_active_until')
+        localStorage.removeItem('provisional_role')
+      } catch {}
+      if (provisionalActive) setProvisionalActive(false)
+    }
+  }, [profile, session, provisionalActive])
 
   useEffect(() => {
     if (session) {
@@ -79,6 +118,67 @@ export default function RecruiterDashboard() {
       setLoading(false);
     }
   }, [session]);
+
+  useEffect(() => {
+    // Show toast when subscription activates (source of truth)
+    const status = (profile as any)?.subscription?.status
+    if (!shownUpgradeToast && status === 'active') {
+      const end = (profile as any)?.subscription?.currentPeriodEnd
+      const when = end ? new Date(end).toLocaleDateString() : undefined
+      toast({
+        title: 'Subscription activated',
+        description: when ? `Next billing: ${when}` : undefined,
+      })
+      setShownUpgradeToast(true)
+    }
+    // No-op cleanup; toast API handles its own lifecycle
+    return () => {};
+  }, [toast, profile, shownUpgradeToast, params]);
+
+  // After returning from checkout, force a backend sync then refetch profile so features unlock immediately
+  useEffect(() => {
+    const billing = params?.get('billing')
+    const sid = params?.get('session_id')
+    if (didSync) return
+    const shouldSync = billing === 'success' || !!sid
+    if (!shouldSync) return
+    (async () => {
+      try {
+        const flagKey = 'billing_synced_recently'
+        if (typeof window !== 'undefined') {
+          const last = Number(localStorage.getItem(flagKey) || '0')
+          const now = Date.now()
+          if (now - last < 60_000) { // 1 minute guard
+            setDidSync(true)
+            return
+          }
+          localStorage.setItem(flagKey, String(now))
+          // Set provisional activation for recruiter if session_id present
+          if (sid) {
+            try {
+              localStorage.setItem('provisional_role', 'recruiter')
+              localStorage.setItem('provisional_active_until', String(now + 15 * 60 * 1000))
+              setProvisionalActive(true)
+            } catch {}
+          }
+        }
+        setDidSync(true)
+        const q = sid ? `?session_id=${encodeURIComponent(sid)}` : ''
+        const r = await fetch(`/api/billing/sync${q}`, { cache: 'no-store' })
+        if (r.status === 429) {
+          // rate limited; skip and rely on webhook
+        }
+        await fetchProfileAndStats()
+        // remove query to avoid re-sync on refresh
+        if (typeof window !== 'undefined') {
+          const url = new URL(window.location.href)
+          url.searchParams.delete('billing')
+          url.searchParams.delete('session_id')
+          window.history.replaceState({}, '', url.toString())
+        }
+      } catch {}
+    })()
+  }, [params, didSync])
 
   useEffect(() => {
     if (profile && !redirecting) {
@@ -105,7 +205,7 @@ export default function RecruiterDashboard() {
   const fetchProfileAndStats = async () => {
     try {
       console.log("[v0] Fetching profile data...");
-      const profileResponse = await fetch("/api/user/profile");
+      const profileResponse = await fetch("/api/user/profile", { cache: 'no-store' });
 
       if (profileResponse.ok) {
         const profileData = await profileResponse.json();
@@ -230,6 +330,13 @@ export default function RecruiterDashboard() {
           </p>
         </div>
         <div className="flex items-center gap-4">
+          {/* Plan badge + Manage Billing */}
+          <Badge variant="outline">
+            {`Plan: ${subscriptionActive ? 'Pro' : 'Free'}`}
+          </Badge>
+          <Button asChild variant="outline">
+            <Link href="/billing">Manage Billing</Link>
+          </Button>
           <NotificationBell />
           <Button asChild className="action-button">
             <Link href="/dashboard/recruiter/job-descriptions">
@@ -388,10 +495,17 @@ export default function RecruiterDashboard() {
                 variant="outline"
                 size="sm"
               >
-                <Link href="/dashboard/recruiter/ai-matching">
-                  <Zap className="mr-2 h-4 w-4" />
-                  Smart Candidate Matching
-                </Link>
+                {hasFeature("rulesEngine") ? (
+                  <Link href="/dashboard/recruiter/ai-matching">
+                    <Zap className="mr-2 h-4 w-4" />
+                    Smart Candidate Matching
+                  </Link>
+                ) : (
+                  <Link href="/billing">
+                    <Zap className="mr-2 h-4 w-4" />
+                    Upgrade to use Matching
+                  </Link>
+                )}
               </Button>
               <Button
                 asChild
@@ -568,6 +682,7 @@ export default function RecruiterDashboard() {
               </CardContent>
             </Card>
 
+
             <Card className="premium-card border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-emerald-700">
@@ -593,14 +708,18 @@ export default function RecruiterDashboard() {
                   </span>
                   <Badge className="bg-teal-100 text-teal-700">18 days</Badge>
                 </div>
-                <Button
-                  asChild
-                  className="w-full bg-emerald-600 hover:bg-emerald-700"
-                >
-                  <Link href="/dashboard/recruiter/analytics">
-                    <TrendingUp className="mr-2 h-4 w-4" />
-                    View Analytics
-                  </Link>
+                <Button asChild className="w-full bg-emerald-600 hover:bg-emerald-700">
+                  {hasFeature("analyticsPro") ? (
+                    <Link href="/dashboard/recruiter/analytics">
+                      <TrendingUp className="mr-2 h-4 w-4" />
+                      View Analytics
+                    </Link>
+                  ) : (
+                    <Link href="/billing">
+                      <TrendingUp className="mr-2 h-4 w-4" />
+                      Upgrade to view Analytics
+                    </Link>
+                  )}
                 </Button>
               </CardContent>
             </Card>
@@ -651,149 +770,112 @@ export default function RecruiterDashboard() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">
-                    Talent Pool Size:
-                  </span>
+                  <span className="text-muted-foreground">Talent Pool Size:</span>
                   <Badge className="bg-amber-100 text-amber-700">2,847</Badge>
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Match Rate:</span>
-                  <Badge className="bg-yellow-100 text-yellow-700">76%</Badge>
-                </div>
-                <Button
-                  asChild
-                  className="w-full bg-amber-600 hover:bg-amber-700"
-                >
-                  <Link href="/dashboard/recruiter/talent-pool">
-                    Explore Talent Pool
-                  </Link>
+                <Button asChild className="w-full bg-amber-600 hover:bg-amber-700">
+                  {hasFeature("rediscovery") ? (
+                    <Link href="/dashboard/recruiter/talent-pool">Explore Talent Pool</Link>
+                  ) : (
+                    <Link href="/billing">Upgrade to unlock Rediscovery</Link>
+                  )}
                 </Button>
               </CardContent>
             </Card>
-          </div>
 
-          <Card className="premium-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Zap className="h-5 w-5 text-yellow-600" />
-                Quick Actions & Advanced Tools
-              </CardTitle>
-              <CardDescription>
-                Access your most powerful recruitment features
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                <Button
-                  asChild
-                  variant="outline"
-                  className="justify-start h-auto p-3 bg-transparent"
-                >
-                  <Link href="/dashboard/recruiter/ai-screening">
-                    <div className="flex flex-col items-start gap-1">
-                      <div className="flex items-center gap-2">
-                        <Brain className="h-4 w-4 text-purple-600" />
-                        <span className="font-medium">AI Screening</span>
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        Auto-score resumes
-                      </span>
+            {/* Quick Actions & Advanced Tools inside right column below pipeline & talent pool */}
+            <Card className="premium-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Zap className="h-5 w-5 text-yellow-600" />
+              Quick Actions & Advanced Tools
+            </CardTitle>
+            <CardDescription>Access your most powerful recruitment features</CardDescription>
+          </CardHeader>
+          <CardContent className="p-6 min-h-[240px]">
+            <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2">
+              <Button asChild variant="outline" className="w-full justify-start h-auto p-3 bg-transparent">
+                <Link href="/dashboard/recruiter/ai-screening">
+                  <div className="flex flex-col items-start gap-1">
+                    <div className="flex items-center gap-2">
+                      <Brain className="h-4 w-4 text-purple-600" />
+                      <span className="font-medium">AI Screening</span>
                     </div>
-                  </Link>
-                </Button>
-
-                <Button
-                  asChild
-                  variant="outline"
-                  className="justify-start h-auto p-3 bg-transparent"
-                >
-                  <Link href="/dashboard/recruiter/email-templates">
-                    <div className="flex flex-col items-start gap-1">
-                      <div className="flex items-center gap-2">
-                        <Mail className="h-4 w-4 text-blue-600" />
-                        <span className="font-medium">Email Templates</span>
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        Streamline communication
-                      </span>
+                    <span className="text-xs text-muted-foreground">Auto-score resumes</span>
+                  </div>
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="w-full justify-start h-auto p-3 bg-transparent">
+                <Link href="/dashboard/recruiter/email-templates">
+                  <div className="flex flex-col items-start gap-1">
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-4 w-4 text-blue-600" />
+                      <span className="font-medium">Email Templates</span>
                     </div>
-                  </Link>
-                </Button>
-
-                <Button
-                  asChild
-                  variant="outline"
-                  className="justify-start h-auto p-3 bg-transparent"
-                >
-                  <Link href="/dashboard/recruiter/collaboration">
-                    <div className="flex flex-col items-start gap-1">
-                      <div className="flex items-center gap-2">
-                        <Users className="h-4 w-4 text-green-600" />
-                        <span className="font-medium">Team Collaboration</span>
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        Work with your team
-                      </span>
+                    <span className="text-xs text-muted-foreground">Streamline communication</span>
+                  </div>
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="w-full justify-start h-auto p-3 bg-transparent">
+                <Link href="/dashboard/recruiter/collaboration">
+                  <div className="flex flex-col items-start gap-1">
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4 text-green-600" />
+                      <span className="font-medium">Team Collaboration</span>
                     </div>
-                  </Link>
-                </Button>
-
-                <Button
-                  asChild
-                  variant="outline"
-                  className="justify-start h-auto p-3 bg-transparent"
-                >
-                  <Link href="/dashboard/recruiter/video-interviews">
-                    <div className="flex flex-col items-start gap-1">
-                      <div className="flex items-center gap-2">
-                        <Video className="h-4 w-4 text-red-600" />
-                        <span className="font-medium">Video Interviews</span>
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        Schedule & conduct
-                      </span>
+                    <span className="text-xs text-muted-foreground">Work with your team</span>
+                  </div>
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="w-full justify-start h-auto p-3 bg-transparent">
+                <Link href="/dashboard/recruiter/video-interviews">
+                  <div className="flex flex-col items-start gap-1">
+                    <div className="flex items-center gap-2">
+                      <Video className="h-4 w-4 text-red-600" />
+                      <span className="font-medium">Video Interviews</span>
                     </div>
-                  </Link>
-                </Button>
-
-                <Button
-                  asChild
-                  variant="outline"
-                  className="justify-start h-auto p-3 bg-transparent"
-                >
-                  <Link href="/dashboard/recruiter/assessments">
-                    <div className="flex flex-col items-start gap-1">
-                      <div className="flex items-center gap-2">
-                        <ClipboardList className="h-4 w-4 text-orange-600" />
-                        <span className="font-medium">Smart Assessments</span>
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        Create & manage tests
-                      </span>
+                    <span className="text-xs text-muted-foreground">Schedule & conduct</span>
+                  </div>
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="w-full justify-start h-auto p-3 bg-transparent">
+                <Link href="/dashboard/recruiter/assessments">
+                  <div className="flex flex-col items-start gap-1">
+                    <div className="flex items-center gap-2">
+                      <ClipboardList className="h-4 w-4 text-orange-600" />
+                      <span className="font-medium">Smart Assessments</span>
                     </div>
-                  </Link>
-                </Button>
-
-                <Button
-                  asChild
-                  variant="outline"
-                  className="justify-start h-auto p-3 bg-transparent"
-                >
+                    <span className="text-xs text-muted-foreground">Create & manage tests</span>
+                  </div>
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="w-full justify-start h-auto p-3 bg-transparent">
+                {hasFeature("analyticsPro") ? (
                   <Link href="/dashboard/recruiter/analytics">
                     <div className="flex flex-col items-start gap-1">
                       <div className="flex items-center gap-2">
                         <BarChart3 className="h-4 w-4 text-indigo-600" />
                         <span className="font-medium">Advanced Analytics</span>
                       </div>
-                      <span className="text-xs text-muted-foreground">
-                        Deep insights & metrics
-                      </span>
+                      <span className="text-xs text-muted-foreground">Deep insights & metrics</span>
                     </div>
                   </Link>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+                ) : (
+                  <Link href="/billing">
+                    <div className="flex flex-col items-start gap-1">
+                      <div className="flex items-center gap-2">
+                        <BarChart3 className="h-4 w-4 text-indigo-600" />
+                        <span className="font-medium">Upgrade for Analytics</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">Unlock insights & metrics</span>
+                    </div>
+                  </Link>
+                )}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+          </div>
         </div>
       </div>
     </div>

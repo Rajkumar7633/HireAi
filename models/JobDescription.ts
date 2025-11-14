@@ -157,3 +157,5 @@ const JobDescriptionSchema = new Schema<IJobDescription>(
 )
 
 export default mongoose.models.JobDescription || mongoose.model<IJobDescription>("JobDescription", JobDescriptionSchema)
+// Helpful indexes for recruiter queries
+JobDescriptionSchema.index({ recruiterId: 1, createdAt: -1 })

@@ -13,3 +13,6 @@ coverage/
 # Editor
 .vscode/
 .idea/
+
+# Ignore uploaded resumes
+uploads/resumes/

@@ -49,11 +49,14 @@ export const navigationByRole: Record<Role, NavItem[]> = {
       url: "#",
       icon: Users,
       items: [
+        { title: "My Profile", url: "/dashboard/job-seeker/profile" },
         { title: "Feed", url: "/dashboard/job-seeker/social/feed" },
+        { title: "Requests", url: "/dashboard/job-seeker/social/requests" },
         { title: "Search", url: "/dashboard/job-seeker/social/search" },
         { title: "Chat", url: "/dashboard/job-seeker/social/chat" },
       ],
     },
+    { title: "Billing", url: "/billing", icon: Settings },
   ],
   recruiter: [
     { title: "Dashboard", url: "/dashboard/recruiter", icon: BarChart3 },
@@ -94,12 +97,14 @@ export const navigationByRole: Record<Role, NavItem[]> = {
     { title: "Talent Pool", url: "/dashboard/recruiter/talent-pool", icon: Database },
     { title: "Notifications", url: "/dashboard/notifications", icon: Bell },
     { title: "History", url: "/dashboard/history", icon: Database },
+    { title: "Billing", url: "/billing", icon: Settings },
   ],
   admin: [
     { title: "Dashboard", url: "/dashboard/admin", icon: BarChart3 },
     { title: "User Management", url: "/dashboard/admin/users", icon: UserCog },
     { title: "Platform Stats", url: "/dashboard/admin/stats", icon: BarChart3 },
-    { title: "Job Oversight", url: "/dashboard/recruiter/job-descriptions", icon: Briefcase },
+    { title: "Job Oversight", url: "/dashboard/admin/jobs", icon: Briefcase },
+    { title: "Security", url: "/dashboard/admin/security", icon: Settings },
     { title: "Settings", url: "/dashboard/settings", icon: Settings },
   ],
 };

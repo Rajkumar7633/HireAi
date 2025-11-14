@@ -106,12 +106,11 @@ const COLORS = [
 ];
 
 export default function RecruiterAnalyticsPage() {
-  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(
-    null
-  );
-  const [advancedMetrics, setAdvancedMetrics] =
-    useState<AdvancedMetrics | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
+  const [advancedMetrics, setAdvancedMetrics] = useState<AdvancedMetrics | null>(null);
+  const [loadingBase, setLoadingBase] = useState(true);
+  const [loadingAdvanced, setLoadingAdvanced] = useState(true);
+  const loading = loadingBase || loadingAdvanced;
   const [error, setError] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState(() => typeof window !== 'undefined' ? (localStorage.getItem('recruiter:analytics:range') || '6months') : '6months');
   const [normalizeFunnel, setNormalizeFunnel] = useState<boolean>(() => typeof window !== 'undefined' ? (localStorage.getItem('recruiter:analytics:norm') === '0' ? false : true) : true);
@@ -163,18 +162,28 @@ export default function RecruiterAnalyticsPage() {
     } catch {}
   }, [timeRange, normalizeFunnel, compare]);
 
+  const fetchWithTimeout = async (input: RequestInfo | URL, init?: RequestInit, ms = 10000) => {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), ms);
+    try {
+      return await fetch(input, { ...(init || {}), signal: controller.signal });
+    } finally {
+      clearTimeout(id);
+    }
+  };
+
   const fetchAnalytics = async () => {
-    setLoading(true);
+    setLoadingBase(true);
     setError(null);
 
     try {
-      const response = await fetch("/api/analytics/recruiter-dashboard", {
+      const response = await fetchWithTimeout("/api/analytics/recruiter-dashboard", {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
         },
         credentials: "include",
-      });
+      }, 10000);
 
       if (response.ok) {
         const data = await response.json();
@@ -192,12 +201,15 @@ export default function RecruiterAnalyticsPage() {
     } catch (error) {
       console.error("Network error fetching analytics:", error);
       setError("Network error. Please check if the backend server is running.");
+    } finally {
+      setLoadingBase(false);
     }
   };
 
   const fetchAdvancedMetrics = async () => {
+    setLoadingAdvanced(true);
     try {
-      const response = await fetch(
+      const response = await fetchWithTimeout(
         `/api/analytics/advanced-metrics?timeRange=${timeRange}`,
         {
           method: "GET",
@@ -205,7 +217,8 @@ export default function RecruiterAnalyticsPage() {
             "Content-Type": "application/json",
           },
           credentials: "include",
-        }
+        },
+        10000
       );
 
       if (response.ok) {
@@ -215,7 +228,7 @@ export default function RecruiterAnalyticsPage() {
     } catch (error) {
       console.error("Error fetching advanced metrics:", error);
     } finally {
-      setLoading(false);
+      setLoadingAdvanced(false);
     }
   };
 

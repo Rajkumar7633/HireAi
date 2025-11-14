@@ -21,17 +21,41 @@ const isAdmin = (req, res, next) => {
 }
 
 // @route   GET /api/admin/users
-// @desc    Get all users
+// @desc    List users with filters and pagination
 // @access  Private (Admin)
 router.get("/users", auth, isAdmin, async (req, res) => {
   try {
-    const users = await User.find().select("-password").sort({ createdAt: -1 })
-    res.json(users)
+    const page = Math.max(parseInt(req.query.page || "1", 10), 1)
+    const limit = Math.min(Math.max(parseInt(req.query.limit || "20", 10), 1), 100)
+    const role = req.query.role && ["recruiter", "job_seeker", "admin"].includes(req.query.role) ? req.query.role : undefined
+    const q = (req.query.q || "").toString().trim()
+
+    const filter = {}
+    if (role) filter.role = role
+    if (q) {
+      filter.$or = [
+        { name: { $regex: q, $options: "i" } },
+        { email: { $regex: q, $options: "i" } },
+      ]
+    }
+
+    const [items, total] = await Promise.all([
+      User.find(filter)
+        .select("-password -passwordHash")
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit),
+      User.countDocuments(filter),
+    ])
+
+    res.json({ items, total, page, limit, pages: Math.ceil(total / limit) })
   } catch (err) {
     console.error(err.message)
     res.status(500).send("Server Error")
   }
 })
+
+module.exports = router
 
 // @route   GET /api/admin/users/:id
 // @desc    Get user by ID
@@ -127,4 +151,56 @@ router.delete("/users/:id", auth, isAdmin, async (req, res) => {
   }
 })
 
-module.exports = router
+// Admin statistics for dashboard
+// @route   GET /api/admin/stats/overview
+// @desc    Aggregate counts for KPI cards
+// @access  Private (Admin)
+router.get("/stats/overview", auth, isAdmin, async (req, res) => {
+  try {
+    const [total, students, recruiters, admins, activeSubs] = await Promise.all([
+      User.countDocuments({}),
+      User.countDocuments({ role: "job_seeker" }),
+      User.countDocuments({ role: "recruiter" }),
+      User.countDocuments({ role: "admin" }),
+      User.countDocuments({ "subscription.status": "active" }),
+    ])
+
+    res.json({ total, students, recruiters, admins, activeSubs })
+  } catch (err) {
+    console.error(err.message)
+    res.status(500).send("Server Error")
+  }
+})
+
+// @route   GET /api/admin/stats/timeseries
+// @desc    Timeseries for charts (signups, subs) grouped by day over a range
+// @access  Private (Admin)
+router.get("/stats/timeseries", auth, isAdmin, async (req, res) => {
+  try {
+    const metric = (req.query.metric || "signups").toString()
+    const days = Math.min(Math.max(parseInt(req.query.days || "30", 10), 1), 180)
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+
+    if (metric === "subs") {
+      const pipeline = [
+        { $match: { "subscription.status": "active", updatedAt: { $gte: since } } },
+        { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$updatedAt" } }, count: { $sum: 1 } } },
+        { $sort: { _id: 1 } },
+      ]
+      const rows = await User.aggregate(pipeline)
+      return res.json({ metric, days, rows })
+    }
+
+    // default: signups
+    const pipeline = [
+      { $match: { createdAt: { $gte: since } } },
+      { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, count: { $sum: 1 } } },
+      { $sort: { _id: 1 } },
+    ]
+    const rows = await User.aggregate(pipeline)
+    return res.json({ metric: "signups", days, rows })
+  } catch (err) {
+    console.error(err.message)
+    res.status(500).send("Server Error")
+  }
+})

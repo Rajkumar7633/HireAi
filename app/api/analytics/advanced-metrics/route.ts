@@ -1,8 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { createHash } from "crypto"
 import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import JobDescription from "@/models/JobDescription"
 import Application from "@/models/Application"
+import { cacheGet, cacheSet, cacheKey } from "@/lib/redis-cache"
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,6 +18,14 @@ export async function GET(request: NextRequest) {
     const recruiterId = session.userId
 
     console.log("[v0] Fetching advanced metrics for recruiter:", recruiterId)
+
+    // Try cache first (optional)
+    try {
+      const timeRange = (new URL(request.url)).searchParams.get('timeRange') || '6months'
+      const key = cacheKey({ route: 'advanced-metrics', recruiterId, timeRange })
+      const hit = await cacheGet(key)
+      if (hit) return NextResponse.json(JSON.parse(hit))
+    } catch {}
 
     // Get recruiter's job descriptions
     const jobDescriptions = await JobDescription.find({ recruiterId }).select("_id title createdAt")
@@ -203,7 +213,25 @@ export async function GET(request: NextRequest) {
       trendsCount: formattedTrends.length,
     })
 
-    return NextResponse.json(advancedMetrics)
+    try {
+      const timeRange = (new URL(request.url)).searchParams.get('timeRange') || '6months'
+      const key = cacheKey({ route: 'advanced-metrics', recruiterId, timeRange })
+      await cacheSet(key, JSON.stringify(advancedMetrics), 60)
+    } catch {}
+
+    // ETag + Cache-Control
+    const body = JSON.stringify(advancedMetrics)
+    const etag = '"' + createHash('sha1').update(body).digest('base64') + '"'
+    const inm = request.headers.get('if-none-match')
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "Cache-Control": "public, max-age=60, stale-while-revalidate=120",
+      "ETag": etag,
+    }
+    if (inm && inm === etag) {
+      return new NextResponse(null, { status: 304, headers })
+    }
+    return new NextResponse(body, { status: 200, headers })
   } catch (error) {
     console.error("[v0] Advanced Analytics Error:", error)
     return NextResponse.json(

@@ -7,8 +7,14 @@ import { getSession } from "@/lib/auth"
 export async function GET(request: NextRequest) {
   try {
     await connectDB()
+    const url = new URL(request.url)
+    const companyId = url.searchParams.get("companyId") || undefined
+    const includeAll = url.searchParams.get("all") === "1"
 
-    const jobs = await JobDescription.find({ status: "active", isActive: true })
+    const baseQuery: any = includeAll ? {} : { status: "active", isActive: true }
+    if (companyId) baseQuery.companyId = companyId
+
+    const jobs = await JobDescription.find(baseQuery)
       .populate("recruiterId", "name email companyName")
       .populate("companyId", "name logoUrl description website")
       .sort({ createdAt: -1 })

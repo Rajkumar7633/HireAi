@@ -29,6 +29,7 @@ import {
 import Link from "next/link";
 import { useSession } from "@/hooks/use-session";
 import { useEffect, useState, useCallback } from "react";
+import { useToast } from "@/hooks/use-toast";
 import { NotificationBell } from "@/components/notification-bell";
 import { useNotifications } from "@/hooks/use-notifications";
 
@@ -57,6 +58,7 @@ interface JSProject {
 
 export default function JobSeekerDashboard() {
   const { session } = useSession();
+  const { toast } = useToast();
   const { notifications, unreadCount } = useNotifications();
   const [stats, setStats] = useState<JobSeekerStats>({
     totalApplications: 12,
@@ -68,6 +70,7 @@ export default function JobSeekerDashboard() {
   const [experiences, setExperiences] = useState<JSExperience[]>([]);
   const [projects, setProjects] = useState<JSProject[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string>("");
+  const [shownUpgradeToast, setShownUpgradeToast] = useState(false);
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -99,6 +102,17 @@ export default function JobSeekerDashboard() {
     };
   }, [fetchProfile]);
 
+  useEffect(() => {
+    const status = (session as any)?.subscription?.status;
+    if (!shownUpgradeToast && status === "active") {
+      const end = (session as any)?.subscription?.currentPeriodEnd;
+      const when = end ? new Date(end).toLocaleDateString() : undefined;
+      toast({ title: "Subscription activated", description: when ? `Next billing: ${when}` : undefined });
+      setShownUpgradeToast(true);
+    }
+    return () => {};
+  }, [session, shownUpgradeToast, toast]);
+
   const assessmentNotifications = notifications.filter(
     (n) => n.type === "assessment_assigned" && !n.read
   );
@@ -116,6 +130,13 @@ export default function JobSeekerDashboard() {
           </p>
         </div>
         <div className="flex items-center gap-4">
+          {/* Plan badge + Manage Billing */}
+          <Badge variant="outline">
+            Plan: {((session as any)?.subscription?.status === 'active' && (session as any)?.subscription?.priceId) ? 'Plus' : 'Free'}
+          </Badge>
+          <Button asChild variant="outline">
+            <Link href="/billing">Manage Billing</Link>
+          </Button>
           <NotificationBell />
           <Button asChild variant="outline">
             <Link href="/dashboard/job-seeker/profile">

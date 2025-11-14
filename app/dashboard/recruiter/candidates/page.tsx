@@ -68,6 +68,10 @@ export default function CandidatesOverviewPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [viewMode, setViewMode] = useState<"all" | "shortlisted">("all");
+  const [views, setViews] = useState<Array<{ name: string; payload: { searchTerm: string; statusFilter: string; viewMode: "all" | "shortlisted" } }>>(() => {
+    try { return JSON.parse(localStorage.getItem('recruiter:candidates:savedViews') || '[]'); } catch { return []; }
+  });
+  const [newViewName, setNewViewName] = useState<string>("");
 
   useEffect(() => {
     fetchAllCandidates();
@@ -75,7 +79,47 @@ export default function CandidatesOverviewPage() {
 
   useEffect(() => {
     filterApplications();
-  }, [applications, searchTerm, statusFilter]);
+  }, [applications, searchTerm, statusFilter, viewMode]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('recruiter:candidates:lastState', JSON.stringify({ searchTerm, statusFilter, viewMode }));
+    } catch {}
+  }, [searchTerm, statusFilter, viewMode]);
+
+  useEffect(() => {
+    // Load last state on mount
+    try {
+      const raw = localStorage.getItem('recruiter:candidates:lastState');
+      if (raw) {
+        const s = JSON.parse(raw);
+        if (typeof s.searchTerm === 'string') setSearchTerm(s.searchTerm);
+        if (typeof s.statusFilter === 'string') setStatusFilter(s.statusFilter);
+        if (s.viewMode === 'all' || s.viewMode === 'shortlisted') setViewMode(s.viewMode);
+      }
+    } catch {}
+  }, []);
+
+  const saveCurrentView = () => {
+    const name = (newViewName || '').trim();
+    if (!name) return;
+    const updated = [...views.filter(v => v.name !== name), { name, payload: { searchTerm, statusFilter, viewMode } }];
+    setViews(updated);
+    try { localStorage.setItem('recruiter:candidates:savedViews', JSON.stringify(updated)); } catch {}
+    setNewViewName("");
+  };
+
+  const loadView = (v: { name: string; payload: { searchTerm: string; statusFilter: string; viewMode: "all" | "shortlisted" } }) => {
+    setSearchTerm(v.payload.searchTerm);
+    setStatusFilter(v.payload.statusFilter);
+    setViewMode(v.payload.viewMode);
+  };
+
+  const deleteView = (name: string) => {
+    const updated = views.filter(v => v.name !== name);
+    setViews(updated);
+    try { localStorage.setItem('recruiter:candidates:savedViews', JSON.stringify(updated)); } catch {}
+  };
 
   const fetchAllCandidates = async () => {
     try {
@@ -283,6 +327,18 @@ export default function CandidatesOverviewPage() {
             <SelectItem value="Rejected">Rejected</SelectItem>
           </SelectContent>
         </Select>
+        {/* Saved Views controls */}
+        <div className="hidden md:flex items-center gap-2">
+          <select className="border rounded px-2 py-1 text-sm" onChange={(e)=>{ const v = views.find(x=>x.name===e.target.value); if (v) loadView(v); }}>
+            <option value="">Views</option>
+            {views.map(v=> (<option key={v.name} value={v.name}>{v.name}</option>))}
+          </select>
+          <input className="border rounded px-2 py-1 text-sm w-40" placeholder="Save as…" value={newViewName} onChange={(e)=>setNewViewName(e.target.value)} />
+          <Button variant="outline" size="sm" onClick={saveCurrentView}>Save</Button>
+          {views.length>0 && (
+            <Button variant="outline" size="sm" onClick={()=>{ const n=(prompt('Delete view by name?')||'').trim(); if(n) deleteView(n); }}>Delete</Button>
+          )}
+        </div>
         <div className="text-xs text-muted-foreground">
           Showing {filteredApplications.length} of {viewMode === "shortlisted" ? applications.filter((a: any) => a.status === "Shortlisted" || (a as any).shortlisted === true).length : applications.length}
         </div>
