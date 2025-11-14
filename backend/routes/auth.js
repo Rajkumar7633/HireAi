@@ -16,15 +16,30 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ msg: "User already exists" })
     }
 
+    // Determine target role
+    const requestedRole = role || "job_seeker"
+
+    // Admin signup policy: allow first admin; otherwise require ADMIN_ALLOW_SELF_SIGNUP=1
+    if (requestedRole === "admin") {
+      const existingAdmins = await User.countDocuments({ role: "admin" })
+      const allow = process.env.ADMIN_ALLOW_SELF_SIGNUP === "1" || existingAdmins === 0
+      if (!allow) {
+        return res.status(403).json({ msg: "Admin signup disabled. Ask an admin to invite/promote." })
+      }
+    }
+
     user = new User({
       email,
       password,
-      role: role || "job_seeker", // Default to job_seeker if not provided
+      role: requestedRole,
       name,
     })
 
     const salt = await bcrypt.genSalt(10)
-    user.password = await bcrypt.hash(password, salt)
+    const hash = await bcrypt.hash(password, salt)
+    // Store in both fields for compatibility with frontend login route which expects passwordHash
+    user.password = hash
+    user.passwordHash = hash
 
     await user.save()
 

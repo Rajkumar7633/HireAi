@@ -33,8 +33,18 @@ const uploadLimiter = rateLimit({
   legacyHeaders: false,
 })
 
+// Strict limiter for billing endpoints to prevent abuse
+const billingLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20, // generous but protective
+  message: { error: "Too many billing requests, please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
 module.exports = {
   apiLimiter,
   authLimiter,
   uploadLimiter,
+  billingLimiter,
 }

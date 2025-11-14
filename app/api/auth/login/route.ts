@@ -62,7 +62,7 @@ export async function POST(req: Request) {
     response.cookies.set("auth-token", token, {
       httpOnly: true,
       path: "/",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
+      // Session cookie: no maxAge/expires so it clears when the browser closes
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
     })

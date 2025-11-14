@@ -1,8 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { createHash } from "crypto"
 import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import JobDescription from "@/models/JobDescription"
 import Application from "@/models/Application"
+import { cacheGet, cacheSet, cacheKey } from "@/lib/redis-cache"
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,6 +16,13 @@ export async function GET(request: NextRequest) {
     await connectDB()
 
     const recruiterId = session.userId
+
+    // Try cache first (optional)
+    try {
+      const key = cacheKey({ route: "recruiter-dashboard", recruiterId })
+      const hit = await cacheGet(key)
+      if (hit) return NextResponse.json(JSON.parse(hit))
+    } catch {}
 
     console.log("[v0] Fetching analytics for recruiter:", recruiterId)
 
@@ -37,7 +46,7 @@ export async function GET(request: NextRequest) {
 
     console.log("[v0] Total applications:", totalApplications)
 
-    const applicationsByStatus = await Application.aggregate([
+    let applicationsByStatus = await Application.aggregate([
       { $match: { jobDescriptionId: { $in: jobDescriptionIds } } },
       {
         $group: {
@@ -50,17 +59,17 @@ export async function GET(request: NextRequest) {
 
     console.log("[v0] Applications by status:", applicationsByStatus)
 
-    // Top Skills from job descriptions
-    const topSkills = await JobDescription.aggregate([
+    // Top Skills from job descriptions (use skillsRequired field)
+    let topSkills = await JobDescription.aggregate([
       { $match: { recruiterId } },
-      { $unwind: "$skills" },
-      { $group: { _id: "$skills", count: { $sum: 1 } } },
+      { $unwind: "$skillsRequired" },
+      { $group: { _id: "$skillsRequired", count: { $sum: 1 } } },
       { $sort: { count: -1 } },
       { $limit: 5 },
     ])
 
-    // Calculate average match score (mock for now)
-    const averageMatchScore = 75.5
+    // Calculate average match score (placeholder metric retained at zero until computed from matches)
+    const averageMatchScore = 0
 
     const analyticsData = {
       totalJobDescriptions,
@@ -72,7 +81,24 @@ export async function GET(request: NextRequest) {
 
     console.log("[v0] Analytics data generated:", analyticsData)
 
-    return NextResponse.json(analyticsData)
+    try {
+      const key = cacheKey({ route: "recruiter-dashboard", recruiterId })
+      await cacheSet(key, JSON.stringify(analyticsData), 60)
+    } catch {}
+
+    // ETag + Cache-Control
+    const body = JSON.stringify(analyticsData)
+    const etag = '"' + createHash('sha1').update(body).digest('base64') + '"'
+    const inm = request.headers.get('if-none-match')
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "Cache-Control": "public, max-age=60, stale-while-revalidate=120",
+      "ETag": etag,
+    }
+    if (inm && inm === etag) {
+      return new NextResponse(null, { status: 304, headers })
+    }
+    return new NextResponse(body, { status: 200, headers })
   } catch (error) {
     console.error("[v0] Analytics API Error:", error)
     return NextResponse.json(

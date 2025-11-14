@@ -178,11 +178,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <SidebarProvider>
+    <SidebarProvider defaultOpen={true}>
       <AppSidebar />
       <SidebarInset className="bg-white text-gray-900">
         <CommandPalette />
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4 bg-white">
+        <header className="flex h-14 shrink-0 items-center gap-2 border-b px-3 bg-white">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4" />
           <Breadcrumb>
@@ -286,7 +286,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             </DropdownMenu>
           </div>
         </header>
-        <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-6 bg-white">
+        <main className="flex flex-1 flex-col gap-4 p-0 md:gap-6 md:p-0 bg-white">
           {children}
         </main>
         {/* Global light overrides to avoid unexpected dark backgrounds from nested components */}

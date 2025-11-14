@@ -7,6 +7,11 @@ export interface ISocialPost extends Document {
   likes: number;
   likedBy: Array<mongoose.Types.ObjectId | string>;
   commentsCount: number;
+  hiddenBy: Array<mongoose.Types.ObjectId | string>;
+  reports?: {
+    count: number;
+    reporters: Array<mongoose.Types.ObjectId | string>;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -19,6 +24,11 @@ const SocialPostSchema = new Schema<ISocialPost>(
     likes: { type: Number, default: 0 },
     likedBy: { type: [Schema.Types.ObjectId], ref: "User", default: [] },
     commentsCount: { type: Number, default: 0 },
+    hiddenBy: { type: [Schema.Types.ObjectId], ref: "User", default: [] },
+    reports: {
+      count: { type: Number, default: 0 },
+      reporters: { type: [Schema.Types.ObjectId], ref: "User", default: [] },
+    },
   },
   { timestamps: true },
 );

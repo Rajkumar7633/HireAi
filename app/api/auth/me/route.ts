@@ -37,6 +37,9 @@ export async function GET(request: NextRequest) {
         professionalSummary: user.professionalSummary,
         businessLocation: user.businessLocation,
         lastManualUpdate: user.lastManualUpdate,
+        subscription: (user as any).subscription || null,
+        features: (user as any).features || {},
+        limits: (user as any).limits || {},
       },
     })
   } catch (error) {

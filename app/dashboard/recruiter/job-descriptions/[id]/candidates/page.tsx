@@ -67,8 +67,8 @@ interface Application {
 }
 
 export default function CandidatesPage() {
-  const params = useParams();
-  const jobId = params.id as string;
+  const params = useParams() as any;
+  const jobId = (params?.id as string) || "";
   const { toast } = useToast();
 
   const [applications, setApplications] = useState<Application[]>([]);
@@ -77,6 +77,7 @@ export default function CandidatesPage() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Application | null>(null);
   const [open, setOpen] = useState(false);
+  const [openWhy, setOpenWhy] = useState(false);
   const [jobMode, setJobMode] = useState<string>("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterAnswers, setFilterAnswers] = useState<string>("all");
@@ -175,6 +176,19 @@ export default function CandidatesPage() {
     } catch (e) {
       console.error("Shortlisted fetch error", e);
     }
+  };
+
+  // Helpers
+  const slaBreached = (app: Application) => {
+    const days = (Date.now() - new Date(app.applicationDate).getTime()) / (1000 * 60 * 60 * 24);
+    const s = (app.status || '').toLowerCase();
+    const pendingish = ["pending", "under review", "shortlisted", "interview scheduled"].includes(s);
+    return pendingish && days > 7;
+  };
+
+  const handleWhyMatched = (app: Application) => {
+    setSelected(app);
+    setOpenWhy(true);
   };
 
   const runAutoScreen = async () => {
@@ -361,9 +375,7 @@ export default function CandidatesPage() {
     <div className="p-6">
       <div className="mb-6">
         <h1 className="text-3xl font-bold">Candidates for: {jobTitle}</h1>
-        <p className="text-muted-foreground mt-2">
-          Manage applications and assign tests to candidates
-        </p>
+        <p className="text-muted-foreground mt-2">Manage applications and assign tests to candidates</p>
       </div>
 
       {/* Actions & Filters */}
@@ -409,9 +421,7 @@ export default function CandidatesPage() {
 
       {applications.length === 0 ? (
         <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            No applications received for this job yet.
-          </CardContent>
+          <CardContent className="py-8 text-center text-muted-foreground">No applications received for this job yet.</CardContent>
         </Card>
       ) : (
         <div className="space-y-4">
@@ -424,96 +434,29 @@ export default function CandidatesPage() {
                       <User className="h-5 w-5" />
                       {application.jobSeekerId?.name || "Candidate"}
                     </CardTitle>
-                    <CardDescription>
-                      {application.jobSeekerId?.email || "-"}
-                    </CardDescription>
+                    <CardDescription>{application.jobSeekerId?.email || "-"}</CardDescription>
+                    <div className="mt-1 text-sm text-muted-foreground">Applied: {format(new Date(application.applicationDate), "MMM dd, yyyy")}</div>
                   </div>
-                  <Badge variant={getStatusColor(application.status)}>
-                    {application.status}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={getStatusColor(application.status)}>{application.status}</Badge>
+                    {slaBreached(application) && <Badge variant="destructive">SLA</Badge>}
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-1">
-                    <FileText className="h-4 w-4" />
-                    Resume: {application.resumeId?.originalName || "Resume"}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Calendar className="h-4 w-4" />
-                    Applied:{" "}
-                    {format(new Date(application.applicationDate), "MMM dd, yyyy")}
-                  </div>
-                  {(application.aiMatchScore != null || application.atsScore != null) && (
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary">AI Match: {application.aiMatchScore ?? "-"}%</Badge>
-                      <Badge variant="outline">ATS: {application.atsScore ?? "-"}%</Badge>
-                    </div>
-                  )}
-                </div>
-
-                {application.testId && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <TestTube className="h-4 w-4" />
-                    <span>Test: {application.testId.title}</span>
-                    {application.testScore !== undefined && (
-                      <Badge variant={application.testScore >= 60 ? "default" : "destructive"}>
-                        Score: {application.testScore}%
-                      </Badge>
-                    )}
+                {(application.aiMatchScore != null || application.atsScore != null) && (
+                  <div className="flex items-center gap-2">
+                    {application.aiMatchScore != null && (<Badge variant="secondary">AI Match: {application.aiMatchScore}%</Badge>)}
+                    {application.atsScore != null && (<Badge variant="outline">ATS: {application.atsScore}%</Badge>)}
                   </div>
                 )}
-
-                <div className="flex gap-2 flex-wrap">
-                  <Select
-                    value={application.status}
-                    onValueChange={(value) => handleStatusUpdate(application._id, value)}
-                  >
-                    <SelectTrigger className="w-48">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Pending">Pending</SelectItem>
-                      <SelectItem value="Under Review">Under Review</SelectItem>
-                      <SelectItem value="Shortlisted">Shortlisted</SelectItem>
-                      <SelectItem value="Test Assigned">Test Assigned</SelectItem>
-                      <SelectItem value="Interview Scheduled">Interview Scheduled</SelectItem>
-                      <SelectItem value="Hired">Hired</SelectItem>
-                      <SelectItem value="Rejected">Rejected</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  {!application.testId && tests.length > 0 && (
-                    <Select onValueChange={(testId) => handleAssignTest(application._id, testId)}>
-                      <SelectTrigger className="w-48">
-                        <SelectValue placeholder="Assign Test" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {tests.map((test) => (
-                          <SelectItem key={test._id} value={test._id}>
-                            {test.title}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href={`/dashboard/recruiter/candidates/${application.jobSeekerId?._id || application._id}`}>
-                      View Profile
-                    </Link>
-                  </Button>
-
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={() => {
-                      setSelected(application);
-                      setOpen(true);
-                    }}
-                  >
-                    View Application
-                  </Button>
+                <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+                  <div className="flex items-center gap-1"><FileText className="h-4 w-4" /> Resume: {application.resumeId?.originalName || "Resume"}</div>
+                </div>
+                <div className="flex items-center justify-end gap-2">
+                  <Button variant="outline" size="sm" onClick={() => handleWhyMatched(application)}>Why matched</Button>
+                  <Button size="sm" onClick={() => { if (tests.length) handleAssignTest(application._id, tests[0]._id); }} disabled={!tests.length}>Assign Test</Button>
+                  <Link href={`/dashboard/job-seeker/profile/${application.jobSeekerId?._id}`} className="text-sm">View Profile</Link>
                 </div>
               </CardContent>
             </Card>
@@ -521,79 +464,32 @@ export default function CandidatesPage() {
         </div>
       )}
 
-      {/* Details Dialog */}
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl">
+      {/* Why matched dialog */}
+      <Dialog open={openWhy} onOpenChange={setOpenWhy}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>Application Details</DialogTitle>
-            <DialogDescription>
-              {selected?.jobSeekerId?.name} • {selected?.jobSeekerId?.email}
-            </DialogDescription>
+            <DialogTitle>Why matched</DialogTitle>
+            <DialogDescription>{selected?.jobSeekerId?.name} for this role</DialogDescription>
           </DialogHeader>
-          <div className="flex gap-2 mb-2">
-            <Button variant="outline" size="sm" onClick={exportJSON}>Export JSON</Button>
-            <Button variant="outline" size="sm" onClick={exportCSV}>Export CSV</Button>
-          </div>
-          <div className="space-y-6">
-            {selected?.resumeId && (
-              <div className="text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">Resume:</span> {selected.resumeId.originalName}
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              {(selected?.skillsMatched || []).map((s) => (<Badge key={s} variant="secondary">{s}</Badge>))}
+            </div>
+            {selected?.missingSkills && selected.missingSkills.length > 0 && (
+              <div>
+                <div className="text-sm font-medium mb-1">Missing skills</div>
+                <div className="flex flex-wrap gap-2">
+                  {selected.missingSkills.map((s) => (<Badge key={s} variant="outline">{s}</Badge>))}
+                </div>
               </div>
             )}
-
-            <div>
-              <h4 className="font-medium mb-2">Screening Answers</h4>
-              {selected?.screeningAnswers && selected.screeningAnswers.length > 0 ? (
-                <div className="space-y-3">
-                  {selected.screeningAnswers.map((qa, idx) => (
-                    <div key={idx} className="rounded-md border p-3">
-                      <div className="text-sm font-medium">{qa.question}</div>
-                      <div className="text-sm text-muted-foreground whitespace-pre-wrap mt-1">{qa.answer}</div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No screening answers provided.</p>
-              )}
+            <div className="flex gap-4 text-sm">
+              {selected?.aiMatchScore != null && (<Badge variant="secondary">AI Match: {selected.aiMatchScore}%</Badge>)}
+              {selected?.atsScore != null && (<Badge variant="outline">ATS: {selected.atsScore}%</Badge>)}
             </div>
-
-            <div>
-              <h4 className="font-medium mb-2">Application Profile</h4>
-              {selected?.applicationProfile ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                  {selected.applicationProfile.experienceLevel && (
-                    <div>
-                      <div className="text-muted-foreground">Experience Level</div>
-                      <div className="font-medium">{selected.applicationProfile.experienceLevel}</div>
-                    </div>
-                  )}
-                  {selected.applicationProfile.expectedSalary && (
-                    <div>
-                      <div className="text-muted-foreground">Expected Salary</div>
-                      <div className="font-medium">{selected.applicationProfile.expectedSalary}</div>
-                    </div>
-                  )}
-                  {selected.applicationProfile.location && (
-                    <div>
-                      <div className="text-muted-foreground">Location</div>
-                      <div className="font-medium">{selected.applicationProfile.location}</div>
-                    </div>
-                  )}
-                  {selected.applicationProfile.skills && selected.applicationProfile.skills.length > 0 && (
-                    <div className="md:col-span-2">
-                      <div className="text-muted-foreground">Skills</div>
-                      <div className="flex flex-wrap gap-2 mt-1">
-                        {selected.applicationProfile.skills.map((s, i) => (
-                          <Badge key={i} variant="secondary">{s}</Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No profile details provided.</p>
-              )}
-            </div>
+            {selected?.aiExplanation && (
+              <div className="text-sm text-muted-foreground whitespace-pre-wrap">{selected.aiExplanation}</div>
+            )}
           </div>
         </DialogContent>
       </Dialog>

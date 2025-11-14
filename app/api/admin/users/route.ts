@@ -1,19 +1,21 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000"
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5001"
 
 export async function GET(req: NextRequest) {
   const session = await getSession(req)
+  const token = req.cookies.get("auth-token")?.value
 
-  if (!session || session.role !== "admin") {
+  if (!session || session.role !== "admin" || !token) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
   }
 
   try {
-    const response = await fetch(`${BACKEND_URL}/api/admin/users`, {
+    const qs = req.nextUrl.search ? req.nextUrl.search : ""
+    const response = await fetch(`${BACKEND_URL}/api/admin/users${qs}`, {
       headers: {
-        Authorization: `Bearer ${session.userId}`,
+        Authorization: `Bearer ${token}`,
       },
       cache: "no-store", // Ensure fresh data
     })
@@ -24,7 +26,11 @@ export async function GET(req: NextRequest) {
     }
 
     const data = await response.json()
-    return NextResponse.json({ users: data }, { status: 200 })
+    // Expect data like { users, total, page, limit } or array fallback
+    if (Array.isArray(data)) {
+      return NextResponse.json({ users: data }, { status: 200 })
+    }
+    return NextResponse.json(data, { status: 200 })
   } catch (error) {
     console.error("Error fetching users (admin):", error)
     return NextResponse.json({ message: "Internal server error" }, { status: 500 })
@@ -33,8 +39,9 @@ export async function GET(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   const session = await getSession(req)
+  const token = req.cookies.get("auth-token")?.value
 
-  if (!session || session.role !== "admin") {
+  if (!session || session.role !== "admin" || !token) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
   }
 
@@ -48,7 +55,7 @@ export async function PUT(req: NextRequest) {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${session.userId}`,
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(body),
     })
@@ -68,8 +75,9 @@ export async function PUT(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const session = await getSession(req)
+  const token = req.cookies.get("auth-token")?.value
 
-  if (!session || session.role !== "admin") {
+  if (!session || session.role !== "admin" || !token) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
   }
 
@@ -82,7 +90,7 @@ export async function DELETE(req: NextRequest) {
     const response = await fetch(`${BACKEND_URL}/api/admin/users/${userId}`, {
       method: "DELETE",
       headers: {
-        Authorization: `Bearer ${session.userId}`,
+        Authorization: `Bearer ${token}`,
       },
     })
 

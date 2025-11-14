@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/mongodb";
 import SocialConnection from "@/models/SocialConnection";
 import { headers, cookies } from "next/headers";
 import { verifyTokenEdge } from "@/lib/auth-edge";
+import { emitSocial } from "@/lib/socket-server";
 
 export const dynamic = "force-dynamic";
 
@@ -42,12 +43,22 @@ export async function POST(req: NextRequest) {
     if (!toUserId) return NextResponse.json({ error: "toUserId required" }, { status: 400 });
     if (toUserId === me) return NextResponse.json({ error: "Cannot connect to self" }, { status: 400 });
 
+    // If reverse pending exists, accept it immediately
+    const reverse = await SocialConnection.findOne({ requesterId: toUserId, addresseeId: me, status: "pending" });
+    if (reverse) {
+      reverse.status = "accepted";
+      await reverse.save();
+      emitSocial("connection:update", { type: "accepted", users: [String(me), String(toUserId)] });
+      return NextResponse.json({ ok: true, status: "accepted", connection: reverse });
+    }
+
     const doc = await SocialConnection.findOneAndUpdate(
       { requesterId: me, addresseeId: toUserId },
       { $setOnInsert: { status: "pending" } },
       { upsert: true, new: true }
     );
-    return NextResponse.json({ ok: true, connection: doc });
+    emitSocial("connection:update", { type: "requested", users: [String(me), String(toUserId)] });
+    return NextResponse.json({ ok: true, status: doc.status, connection: doc });
   } catch (e) {
     console.error("/api/social/connections/request error", e);
     return NextResponse.json({ error: "Server error" }, { status: 500 });

@@ -10,6 +10,9 @@ const UserSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  passwordHash: {
+    type: String,
+  },
   role: {
     type: String,
     enum: ["job_seeker", "recruiter", "admin"],
@@ -67,6 +70,34 @@ const UserSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  // Billing fields
+  stripeCustomerId: {
+    type: String,
+    index: true,
+    sparse: true,
+  },
+  subscription: {
+    productId: { type: String },
+    priceId: { type: String },
+    status: { type: String },
+    currentPeriodEnd: { type: Date },
+  },
+  // Entitlements and usage limits
+  features: {
+    type: Object,
+    default: {},
+  },
+  limits: {
+    type: Object,
+    default: {},
+  },
+});
+
+UserSchema.pre("save", function (next) {
+  if (this.isModified("password") && !this.passwordHash) {
+    this.passwordHash = this.password;
+  }
+  next();
 });
 
 module.exports = mongoose.model("User", UserSchema);

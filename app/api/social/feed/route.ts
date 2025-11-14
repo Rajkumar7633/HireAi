@@ -42,7 +42,10 @@ export async function GET(_req: NextRequest) {
       ids.add(String(c.addresseeId));
     }
 
-    const raw = await SocialPost.find({ authorId: { $in: Array.from(ids) } })
+    const raw = await SocialPost.find({
+      authorId: { $in: Array.from(ids) },
+      hiddenBy: { $ne: me },
+    })
       .sort({ createdAt: -1 })
       .limit(50)
       .lean();

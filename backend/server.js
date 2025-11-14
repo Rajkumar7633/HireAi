@@ -53,6 +53,14 @@ subDirs.forEach((dir) => {
   }
 });
 
+// Stripe webhook must be registered BEFORE JSON parser to keep raw body
+const billingController = require("./controllers/billingController");
+app.post(
+  "/api/billing/webhook",
+  express.raw({ type: "application/json" }),
+  billingController.webhook
+);
+
 // Middleware
 app.use(express.json()); // for parsing application/json
 app.use(
@@ -71,6 +79,7 @@ app.get("/", (req, res) => {
 });
 
 // API Routes
+app.use("/api/billing", require("./routes/billing"));
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/resume", require("./routes/resume"));
 app.use("/api/job-description", require("./routes/jobDescription"));

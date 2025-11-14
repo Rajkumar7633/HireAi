@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/mongodb";
 import SocialConnection from "@/models/SocialConnection";
 import { headers, cookies } from "next/headers";
 import { verifyTokenEdge } from "@/lib/auth-edge";
+import { emitSocial } from "@/lib/socket-server";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,7 @@ export async function POST(req: NextRequest) {
       { new: true }
     );
     if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    emitSocial("connection:update", { type: "accepted", users: [String(requesterId), String(me)] });
     return NextResponse.json({ ok: true, connection: updated });
   } catch (e) {
     console.error("/api/social/connections/accept error", e);

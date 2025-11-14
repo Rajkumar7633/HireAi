@@ -1,202 +1,5 @@
-// import { type NextRequest, NextResponse } from "next/server"
+
 export const dynamic = "force-dynamic";
-// import { getSession } from "@/lib/auth"
-
-// const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5001"
-
-// export async function GET(req: NextRequest) {
-//   const session = await getSession(req)
-
-//   if (!session) {
-//     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
-//   }
-
-//   const { searchParams } = new URL(req.url)
-//   const userId = searchParams.get("userId") || session.userId
-
-//   try {
-//     console.log("[v0] Fetching profile from backend:", `${BACKEND_URL}/api/user/profile`)
-
-//     const response = await fetch(`${BACKEND_URL}/api/user/profile?userId=${userId}`, {
-//       headers: {
-//         Authorization: `Bearer ${session.userId}`,
-//       },
-//       cache: "no-store",
-//     })
-
-//     if (!response.ok) {
-//       console.error("[v0] Backend profile fetch failed:", response.status, response.statusText)
-
-//       return NextResponse.json(
-//         {
-//           firstName: "John",
-//           lastName: "Doe",
-//           email: session.email || "jobseeker@example.com",
-//           phone: "",
-//           location: "",
-//           currentTitle: "",
-//           experienceLevel: "entry",
-//           industry: "",
-//           skills: [],
-//           yearsOfExperience: 0,
-//           education: "",
-//           university: "",
-//           graduationYear: "",
-//           gpa: "",
-//           linkedinUrl: "",
-//           portfolioUrl: "",
-//           githubUrl: "",
-//           desiredRole: "",
-//           salaryExpectation: "",
-//           workPreference: "",
-//           summary: "",
-//           profileCompleteness: 25,
-//           atsScore: 65,
-//           skillsVerified: 0,
-//           lastUpdated: new Date().toISOString(),
-//           message: "Using fallback data - backend unavailable",
-//         },
-//         { status: 200 },
-//       )
-//     }
-
-//     const data = await response.json()
-//     console.log("[v0] Profile data from backend:", data)
-//     return NextResponse.json(data, { status: 200 })
-//   } catch (error) {
-//     console.error("[v0] Error fetching user profile:", error)
-
-//     return NextResponse.json(
-//       {
-//         firstName: "John",
-//         lastName: "Doe",
-//         email: session.email || "jobseeker@example.com",
-//         phone: "",
-//         location: "",
-//         currentTitle: "",
-//         experienceLevel: "entry",
-//         industry: "",
-//         skills: [],
-//         yearsOfExperience: 0,
-//         education: "",
-//         university: "",
-//         graduationYear: "",
-//         gpa: "",
-//         linkedinUrl: "",
-//         portfolioUrl: "",
-//         githubUrl: "",
-//         desiredRole: "",
-//         salaryExpectation: "",
-//         workPreference: "",
-//         summary: "",
-//         profileCompleteness: 25,
-//         atsScore: 65,
-//         skillsVerified: 0,
-//         lastUpdated: new Date().toISOString(),
-//         message: "Using fallback data - connection error",
-//       },
-//       { status: 200 },
-//     )
-//   }
-// }
-
-// export async function PUT(req: NextRequest) {
-//   const session = await getSession(req)
-
-//   if (!session) {
-//     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
-//   }
-
-//   try {
-//     const body = await req.json()
-//     const { userId, profileData, section } = body
-
-//     console.log("[v0] Profile update request:", { userId: userId || session.userId, section })
-
-//     if (!profileData) {
-//       return NextResponse.json({ message: "Profile data is required" }, { status: 400 })
-//     }
-
-//     // Calculate profile completeness based on filled fields
-//     const calculateCompleteness = (profile: any) => {
-//       const fields = [
-//         "firstName",
-//         "lastName",
-//         "email",
-//         "phone",
-//         "location",
-//         "currentTitle",
-//         "experienceLevel",
-//         "industry",
-//         "yearsOfExperience",
-//         "education",
-//         "university",
-//         "graduationYear",
-//         "summary",
-//         "desiredRole",
-//         "salaryExpectation",
-//         "workPreference",
-//       ]
-
-//       const filledFields = fields.filter((field) => profile[field] && profile[field].toString().trim() !== "").length
-
-//       const skillsBonus = profile.skills && profile.skills.length > 0 ? 1 : 0
-//       const linksBonus =
-//         [profile.linkedinUrl, profile.portfolioUrl, profile.githubUrl].filter((url) => url && url.trim() !== "")
-//           .length > 0
-//           ? 1
-//           : 0
-
-//       return Math.round(((filledFields + skillsBonus + linksBonus) / (fields.length + 2)) * 100)
-//     }
-
-//     const updatedProfile = {
-//       ...profileData,
-//       profileCompleteness: calculateCompleteness(profileData),
-//       lastUpdated: new Date().toISOString(),
-//     }
-
-//     console.log("[v0] Attempting backend update to:", `${BACKEND_URL}/api/user/profile`)
-
-//     try {
-//       const response = await fetch(`${BACKEND_URL}/api/user/profile`, {
-//         method: "PUT",
-//         headers: {
-//           "Content-Type": "application/json",
-//           Authorization: `Bearer ${session.userId}`,
-//         },
-//         body: JSON.stringify({
-//           userId: userId || session.userId,
-//           profileData: updatedProfile,
-//           section,
-//         }),
-//       })
-
-//       if (!response.ok) {
-//         console.error("[v0] Backend profile update failed:", response.status, response.statusText)
-//         console.log("[v0] Using fallback - returning updated profile locally")
-//         return NextResponse.json(updatedProfile, { status: 200 })
-//       }
-
-//       const data = await response.json()
-//       console.log("[v0] Backend update successful:", data)
-//       return NextResponse.json(data.profileData || updatedProfile, { status: 200 })
-//     } catch (backendError) {
-//       console.error("[v0] Backend connection error:", backendError)
-//       console.log("[v0] Backend unreachable - returning updated profile locally")
-//       return NextResponse.json(updatedProfile, { status: 200 })
-//     }
-//   } catch (error) {
-//     console.error("[v0] Error updating user profile:", error)
-//     return NextResponse.json(
-//       {
-//         message: "Failed to update profile",
-//         error: error instanceof Error ? error.message : "Unknown error",
-//       },
-//       { status: 500 },
-//     )
-//   }
-// }
 
 
 import { type NextRequest, NextResponse } from "next/server"
@@ -216,10 +19,30 @@ export async function GET(req: NextRequest) {
 
   try {
     await connectDB()
-    const user = await User.findById(session.userId).select("-passwordHash")
+    let user = await User.findById(session.userId).select("-passwordHash")
 
     if (!user) {
       return NextResponse.json({ message: "User not found" }, { status: 404 })
+    }
+
+    try {
+      console.log("[profile] userId=", session.userId, "subStatus=", (user as any)?.subscription?.status, "features=", Object.keys((user as any)?.features || {}).length)
+    } catch { }
+
+    if (!((user as any)?.subscription?.status)) {
+      try {
+        const bearer = req.headers.get("authorization") || req.headers.get("Authorization") || ""
+        const cookieToken = req.cookies.get("auth-token")?.value
+        const authHeader = bearer || (cookieToken ? `Bearer ${cookieToken}` : "")
+        if (authHeader) {
+          await fetch(`${BACKEND_URL}/api/billing/sync`, {
+            method: "GET",
+            headers: { Authorization: authHeader },
+            cache: "no-store",
+          })
+          user = await User.findById(session.userId).select("-passwordHash")
+        }
+      } catch {}
     }
 
     return NextResponse.json({
@@ -241,6 +64,9 @@ export async function GET(req: NextRequest) {
         businessLocation: user.businessLocation,
         isProfileComplete: user.isProfileComplete || false,
         lastManualUpdate: user.lastManualUpdate,
+        subscription: (user as any).subscription || null,
+        features: (user as any).features || {},
+        limits: (user as any).limits || {},
       },
     })
   } catch (error) {

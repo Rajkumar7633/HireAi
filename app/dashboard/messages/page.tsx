@@ -36,7 +36,7 @@ interface Message {
 
 export default function MessagesPage() {
   const searchParams = useSearchParams();
-  const initialRecipientId = searchParams.get("userId");
+  const initialRecipientId = searchParams?.get("userId") || "";
   const { session, isLoading: sessionLoading } = useSession();
   const { toast } = useToast();
 
@@ -53,6 +53,7 @@ export default function MessagesPage() {
   const [creatingConv, setCreatingConv] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLInputElement>(null);
   const sseRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
@@ -94,6 +95,11 @@ export default function MessagesPage() {
       );
       if (existingConv) {
         setSelectedConversation(existingConv);
+        // Prefill a friendly greeting and focus composer
+        setTimeout(() => {
+          setNewMessage((prev) => prev || `Hi ${getParticipantName(existingConv)}, `);
+          composerRef.current?.focus();
+        }, 0);
       } else {
         // Create new conversation if not found
         createConversation(initialRecipientId);
@@ -191,6 +197,11 @@ export default function MessagesPage() {
         const data = await response.json();
         setSelectedConversation(data.conversation);
         fetchConversations(); // Refresh list to include new conversation
+        // Prefill and focus
+        setTimeout(() => {
+          setNewMessage(`Hi ${getParticipantName(data.conversation)}, `);
+          composerRef.current?.focus();
+        }, 0);
       } else {
         const mockConversation = {
           _id: `new-${Date.now()}`,
@@ -213,8 +224,12 @@ export default function MessagesPage() {
           type: "direct",
           lastMessageAt: new Date().toISOString(),
         };
-        setSelectedConversation(mockConversation);
+        setSelectedConversation(mockConversation as any);
         setConversations((prev) => [mockConversation, ...prev]);
+        setTimeout(() => {
+          setNewMessage(`Hi ${getParticipantName(mockConversation as any)}, `);
+          composerRef.current?.focus();
+        }, 0);
       }
     } catch (error) {
       console.error("Error creating conversation:", error);
@@ -548,6 +563,7 @@ export default function MessagesPage() {
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
                     disabled={sendingMessage}
+                    ref={composerRef}
                   />
                   <Button type="submit" disabled={sendingMessage}>
                   {sendingMessage ? (

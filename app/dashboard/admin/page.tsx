@@ -7,12 +7,12 @@ import Link from "next/link"
 
 export default function AdminDashboard() {
   return (
-    <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
+    <div className="flex-1 space-y-6 p-4 md:p-8 pt-6">
+      <div className="flex items-center justify-between">
         <h2 className="text-3xl font-bold tracking-tight">Admin Dashboard</h2>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -53,12 +53,12 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <Button asChild className="w-full">
-              <Link href="/dashboard/recruiter/job-descriptions">View Jobs</Link>
+              <Link href="/dashboard/admin/jobs">View Jobs</Link>
             </Button>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="sm:col-span-2 lg:col-span-1">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Settings className="h-5 w-5" />
@@ -73,7 +73,7 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="sm:col-span-2 lg:col-span-1">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Shield className="h-5 w-5" />
@@ -82,8 +82,8 @@ export default function AdminDashboard() {
             <CardDescription>Security and compliance</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button asChild className="w-full" disabled>
-              <Link href="#">Security Center</Link>
+            <Button asChild className="w-full">
+              <Link href="/dashboard/admin/security">Security Center</Link>
             </Button>
           </CardContent>
         </Card>
