@@ -2,7 +2,10 @@ const express = require("express")
 const router = express.Router()
 const bcrypt = require("bcryptjs")
 const jwt = require("jsonwebtoken")
+const crypto = require("crypto")
 const User = require("../models/User")
+const sendEmail = require("../utils/emailService")
+const { authLimiter } = require("../middleware/rateLimiter")
 
 // @route   POST /api/auth/register
 // @desc    Register user
@@ -64,31 +67,110 @@ router.post("/register", async (req, res) => {
 // @route   POST /api/auth/login
 // @desc    Authenticate user & get token
 // @access  Public
-router.post("/login", async (req, res) => {
-  const { email, password } = req.body
+router.post("/login", authLimiter, async (req, res) => {
+  let { email, password } = req.body
+  email = (email || "").toLowerCase().trim()
 
   try {
     const user = await User.findOne({ email })
     if (!user) {
-      return res.status(400).json({ msg: "Invalid Credentials" })
+      return res.status(404).json({ message: "No account found for this email. Please sign up." })
     }
 
-    const isMatch = await bcrypt.compare(password, user.password)
-    if (!isMatch) {
-      return res.status(400).json({ msg: "Invalid Credentials" })
+    const storedHash = user.password || user.passwordHash
+    if (!storedHash) {
+      return res.status(400).json({ message: "Invalid credentials" })
     }
+    const isMatch = await bcrypt.compare(password, storedHash)
+    if (!isMatch) {
+      return res.status(400).json({ message: "Invalid credentials" })
+    }
+
+    // Step 1: generate and send OTP (6 digits), store hash+expiry and require verification
+    const otp = ("000000" + Math.floor(Math.random() * 1000000)).slice(-6)
+    const otpHash = await bcrypt.hash(otp, 10)
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
+    user.loginOtp = {
+      codeHash: otpHash,
+      expiresAt,
+      attempts: 0,
+      devPlain: process.env.NODE_ENV !== 'production' ? otp : undefined,
+    }
+    await user.save()
+
+    try {
+      // Dev helper: log OTP to console for local testing
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`[otp] login code for ${user.email}: ${otp}`)
+      }
+      await sendEmail({
+        to: user.email,
+        subject: "Your HireAI login code",
+        html: `<p>Your verification code is <b>${otp}</b>. It expires in 10 minutes.</p>`,
+      })
+    } catch (e) {
+      console.error("Failed to send OTP email:", e?.message || e)
+      return res.status(500).json({ message: "Failed to send verification code" })
+    }
+
+    return res.json({ status: "otp_sent", message: "Verification code sent to email" })
+  } catch (err) {
+    console.error(err.message)
+    res.status(500).send("Server Error")
+  }
+})
+
+// @route   POST /api/auth/verify-otp
+// @desc    Verify OTP and issue JWT
+// @access  Public (rate limited)
+router.post("/verify-otp", authLimiter, async (req, res) => {
+  let { email, code } = req.body
+  email = (email || "").toLowerCase().trim()
+  code = String(code || "").trim()
+  if (!email || !code) return res.status(400).json({ message: "Email and code are required" })
+
+  try {
+    const user = await User.findOne({ email })
+    if (!user || !user.loginOtp || !user.loginOtp.codeHash || !user.loginOtp.expiresAt) {
+      return res.status(400).json({ message: "Invalid or expired code" })
+    }
+
+    if (new Date(user.loginOtp.expiresAt).getTime() < Date.now()) {
+      return res.status(400).json({ message: "Code expired" })
+    }
+
+    const attempts = user.loginOtp.attempts || 0
+    if (attempts >= 5) {
+      return res.status(429).json({ message: "Too many attempts. Please request a new code." })
+    }
+
+    // In dev, accept direct match against stored devPlain to rule out hashing/format issues
+    let ok = false
+    if (process.env.NODE_ENV !== 'production' && user.loginOtp.devPlain && code === String(user.loginOtp.devPlain)) {
+      ok = true
+    } else {
+      ok = await bcrypt.compare(String(code), user.loginOtp.codeHash)
+    }
+    if (!ok) {
+      user.loginOtp.attempts = attempts + 1
+      await user.save()
+      return res.status(400).json({ message: "Invalid code" })
+    }
+
+    // Success: clear OTP and set emailVerified
+    user.loginOtp = { codeHash: undefined, expiresAt: undefined, attempts: 0 }
+    user.emailVerified = true
+    await user.save()
 
     const payload = {
-      user: {
-        id: user.id,
-        role: user.role,
-        email: user.email,
-      },
+      userId: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
     }
-
-    jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "1h" }, (err, token) => {
+    jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" }, (err, token) => {
       if (err) throw err
-      res.json({ token, user: payload.user })
+      res.json({ token, user: { id: user.id, role: user.role, email: user.email } })
     })
   } catch (err) {
     console.error(err.message)

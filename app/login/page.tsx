@@ -3,7 +3,7 @@
 import type React from "react";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useSession } from "@/hooks/use-session";
 import Link from "next/link";
@@ -25,10 +25,18 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [tilt, setTilt] = useState<{rx: number; ry: number}>({ rx: 0, ry: 0 });
+  const [showSignupPrompt, setShowSignupPrompt] = useState(false);
+  const [otpPhase, setOtpPhase] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [otpError, setOtpError] = useState("");
+  const [tilt, setTilt] = useState<{ rx: number; ry: number }>({ rx: 0, ry: 0 });
   const [particleCount, setParticleCount] = useState(260);
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectParam = (searchParams?.get("redirect") || "").toString();
+  const redirectPath = redirectParam ? decodeURIComponent(redirectParam) : "";
   const { refreshSession, user } = useSession() as any;
   const brandColor = (user?.recruiter?.brandColor as string) || process.env.NEXT_PUBLIC_BRAND_COLOR || "#6d28d9";
   const accentColor = (user?.recruiter?.accentColor as string) || process.env.NEXT_PUBLIC_ACCENT_COLOR || "#eef2ff";
@@ -47,6 +55,7 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setShowSignupPrompt(false);
 
     try {
       console.log("[v0] Starting login process...");
@@ -64,7 +73,13 @@ export default function LoginPage() {
         role: data.user?.role,
       });
 
-      if (response.ok) {
+      if (response.ok && data?.status === "otp_sent") {
+        setOtpPhase(true)
+        setLoading(false)
+        return
+      }
+
+      if (response.ok && data?.token) {
         localStorage.setItem("auth-token", data.token);
 
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -74,7 +89,9 @@ export default function LoginPage() {
 
         await new Promise((resolve) => setTimeout(resolve, 200));
 
-        if (data.user.role === "recruiter") {
+        if (redirectPath && redirectPath.startsWith("/")) {
+          router.push(redirectPath)
+        } else if (data.user.role === "recruiter") {
           console.log("[v0] Redirecting recruiter to dashboard...");
           router.push("/dashboard/recruiter");
         } else if (data.user.role === "job_seeker") {
@@ -85,6 +102,9 @@ export default function LoginPage() {
           router.push("/dashboard");
         }
       } else {
+        if (response.status === 404) {
+          setShowSignupPrompt(true)
+        }
         setError(data.message || "Login failed");
       }
     } catch (err) {
@@ -94,6 +114,44 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!otpCode) { setOtpError("Enter the verification code"); return }
+    setVerifying(true)
+    setOtpError("")
+    try {
+      const r = await fetch("/api/auth/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, code: otpCode })
+      })
+      const data = await r.json()
+      if (!r.ok) {
+        setOtpError(data?.msg || data?.message || "Invalid code")
+        return
+      }
+      if (data?.token) {
+        localStorage.setItem("auth-token", data.token)
+      }
+      await new Promise((r) => setTimeout(r, 100))
+      await refreshSession()
+      await new Promise((r) => setTimeout(r, 200))
+      if (redirectPath && redirectPath.startsWith("/")) {
+        router.push(redirectPath)
+      } else if (data?.user?.role === "recruiter") {
+        router.push("/dashboard/recruiter")
+      } else if (data?.user?.role === "job_seeker") {
+        router.push("/dashboard/job-seeker")
+      } else {
+        router.push("/dashboard")
+      }
+    } catch (e) {
+      setOtpError("Verification failed. Try again.")
+    } finally {
+      setVerifying(false)
+    }
+  }
 
   const fillDemoCredentials = (role: "recruiter" | "job_seeker") => {
     if (role === "recruiter") {
@@ -190,11 +248,17 @@ export default function LoginPage() {
               <CardDescription className="text-center">Enter your credentials to access your account</CardDescription>
             </CardHeader>
             <CardContent className="pb-12 px-10 md:px-16">
-              <form onSubmit={handleSubmit} className="space-y-5">
+              <form onSubmit={otpPhase ? handleVerifyOtp : handleSubmit} className="space-y-5">
                 {error && (
                   <Alert variant="destructive">
                     <AlertDescription>{error}</AlertDescription>
                   </Alert>
+                )}
+                {showSignupPrompt && (
+                  <div className="text-sm text-center text-gray-700/90">
+                    <span>Dont have an account? </span>
+                    <Link href="/signup" className="font-medium text-blue-600 hover:text-blue-500">Sign up</Link>
+                  </div>
                 )}
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
@@ -214,32 +278,52 @@ export default function LoginPage() {
                     />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
-                  <div className="relative">
-                    <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-700/70">
-                      <Lock className="h-4 w-4" />
+                {!otpPhase && (
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Password</Label>
+                    <div className="relative">
+                      <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-700/70">
+                        <Lock className="h-4 w-4" />
+                      </div>
+                      <Input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        onKeyDown={() => window.dispatchEvent(new CustomEvent('login-typing'))}
+                        required
+                        placeholder="Enter your password"
+                        className="pl-9 h-11 text-base transition-all duration-200 focus:scale-[1.01] bg-white/40 backdrop-blur-sm border-white/30 placeholder:text-gray-600 focus:ring-2 focus:ring-[var(--brand)] focus:border-transparent"
+                      />
+                      <button
+                        type="button"
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                        onClick={() => setShowPassword((v) => !v)}
+                        className="absolute inset-y-0 right-3 flex items-center text-gray-700/70 hover:text-gray-900"
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
                     </div>
-                    <Input
-                      id="password"
-                      type={showPassword ? "text" : "password"}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      onKeyDown={() => window.dispatchEvent(new CustomEvent('login-typing'))}
-                      required
-                      placeholder="Enter your password"
-                      className="pl-9 h-11 text-base transition-all duration-200 focus:scale-[1.01] bg-white/40 backdrop-blur-sm border-white/30 placeholder:text-gray-600 focus:ring-2 focus:ring-[var(--brand)] focus:border-transparent"
-                    />
-                    <button
-                      type="button"
-                      aria-label={showPassword ? "Hide password" : "Show password"}
-                      onClick={() => setShowPassword((v) => !v)}
-                      className="absolute inset-y-0 right-3 flex items-center text-gray-700/70 hover:text-gray-900"
-                    >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
                   </div>
-                </div>
+                )}
+
+                {otpPhase && (
+                  <div className="space-y-2">
+                    <Label htmlFor="otp">Verification code</Label>
+                    <Input
+                      id="otp"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={otpCode}
+                      onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0,6))}
+                      placeholder="Enter 6-digit code"
+                      className="h-11 text-base transition-all duration-200 focus:scale-[1.01] bg-white/40 backdrop-blur-sm border-white/30 placeholder:text-gray-600 focus:ring-2 focus:ring-[var(--brand)] focus:border-transparent"
+                    />
+                    {otpError && (
+                      <div className="text-sm text-red-600">{otpError}</div>
+                    )}
+                  </div>
+                )}
 
                 {/* Remember me and Forgot password */}
                 <div className="flex items-center justify-between text-sm">
@@ -250,14 +334,14 @@ export default function LoginPage() {
                   <a href="#" className="text-blue-600 hover:underline">Forgot password?</a>
                 </div>
 
-                <Button type="submit" className="w-full h-11 text-base transition-transform active:scale-[0.99] hover:shadow-2xl bg-[var(--brand)] hover:opacity-90 text-white font-semibold tracking-wide" disabled={loading}>
-                  {loading ? (
+                <Button type="submit" className="w-full h-11 text-base transition-transform active:scale-[0.99] hover:shadow-2xl bg-[var(--brand)] hover:opacity-90 text-white font-semibold tracking-wide" disabled={otpPhase ? verifying : loading}>
+                  {(otpPhase ? verifying : loading) ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Signing In...
+                      {otpPhase ? "Verifying..." : "Signing In..."}
                     </>
                   ) : (
-                    "Sign In"
+                    (otpPhase ? "Verify Code" : "Sign In")
                   )}
                 </Button>
 
