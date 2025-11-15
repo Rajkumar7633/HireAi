@@ -7,11 +7,37 @@ const User = require("../models/User")
 const sendEmail = require("../utils/emailService")
 const { authLimiter } = require("../middleware/rateLimiter")
 
+// Simple validators to harden auth endpoints without adding new deps
+const isValidEmail = (value) => {
+  if (typeof value !== 'string') return false
+  const v = value.trim()
+  if (!v) return false
+  // Basic RFC5322-ish check; keep permissive
+  return /.+@.+\..+/.test(v)
+}
+
+const isValidPassword = (value) => {
+  if (typeof value !== 'string') return false
+  const v = value.trim()
+  // Keep bounds generous to avoid breaking existing users
+  return v.length >= 6 && v.length <= 200
+}
+
+const isValidOtpCode = (value) => {
+  if (value === undefined || value === null) return false
+  const v = String(value).trim()
+  return v.length === 6 && /^[0-9]+$/.test(v)
+}
+
 // @route   POST /api/auth/register
 // @desc    Register user
 // @access  Public
 router.post("/register", async (req, res) => {
   const { email, password, role, name } = req.body
+
+  if (!isValidEmail(email) || !isValidPassword(password || "")) {
+    return res.status(400).json({ message: "Invalid email or password" })
+  }
 
   try {
     let user = await User.findOne({ email })
@@ -71,6 +97,10 @@ router.post("/login", authLimiter, async (req, res) => {
   let { email, password } = req.body
   email = (email || "").toLowerCase().trim()
 
+   if (!isValidEmail(email) || !isValidPassword(password || "")) {
+     return res.status(400).json({ message: "Invalid email or password" })
+   }
+
   try {
     const user = await User.findOne({ email })
     if (!user) {
@@ -128,6 +158,9 @@ router.post("/verify-otp", authLimiter, async (req, res) => {
   email = (email || "").toLowerCase().trim()
   code = String(code || "").trim()
   if (!email || !code) return res.status(400).json({ message: "Email and code are required" })
+  if (!isValidEmail(email) || !isValidOtpCode(code)) {
+    return res.status(400).json({ message: "Invalid email or code" })
+  }
 
   try {
     const user = await User.findOne({ email })
@@ -160,17 +193,36 @@ router.post("/verify-otp", authLimiter, async (req, res) => {
     // Success: clear OTP and set emailVerified
     user.loginOtp = { codeHash: undefined, expiresAt: undefined, attempts: 0 }
     user.emailVerified = true
-    await user.save()
 
-    const payload = {
+    const basePayload = {
       userId: user.id,
       email: user.email,
       name: user.name,
       role: user.role,
     }
-    jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" }, (err, token) => {
-      if (err) throw err
-      res.json({ token, user: { id: user.id, role: user.role, email: user.email } })
+
+    const accessToken = jwt.sign(
+      { ...basePayload, type: "access" },
+      process.env.JWT_SECRET,
+      { expiresIn: "20m" }
+    )
+
+    const refreshToken = jwt.sign(
+      { ...basePayload, type: "refresh" },
+      process.env.JWT_SECRET,
+      { expiresIn: "14d" }
+    )
+
+    if (!Array.isArray(user.refreshTokens)) {
+      user.refreshTokens = []
+    }
+    user.refreshTokens.push(refreshToken)
+    await user.save()
+
+    res.json({
+      accessToken,
+      refreshToken,
+      user: { id: user.id, role: user.role, email: user.email },
     })
   } catch (err) {
     console.error(err.message)
@@ -199,6 +251,82 @@ router.post("/logout", require("../middleware/auth"), (req, res) => {
   // This endpoint can be used to clear any server-side session data if applicable,
   // or simply confirm logout.
   res.json({ msg: "Logged out successfully" })
+})
+
+// @route   POST /api/auth/logout-all
+// @desc    Logout user from all devices (clear all refresh tokens)
+// @access  Private
+router.post("/logout-all", require("../middleware/auth"), async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id)
+    if (!user) return res.status(404).json({ message: "User not found" })
+    user.refreshTokens = []
+    await user.save()
+    res.json({ message: "Logged out from all devices" })
+  } catch (err) {
+    console.error(err.message)
+    res.status(500).send("Server Error")
+  }
+})
+
+// @route   POST /api/auth/refresh
+// @desc    Issue a new access token from a valid refresh token
+// @access  Public (token-based)
+router.post("/refresh", async (req, res) => {
+  try {
+    const { refreshToken } = req.body || {}
+    if (!refreshToken) {
+      return res.status(401).json({ message: "No refresh token provided" })
+    }
+
+    let decoded
+    try {
+      decoded = jwt.verify(refreshToken, process.env.JWT_SECRET)
+    } catch (e) {
+      return res.status(401).json({ message: "Invalid or expired refresh token" })
+    }
+
+    if (!decoded || decoded.type !== "refresh" || !decoded.userId) {
+      return res.status(401).json({ message: "Invalid refresh token" })
+    }
+
+    const user = await User.findById(decoded.userId)
+    if (!user) {
+      return res.status(401).json({ message: "User not found" })
+    }
+
+    if (!Array.isArray(user.refreshTokens) || !user.refreshTokens.includes(refreshToken)) {
+      return res.status(401).json({ message: "Refresh token no longer valid" })
+    }
+
+    const basePayload = {
+      userId: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+    }
+
+    const accessToken = jwt.sign(
+      { ...basePayload, type: "access" },
+      process.env.JWT_SECRET,
+      { expiresIn: "20m" }
+    )
+
+    const newRefreshToken = jwt.sign(
+      { ...basePayload, type: "refresh" },
+      process.env.JWT_SECRET,
+      { expiresIn: "14d" }
+    )
+
+    user.refreshTokens = user.refreshTokens.filter((t) => t !== refreshToken)
+    user.refreshTokens.push(newRefreshToken)
+    await user.save()
+
+    res.json({ accessToken, refreshToken: newRefreshToken })
+  } catch (err) {
+    console.error(err.message)
+    res.status(500).send("Server Error")
+  }
 })
 
 module.exports = router

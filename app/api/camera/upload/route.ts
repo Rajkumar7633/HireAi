@@ -33,7 +33,17 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Missing fields" }, { status: 400 });
         }
 
+        // Basic upload security: allow only common image types and enforce a generous size limit
+        const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp"];
+        if (typeof mimeType !== "string" || !allowedMimeTypes.includes(mimeType)) {
+            return NextResponse.json({ error: "Invalid file type" }, { status: 400 });
+        }
+
         const sizeBytes = Math.ceil((dataUrl.length * 3) / 4); // approx
+        const maxBytes = 5 * 1024 * 1024; // 5MB, generous for camera stills
+        if (sizeBytes > maxBytes) {
+            return NextResponse.json({ error: "File too large" }, { status: 400 });
+        }
 
         const doc = await CameraCapture.create({
             dataUrl,

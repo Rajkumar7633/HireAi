@@ -7,13 +7,15 @@ const User = require("../models/User")
 const Notification = require("../models/Notification")
 const sendEmail = require("../utils/emailService")
 
+const isNonEmptyString = (v) => typeof v === "string" && v.trim().length > 0
+
 // @route   POST /api/conversations
 // @desc    Create a new conversation or get existing one
 // @access  Private
 router.post("/", auth, async (req, res) => {
   const { recipientId } = req.body // For general chat, recipient is another user
 
-  if (!recipientId) {
+  if (!isNonEmptyString(recipientId)) {
     return res.status(400).json({ msg: "Recipient ID is required to start a conversation" })
   }
 
@@ -113,6 +115,14 @@ router.get("/:id/messages", auth, async (req, res) => {
 // @access  Private
 router.post("/:id/messages", auth, async (req, res) => {
   const { content } = req.body
+
+  if (!isNonEmptyString(content)) {
+    return res.status(400).json({ msg: "Message content is required" })
+  }
+
+  if (content.length > 2000) {
+    return res.status(400).json({ msg: "Message too long" })
+  }
 
   try {
     const conversation = await Conversation.findById(req.params.id)

@@ -70,6 +70,26 @@ app.use(
   })
 );
 
+// Basic security headers (kept permissive to avoid breaking existing behavior)
+app.use((req, res, next) => {
+  // Prevent clickjacking
+  res.setHeader("X-Frame-Options", "DENY");
+  // Safer referrer information
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  // Disable MIME sniffing
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  // Very permissive CSP (kept broad to avoid breaking existing behavior)
+  const csp = [
+    "default-src 'self'" ,
+    "img-src 'self' data: blob: https://res.cloudinary.com", // allow Cloudinary + data URLs
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'", // keep permissive to avoid breaking existing scripts
+    "style-src 'self' 'unsafe-inline'",
+    "connect-src 'self' *",
+  ].join("; ");
+  res.setHeader("Content-Security-Policy", csp);
+  next();
+});
+
 // Serve static files
 app.use("/uploads", express.static(uploadsDir));
 

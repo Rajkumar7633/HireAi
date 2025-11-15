@@ -14,13 +14,22 @@ export async function POST(request: NextRequest) {
     const data = await r.json()
 
     const res = NextResponse.json(data, { status: r.status })
-    if (r.ok && (data as any)?.token) {
-      res.cookies.set("auth-token", (data as any).token, {
+    if (r.ok && (data as any)?.accessToken) {
+      res.cookies.set("auth-token", (data as any).accessToken, {
         httpOnly: true,
         path: "/",
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
-        maxAge: 60 * 60 * 24 * 7,
+        maxAge: 60 * 20, // 20 minutes
+      })
+    }
+    if (r.ok && (data as any)?.refreshToken) {
+      res.cookies.set("refresh-token", (data as any).refreshToken, {
+        httpOnly: true,
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 60 * 60 * 24 * 14, // 14 days
       })
     }
     return res

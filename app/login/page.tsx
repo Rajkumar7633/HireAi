@@ -78,30 +78,7 @@ export default function LoginPage() {
         setLoading(false)
         return
       }
-
-      if (response.ok && data?.token) {
-        localStorage.setItem("auth-token", data.token);
-
-        await new Promise((resolve) => setTimeout(resolve, 100));
-
-        console.log("[v0] Refreshing session after login...");
-        await refreshSession();
-
-        await new Promise((resolve) => setTimeout(resolve, 200));
-
-        if (redirectPath && redirectPath.startsWith("/")) {
-          router.push(redirectPath)
-        } else if (data.user.role === "recruiter") {
-          console.log("[v0] Redirecting recruiter to dashboard...");
-          router.push("/dashboard/recruiter");
-        } else if (data.user.role === "job_seeker") {
-          console.log("[v0] Redirecting job seeker to dashboard...");
-          router.push("/dashboard/job-seeker");
-        } else {
-          console.log("[v0] Redirecting to general dashboard...");
-          router.push("/dashboard");
-        }
-      } else {
+      if (!response.ok) {
         if (response.status === 404) {
           setShowSignupPrompt(true)
         }
@@ -130,9 +107,6 @@ export default function LoginPage() {
       if (!r.ok) {
         setOtpError(data?.msg || data?.message || "Invalid code")
         return
-      }
-      if (data?.token) {
-        localStorage.setItem("auth-token", data.token)
       }
       await new Promise((r) => setTimeout(r, 100))
       await refreshSession()

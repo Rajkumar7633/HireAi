@@ -128,8 +128,55 @@ App: http://localhost:3000
 - Seed demo data (optional): see `scripts/` directory.
 
 ## Security
+
 - Do not commit `.env*` files.
 - Use GitHub noreply email if you keep email private.
+
+### Authentication & Session Security
+
+- **OTP‑based login flow**
+  - Users sign in with email + password.
+  - If credentials are valid and the user exists, a 6‑digit OTP is generated and sent to the email.
+  - The OTP is valid for 10 minutes and limited to a small number of attempts.
+  - In development, the OTP is also logged to the server console to simplify testing.
+
+- **Cookie‑only JWT tokens (no `localStorage`)**
+  - After successful OTP verification, the backend issues:
+    - A short‑lived **access token** (≈20 minutes).
+    - A long‑lived **refresh token** (≈14 days).
+  - Both tokens are stored as `httpOnly` cookies:
+    - `auth-token`: access token, `httpOnly`, `secure` in production, `SameSite=lax`.
+    - `refresh-token`: refresh token, `httpOnly`, `secure` in production, `SameSite=lax`.
+  - The frontend never reads or writes JWTs directly; it relies on these cookies and `/api/auth/me`.
+
+- **Access / Refresh model**
+  - **Access token**
+    - Payload includes `{ userId, email, name, role, type: "access" }`.
+    - Used by backend auth middleware and Next.js `/api/auth/me` to identify the user.
+  - **Refresh token**
+    - Payload includes `{ userId, email, name, role, type: "refresh" }`.
+    - Stored in `User.refreshTokens` so active sessions can be tracked.
+    - On `/api/auth/refresh`, the backend:
+      - Verifies the refresh token.
+      - Ensures it is present in `user.refreshTokens`.
+      - Issues a new access token + a rotated refresh token.
+      - Replaces the old refresh token in `user.refreshTokens` (rotation).
+
+- **Auto refresh on the frontend**
+  - The `useSession` hook calls `/api/auth/me` to resolve the current user from the `auth-token` cookie.
+  - If `/api/auth/me` returns `401` once, the hook calls `/api/auth/refresh` (Next.js proxy), which uses the `refresh-token` cookie.
+  - If refresh succeeds, `useSession` retries the session fetch and the user stays logged in.
+  - If refresh fails, the session is cleared and the user is treated as logged out.
+
+- **Logout & Logout‑all‑devices**
+  - `/api/auth/logout` (Next.js) clears `auth-token`, legacy `token`, and `refresh-token` cookies.
+  - `/api/auth/logout-all` (backend) clears `user.refreshTokens`, so all devices lose the ability to refresh tokens.
+  - After logout‑all, any remaining `refresh-token` cookies will fail on the next refresh attempt.
+
+- **Rate limiting and OTP hardening**
+  - Auth routes (login, OTP verify, refresh) are wrapped in configurable rate limiters.
+  - In development, rate limiting is relaxed to simplify local testing.
+  - OTP codes are normalized and attempts are capped to reduce brute‑force risk.
 
 ## Troubleshooting
 - Judge0 key missing: use public CE or add `JUDGE0_KEY`.

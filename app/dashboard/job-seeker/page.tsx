@@ -25,6 +25,7 @@ import {
   User,
   Settings,
   AlertCircle,
+  Shield,
 } from "lucide-react";
 import Link from "next/link";
 import { useSession } from "@/hooks/use-session";
@@ -71,6 +72,33 @@ export default function JobSeekerDashboard() {
   const [projects, setProjects] = useState<JSProject[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string>("");
   const [shownUpgradeToast, setShownUpgradeToast] = useState(false);
+
+  const handleLogoutAllDevices = async () => {
+    try {
+      const csrfRes = await fetch("/api/auth/csrf", {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      });
+      const csrfData = csrfRes.ok ? await csrfRes.json().catch(() => null) : null;
+      const csrfToken = csrfData?.token;
+      const res = await fetch("/api/auth/logout-all", {
+        method: "POST",
+        credentials: "include",
+        headers: csrfToken ? { "X-CSRF-Token": csrfToken } : undefined,
+      });
+      if (res.ok) {
+        toast({ title: "Logged out on all devices", description: "For security, please sign in again." });
+        if (typeof window !== "undefined") {
+          window.location.href = "/login";
+        }
+      } else {
+        toast({ title: "Logout failed", description: "Could not logout all devices.", variant: "destructive" });
+      }
+    } catch (e) {
+      toast({ title: "Logout failed", description: "Network error while logging out.", variant: "destructive" });
+    }
+  };
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -153,6 +181,9 @@ export default function JobSeekerDashboard() {
               <Target className="mr-2 h-4 w-4" />
               View Job Matches
             </Link>
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleLogoutAllDevices}>
+            Logout all devices
           </Button>
         </div>
       </div>
@@ -408,6 +439,22 @@ export default function JobSeekerDashboard() {
 
       <div className="grid gap-6 md:grid-cols-12">
         <div className="md:col-span-4 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-4 w-4" />
+                Security Checklist
+              </CardTitle>
+              <CardDescription>Key protections active on your account</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-muted-foreground">
+              <div>• Email + password + OTP required for login</div>
+              <div>• Short-lived access token with auto-refresh</div>
+              <div>• Refresh tokens stored server-side and rotated</div>
+              <div>• Cookie-only auth (no tokens in localStorage)</div>
+              <div>• "Logout all devices" to revoke sessions</div>
+            </CardContent>
+          </Card>
           <Card className="premium-card border-indigo-200 bg-gradient-to-br from-indigo-50 to-purple-50">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-indigo-700">

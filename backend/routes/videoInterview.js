@@ -4,6 +4,19 @@ const auth = require("../middleware/auth");
 const { requireRole } = require("../middleware/auth");
 const router = express.Router();
 
+// Simple helpers to validate fields without new dependencies
+const isNonEmptyString = (v) => typeof v === "string" && v.trim().length > 0;
+const isValidEmail = (v) => typeof v === "string" && /.+@.+\..+/.test(v.trim());
+const isValidISODate = (v) => {
+  if (!v) return false;
+  const d = new Date(v);
+  return !Number.isNaN(d.getTime());
+};
+const isValidDuration = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 && n <= 8 * 60; // up to 8 hours
+};
+
 // Mock database - replace with your actual database model
 let interviews = [
   {
@@ -117,10 +130,22 @@ router.post("/", auth, async (req, res) => {
     } = req.body;
 
     // Validate required fields
-    if (!candidateId || !scheduledDate || !candidateName || !position) {
+    if (!candidateId || !isNonEmptyString(candidateName) || !isNonEmptyString(position) || !scheduledDate) {
       return res.status(400).json({
         msg: "Missing required fields: candidateId, candidateName, position, scheduledDate",
       });
+    }
+
+    if (!isValidISODate(scheduledDate)) {
+      return res.status(400).json({ msg: "Invalid scheduledDate" });
+    }
+
+    if (candidateEmail && !isValidEmail(candidateEmail)) {
+      return res.status(400).json({ msg: "Invalid candidateEmail" });
+    }
+
+    if (duration && !isValidDuration(duration)) {
+      return res.status(400).json({ msg: "Invalid duration" });
     }
 
     // Create new interview
@@ -174,7 +199,13 @@ router.patch("/:interviewId/status", auth, async (req, res) => {
   try {
     const { interviewId } = req.params;
     const { status } = req.body;
-    const { userId } = req.user;
+    const { userId, role } = req.user;
+
+    if (role !== "recruiter") {
+      return res
+        .status(403)
+        .json({ msg: "Access denied. Recruiter role required." });
+    }
 
     // Valid status values
     const validStatuses = [

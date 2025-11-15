@@ -81,6 +81,10 @@ const UserSchema = new mongoose.Schema({
     attempts: { type: Number, default: 0 },
     devPlain: { type: String },
   },
+  refreshTokens: {
+    type: [String],
+    default: [],
+  },
   // Billing fields
   stripeCustomerId: {
     type: String,
