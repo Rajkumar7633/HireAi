@@ -61,11 +61,27 @@ router.get("/my-jobs", auth, async (req, res) => {
 // @access  Private (Job Seeker, Admin)
 router.get("/all", auth, async (req, res) => {
   if (req.user.role !== "job_seeker" && req.user.role !== "admin") {
-    return res.status(403).json({ msg: "Access denied. Only job seekers and admins can view all job descriptions." })
+    return res
+      .status(403)
+      .json({ msg: "Access denied. Only job seekers and admins can view all job descriptions." })
   }
 
   try {
-    const jobDescriptions = await JobDescription.find({}).sort({ postedDate: -1 })
+    let query = {}
+
+    // For job seekers, only show active/open jobs
+    if (req.user.role === "job_seeker") {
+      query = {
+        $and: [
+          // Either explicitly active, or no isActive flag set (backwards compatible)
+          { $or: [{ isActive: { $exists: false } }, { isActive: true }] },
+          // And not explicitly marked inactive via status
+          { $or: [{ status: { $exists: false } }, { status: { $ne: "inactive" } }] },
+        ],
+      }
+    }
+
+    const jobDescriptions = await JobDescription.find(query).sort({ postedDate: -1 })
     res.json(jobDescriptions)
   } catch (err) {
     console.error(err.message)

@@ -34,6 +34,8 @@ interface JobDescription {
   postedDate: string;
   requirements: string[];
   responsibilities: string[];
+  isActive?: boolean;
+  status?: string;
 }
 
 const formatSafeDate = (dateString: string | undefined | null): string => {
@@ -53,14 +55,8 @@ const formatSafeDate = (dateString: string | undefined | null): string => {
 export default function RecruiterJobDescriptionsPage() {
   const [jobs, setJobs] = useState<JobDescription[]>([]);
   const [loading, setLoading] = useState(true);
-  const { toast } = useToast(); // Declare useToast hook
+  const { toast } = useToast();
   const { session, isLoading: sessionLoading } = useSession();
-
-  useEffect(() => {
-    if (!sessionLoading && session) {
-      fetchJobs();
-    }
-  }, [session, sessionLoading]);
 
   const fetchJobs = async () => {
     setLoading(true);
@@ -103,6 +99,61 @@ export default function RecruiterJobDescriptionsPage() {
     }
   };
 
+  useEffect(() => {
+    if (!sessionLoading && session) {
+      void fetchJobs();
+    }
+  }, [session, sessionLoading]);
+
+  const handleToggleJobActive = async (job: JobDescription) => {
+    const nextActive = job.isActive !== false;
+    const confirmMsg = nextActive
+      ? "Close this job? New candidates will no longer see it as open."
+      : "Reopen this job so candidates can apply again?";
+
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      const response = await fetch(`/api/job-descriptions/${job._id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          isActive: !nextActive,
+          status: !nextActive ? "inactive" : "active",
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        toast({
+          title: "Update failed",
+          description: data.message || "Could not update job status.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: !nextActive ? "Job reopened" : "Job closed",
+        description: !nextActive
+          ? "This job is now open for new candidates."
+          : "This job is now closed and will not accept new applications.",
+      });
+
+      void fetchJobs();
+    } catch (error) {
+      console.error("Toggle job active error:", error);
+      toast({
+        title: "Error",
+        description: "Network error. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleDeleteJob = async (jobId: string) => {
     if (
       !window.confirm(
@@ -122,7 +173,7 @@ export default function RecruiterJobDescriptionsPage() {
           title: "Job Deleted",
           description: "The job description has been successfully deleted.",
         });
-        fetchJobs(); // Refresh the list
+        void fetchJobs();
       } else {
         const errorData = await response.json();
         toast({
@@ -182,84 +233,106 @@ export default function RecruiterJobDescriptionsPage() {
         </Card>
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {jobs.map((job) => (
-            <Card key={job._id}>
-              <CardHeader>
-                <CardTitle>{job.title}</CardTitle>
-                <CardDescription className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4" />
-                  Posted: {formatSafeDate(job.postedDate)}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-sm text-muted-foreground line-clamp-3">
-                  {job.description}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="secondary">{job.location}</Badge>
-                  <Badge variant="outline">{job.employmentType}</Badge>
-                  {job.salary && <Badge variant="outline">{job.salary}</Badge>}
-                </div>
-                <div>
-                  <p className="text-sm font-medium mb-2">Skills:</p>
-                  <div className="flex flex-wrap gap-1">
-                    {job.skills &&
-                    Array.isArray(job.skills) &&
-                    job.skills.length > 0 ? (
-                      <>
-                        {job.skills.slice(0, 3).map((skill, idx) => (
-                          <Badge
-                            key={idx}
-                            variant="secondary"
-                            className="text-xs"
-                          >
-                            {skill}
-                          </Badge>
-                        ))}
-                        {job.skills.length > 3 && (
-                          <Badge variant="secondary" className="text-xs">
-                            +{job.skills.length - 3} more
-                          </Badge>
-                        )}
-                      </>
-                    ) : (
-                      <Badge variant="outline" className="text-xs">
-                        No skills specified
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-                <div className="flex justify-between gap-2">
-                  <Button variant="outline" size="sm" asChild>
-                    <Link
-                      href={`/dashboard/recruiter/job-descriptions/${job._id}/candidates`}
+          {jobs.map((job) => {
+            const isActive = job.isActive !== false;
+            return (
+              <Card key={job._id}>
+                <CardHeader>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <CardTitle>{job.title}</CardTitle>
+                      <CardDescription className="flex items-center gap-2 mt-1">
+                        <Calendar className="h-4 w-4" />
+                        Posted: {formatSafeDate(job.postedDate)}
+                      </CardDescription>
+                    </div>
+                    <Badge
+                      variant={isActive ? "secondary" : "outline"}
+                      className={
+                        isActive
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "border-destructive text-destructive"
+                      }
                     >
-                      <Users className="mr-2 h-4 w-4" />
-                      Candidates
-                    </Link>
-                  </Button>
-                  <div className="flex gap-2">
+                      {isActive ? "Open" : "Closed"}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-muted-foreground line-clamp-3">
+                    {job.description}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="secondary">{job.location}</Badge>
+                    <Badge variant="outline">{job.employmentType}</Badge>
+                    {job.salary && <Badge variant="outline">{job.salary}</Badge>}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium mb-2">Skills:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {job.skills && Array.isArray(job.skills) && job.skills.length > 0 ? (
+                        <>
+                          {job.skills.slice(0, 3).map((skill, idx) => (
+                            <Badge
+                              key={idx}
+                              variant="secondary"
+                              className="text-xs"
+                            >
+                              {skill}
+                            </Badge>
+                          ))}
+                          {job.skills.length > 3 && (
+                            <Badge variant="secondary" className="text-xs">
+                              +{job.skills.length - 3} more
+                            </Badge>
+                          )}
+                        </>
+                      ) : (
+                        <Badge variant="outline" className="text-xs">
+                          No skills specified
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex justify-between gap-2">
                     <Button variant="outline" size="sm" asChild>
                       <Link
-                        href={`/dashboard/recruiter/job-descriptions/${job._id}/edit`}
+                        href={`/dashboard/recruiter/job-descriptions/${job._id}/candidates`}
                       >
-                        <Edit className="mr-2 h-4 w-4" />
-                        Edit
+                        <Users className="mr-2 h-4 w-4" />
+                        Candidates
                       </Link>
                     </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => handleDeleteJob(job._id)}
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Delete
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant={isActive ? "outline" : "secondary"}
+                        size="sm"
+                        onClick={() => handleToggleJobActive(job)}
+                      >
+                        {isActive ? "Close" : "Reopen"}
+                      </Button>
+                      <Button variant="outline" size="sm" asChild>
+                        <Link
+                          href={`/dashboard/recruiter/job-descriptions/${job._id}/edit`}
+                        >
+                          <Edit className="mr-2 h-4 w-4" />
+                          Edit
+                        </Link>
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleDeleteJob(job._id)}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

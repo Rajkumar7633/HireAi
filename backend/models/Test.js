@@ -48,6 +48,7 @@ const TestSchema = new mongoose.Schema({
       },
       testCases: [
         {
+          _id: false,
           input: {
             type: String,
             required: false,

@@ -97,8 +97,25 @@ export async function POST(req: NextRequest) {
     clearTimeout(timeoutId)
 
     if (!response.ok) {
-      const errorData = await response.json()
-      return NextResponse.json({ message: errorData.msg || "Failed to create test" }, { status: response.status })
+      let message = "Failed to create test"
+      try {
+        const errorData = await response.json()
+        if (errorData && (errorData as any).msg) {
+          message = (errorData as any).msg as string
+        }
+      } catch {
+        // Backend might have returned plain text, fall back to text body
+        try {
+          const text = await response.text()
+          if (text) {
+            message = text
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      return NextResponse.json({ message }, { status: response.status })
     }
 
     const data = await response.json()

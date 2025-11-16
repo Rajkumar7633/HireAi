@@ -38,6 +38,8 @@ export async function GET(request: NextRequest) {
       requirements: job.requirements || [],
       responsibilities: job.responsibilities || [],
       postedDate: job.postedDate || job.createdAt,
+      isActive: typeof job.isActive === "boolean" ? job.isActive : job.status !== "inactive",
+      status: job.status || (job.isActive === false ? "inactive" : "active"),
     }))
 
     return NextResponse.json({ jobDescriptions: transformedJobs })

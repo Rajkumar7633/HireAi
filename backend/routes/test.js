@@ -8,6 +8,37 @@ const sendEmail = require("../utils/emailService")
 const User = require("../models/User")
 const TestSubmission = require("../models/TestSubmission")
 
+// Very lightweight helpers to compare code answers for plagiarism/similarity
+function normalizeCode(code) {
+  if (!code || typeof code !== "string") return ""
+  return code
+    .replace(/\/\*[\s\S]*?\*\//g, "") // block comments
+    .replace(/\/\/.*$/gm, "") // line comments
+    .replace(/#.*$/gm, "") // hash comments (Python, etc.)
+    .replace(/\s+/g, " ")
+    .toLowerCase()
+    .trim()
+}
+
+function similarityScore(a, b) {
+  const s1 = normalizeCode(a)
+  const s2 = normalizeCode(b)
+  if (!s1 || !s2) return 0
+
+  // token based Jaccard similarity
+  const t1 = new Set(s1.split(/[^a-z0-9_]+/g).filter(Boolean))
+  const t2 = new Set(s2.split(/[^a-z0-9_]+/g).filter(Boolean))
+  if (t1.size === 0 || t2.size === 0) return 0
+
+  let intersection = 0
+  for (const token of t1) {
+    if (t2.has(token)) intersection++
+  }
+  const union = t1.size + t2.size - intersection
+  if (union === 0) return 0
+  return intersection / union
+}
+
 // @route   POST /api/tests
 // @desc    Create a new test
 // @access  Private (Recruiter)
@@ -35,8 +66,90 @@ router.post("/", auth, async (req, res) => {
     await newTest.save()
     res.json({ msg: "Test created successfully", test: newTest })
   } catch (err) {
-    console.error(err.message)
-    res.status(500).send("Server Error")
+    console.error("Error creating test:", err)
+    res.status(500).json({ msg: "Server Error", error: err.message })
+  }
+})
+
+// @route   POST /api/tests/:id/auto-select
+// @desc    Auto-select best candidates for a test based on score and plagiarism and send next-round emails
+// @access  Private (Recruiter)
+router.post("/:id/auto-select", auth, async (req, res) => {
+  try {
+    const { minScore = 70, maxPlagiarism = 40, topN = 3 } = req.body || {}
+
+    const test = await Test.findById(req.params.id)
+    if (!test) {
+      return res.status(404).json({ msg: "Test not found" })
+    }
+
+    if (req.user.role !== "recruiter" || test.recruiterId.toString() !== req.user.id) {
+      return res.status(401).json({ msg: "Not authorized to auto-select for this test" })
+    }
+
+    const submissions = await TestSubmission.find({ testId: req.params.id })
+      .populate("candidateId", "email name")
+      .populate("applicationId")
+
+    if (!submissions || submissions.length === 0) {
+      return res.json({ msg: "No submissions for this test yet", selectedCount: 0 })
+    }
+
+    const eligible = submissions
+      .filter((s) => {
+        const pct = s.percentage || 0
+        const plag = s.plagiarismScore || 0
+        return pct >= minScore && plag <= maxPlagiarism
+      })
+      .sort((a, b) => (b.percentage || 0) - (a.percentage || 0))
+
+    const selected = eligible.slice(0, Math.max(1, Number(topN) || 0))
+
+    const updatedApplications = []
+
+    for (const sub of selected) {
+      if (!sub.applicationId) continue
+
+      const app = await JobApplication.findById(sub.applicationId._id)
+        .populate("jobSeekerId", "email name")
+        .populate("jobDescriptionId", "title recruiterId")
+
+      if (!app) continue
+
+      // Ensure recruiter owns the job description associated with this application
+      if (app.jobDescriptionId.recruiterId.toString() !== req.user.id) {
+        continue
+      }
+
+      app.status = "Shortlisted"
+      await app.save()
+      updatedApplications.push(app)
+
+      const jobSeeker = app.jobSeekerId
+      if (jobSeeker && jobSeeker.email) {
+        try {
+          await sendEmail({
+            to: jobSeeker.email,
+            subject: `You have been shortlisted for ${app.jobDescriptionId.title}`,
+            html: `<p>Dear ${jobSeeker.name || "Candidate"},</p>
+                   <p>Congratulations! Based on your performance in the coding assessment <strong>${test.title}</strong>, you have been shortlisted for the next round for <strong>${app.jobDescriptionId.title}</strong>.</p>
+                   <p>Our team will contact you shortly with details about the next steps.</p>
+                   <p>Best regards,<br/>The HireAI Team</p>`,
+          })
+        } catch (mailErr) {
+          console.error("Failed to send shortlist email", mailErr)
+        }
+      }
+    }
+
+    return res.json({
+      msg: "Auto-select completed",
+      selectedCount: selected.length,
+      shortlistedApplications: updatedApplications.map((a) => a._id),
+    })
+  } catch (err) {
+    console.error("auto-select error", err)
+    return res.status(500).json({ msg: "Server Error" })
   }
 })
 
@@ -387,6 +500,59 @@ router.post("/applications/:id/submit-test", auth, async (req, res) => {
 
     const percentageScore = totalPoints > 0 ? Math.round((score / totalPoints) * 100) : 0
 
+    // --- Basic plagiarism / similarity scoring for code questions ---
+    let plagiarismScore = 0
+    const flags = []
+
+    try {
+      // Look at previous submissions for this same test
+      const previousSubs = await TestSubmission.find({
+        testId: application.testId._id,
+      })
+        .select("candidateId answers")
+        .lean()
+
+      if (previousSubs && previousSubs.length > 0) {
+        let maxSimilarity = 0
+        let mostSimilarCandidate = null
+
+        // Collect current code answers as plain strings
+        const currentCodeAnswers = detailedAnswers
+          .filter((a) => a.questionType === "code_snippet" && typeof a.answer === "string")
+          .map((a) => a.answer)
+
+        for (const prev of previousSubs) {
+          const prevCodeAnswers = (prev.answers || [])
+            .filter((a) => a.questionType === "code_snippet" && typeof a.answer === "string")
+            .map((a) => a.answer)
+
+          for (const curCode of currentCodeAnswers) {
+            for (const prevCode of prevCodeAnswers) {
+              const sim = similarityScore(curCode, prevCode)
+              if (sim > maxSimilarity) {
+                maxSimilarity = sim
+                mostSimilarCandidate = prev.candidateId
+              }
+            }
+          }
+        }
+
+        if (maxSimilarity > 0) {
+          plagiarismScore = Math.round(maxSimilarity * 100)
+          if (plagiarismScore >= 80) {
+            flags.push("high_similarity_to_other_candidate")
+          } else if (plagiarismScore >= 40) {
+            flags.push("medium_similarity_to_other_candidate")
+          }
+          if (mostSimilarCandidate && mostSimilarCandidate.toString() !== application.jobSeekerId._id.toString()) {
+            flags.push("similar_to_different_candidate")
+          }
+        }
+      }
+    } catch (plagErr) {
+      console.error("Plagiarism similarity computation failed", plagErr)
+    }
+
     // Save aggregate score on application (existing behavior)
     application.testScore = percentageScore
     application.status = "Reviewed" // Or "Test Completed"
@@ -402,8 +568,8 @@ router.post("/applications/:id/submit-test", auth, async (req, res) => {
       totalScore: score,
       percentage: percentageScore,
       status: "completed",
-      plagiarismScore: 0,
-      plagiarismFlags: [],
+      plagiarismScore,
+      plagiarismFlags: flags,
       startedAt: new Date(),
       submittedAt: new Date(),
     })
