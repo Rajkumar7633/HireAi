@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
           })
           user = await User.findById(session.userId).select("-passwordHash")
         }
-      } catch {}
+      } catch { }
     }
 
     return NextResponse.json({
@@ -67,6 +67,7 @@ export async function GET(req: NextRequest) {
         subscription: (user as any).subscription || null,
         features: (user as any).features || {},
         limits: (user as any).limits || {},
+        skills: (user as any).skills || [],
       },
     })
   } catch (error) {

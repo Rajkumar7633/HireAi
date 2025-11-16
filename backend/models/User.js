@@ -106,6 +106,20 @@ const UserSchema = new mongoose.Schema({
     type: Object,
     default: {},
   },
+  // Skills with optional verification
+  skills: [
+    {
+      name: { type: String },
+      level: {
+        type: String,
+        enum: ["beginner", "intermediate", "advanced"],
+        default: "intermediate",
+      },
+      verified: { type: Boolean, default: false },
+      verifiedScore: { type: Number },
+      verifiedAt: { type: Date },
+    },
+  ],
 });
 
 UserSchema.pre("save", function (next) {

@@ -7,6 +7,7 @@ import SocialConnection from "@/models/SocialConnection";
 import MutualsBlock from "@/components/social/MutualsBlock";
 import ControlsBlock from "@/components/social/ControlsBlock";
 import ProfileTabs from "@/components/social/ProfileTabs";
+import MutualSkillsHighlights from "@/components/social/MutualSkillsHighlights";
 
 async function getData(userId: string) {
   await connectDB();
@@ -121,6 +122,30 @@ export default async function ProfilePage({ params }: { params: { userId: string
                   <div className="text-sm font-semibold">{Array.isArray(profile.skills) ? profile.skills.length : 0}</div>
                 </div>
               </div>
+
+              {/* Highlights */}
+              <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 border border-slate-200 px-2 py-0.5 text-slate-700">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  {Number((profile as any).yearsOfExperience || 0)} yrs experience
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 border border-slate-200 px-2 py-0.5 text-slate-700">
+                  <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
+                  {(Array.isArray((profile as any).projects) ? (profile as any).projects.length : 0) || 0} projects
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 border border-slate-200 px-2 py-0.5 text-slate-700">
+                  <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
+                  {(Array.isArray(profile.skills) ? profile.skills.length : 0) || 0} skills
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 border border-slate-200 px-2 py-0.5 text-slate-700">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                  {(connectionsCount || 0)} connections
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 border border-slate-200 px-2 py-0.5 text-slate-700">
+                  <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                  {posts.length} posts
+                </span>
+              </div>
               {profile.university && (
                 <div className="text-sm"><span className="font-medium">University:</span> <span className="text-muted-foreground">{profile.university}</span></div>
               )}
@@ -135,6 +160,7 @@ export default async function ProfilePage({ params }: { params: { userId: string
                       <span key={i} className="text-xs px-2 py-0.5 bg-slate-50 border rounded">{s}</span>
                     ))}
                   </div>
+                  <MutualSkillsHighlights otherSkills={profile.skills as string[]} />
                 </div>
               )}
             </div>

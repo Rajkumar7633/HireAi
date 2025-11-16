@@ -118,6 +118,7 @@ app.use("/api/tests", require("./routes/test"));
 app.use("/api/ai-screening", require("./routes/aiScreening"));
 app.use("/api/video-interviews", require("./routes/videoInterview"));
 app.use("/api/candidates", require("./routes/candidates"));
+app.use("/api/skills", require("./routes/skills"));
 
 // Simplified server startup
 const PORT = process.env.PORT || 5001;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   Card,
@@ -35,6 +35,13 @@ interface UserProfile {
   phone?: string;
   address?: string;
   role: string;
+  // Top-level skills from User model (may include verification metadata)
+  skills?: Array<{
+    name?: string;
+    verified?: boolean;
+    verifiedScore?: number;
+    verifiedAt?: string;
+  }>;
   jobSeekerProfile?: {
     firstName?: string;
     lastName?: string;
@@ -101,6 +108,19 @@ export default function CandidateProfilePage() {
   const [userResumes, setUserResumes] = useState<Resume[]>([]);
   const [selectedResume, setSelectedResume] = useState<Resume | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Build a quick lookup set of verified skill names from the User.skills array
+  const verifiedSkillNames = useMemo(() => {
+    if (!userProfile?.skills) return new Set<string>();
+    const set = new Set<string>();
+    for (const s of userProfile.skills as any[]) {
+      if (s && s.verified && typeof s.name === "string") {
+        const k = s.name.toLowerCase().trim();
+        if (k) set.add(k);
+      }
+    }
+    return set;
+  }, [userProfile]);
 
   useEffect(() => {
     if (userId) {
@@ -304,13 +324,49 @@ export default function CandidateProfilePage() {
                 )}
               </div>
               {userProfile.jobSeekerProfile.skills && userProfile.jobSeekerProfile.skills.length > 0 && (
-                <div>
+                <div className="space-y-2">
                   <h3 className="text-sm font-medium mb-1">Skills</h3>
                   <div className="flex flex-wrap gap-1">
-                    {userProfile.jobSeekerProfile.skills.slice(0, 12).map((skill, idx) => (
-                      <Badge key={idx} variant="secondary">{skill}</Badge>
-                    ))}
+                    {userProfile.jobSeekerProfile.skills.slice(0, 12).map((skill, idx) => {
+                      const key = skill.toLowerCase().trim();
+                      const isVerified = verifiedSkillNames.has(key);
+                      return (
+                        <Badge
+                          key={idx}
+                          className={
+                            "px-3 py-1 text-xs " +
+                            (isVerified
+                              ? "bg-green-100 text-green-800 border border-green-300"
+                              : "bg-slate-100 text-slate-800")
+                          }
+                        >
+                          {skill}
+                          {isVerified && (
+                            <span className="ml-1 text-[10px] uppercase tracking-wide">
+                              Verified
+                            </span>
+                          )}
+                        </Badge>
+                      );
+                    })}
                   </div>
+
+                  {verifiedSkillNames.size > 0 && (
+                    <div className="mt-2 text-[11px] text-emerald-900/80">
+                      <span className="font-medium">Verified skills: </span>
+                      {Array.from(verifiedSkillNames)
+                        .slice(0, 4)
+                        .map((name, idx) => (
+                          <span key={name}>
+                            {idx > 0 && ", "}
+                            {name}
+                          </span>
+                        ))}
+                      {verifiedSkillNames.size > 4 && (
+                        <span>{" +"}{verifiedSkillNames.size - 4} more</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
               <div className="flex gap-2 flex-wrap">

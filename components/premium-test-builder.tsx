@@ -43,6 +43,14 @@ import {
   Settings,
 } from "lucide-react";
 
+interface TestCase {
+  id: string;
+  input: string;
+  expectedOutput: string;
+  hidden: boolean;
+  weight: number;
+}
+
 interface Question {
   id: string;
   questionText: string;
@@ -50,6 +58,11 @@ interface Question {
   options: string[];
   correctAnswer: string;
   points: number;
+  // Coding question extras (used when type === "code_snippet")
+  language?: string;
+  starterCode?: string;
+  functionSignature?: string;
+  testCases?: TestCase[];
 }
 
 interface TestTemplate {
@@ -189,6 +202,10 @@ export default function PremiumTestBuilder({
         options: type === "multiple_choice" ? ["", "", "", ""] : [],
         correctAnswer: "",
         points: 10,
+        language: type === "code_snippet" ? "javascript" : undefined,
+        starterCode: type === "code_snippet" ? "" : undefined,
+        functionSignature: type === "code_snippet" ? "" : undefined,
+        testCases: type === "code_snippet" ? [] : undefined,
       };
       setQuestions((prev) => [...prev, newQuestion]);
     },
@@ -687,6 +704,230 @@ export default function PremiumTestBuilder({
                                   }
                                   className="premium-input font-mono"
                                 />
+                              </div>
+                            )}
+
+                            {question.type === "code_snippet" && (
+                              <div className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                  <div className="space-y-2">
+                                    <Label>Language</Label>
+                                    <Select
+                                      value={question.language || "javascript"}
+                                      onValueChange={(value) =>
+                                        updateQuestion(
+                                          question.id,
+                                          "language",
+                                          value
+                                        )
+                                      }
+                                    >
+                                      <SelectTrigger className="premium-input">
+                                        <SelectValue placeholder="Select language" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="javascript">
+                                          JavaScript
+                                        </SelectItem>
+                                        <SelectItem value="typescript">
+                                          TypeScript
+                                        </SelectItem>
+                                        <SelectItem value="python">Python</SelectItem>
+                                        <SelectItem value="java">Java</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div className="md:col-span-2 space-y-2">
+                                    <Label>Function Signature (optional)</Label>
+                                    <Input
+                                      value={question.functionSignature || ""}
+                                      onChange={(e) =>
+                                        updateQuestion(
+                                          question.id,
+                                          "functionSignature",
+                                          e.target.value
+                                        )
+                                      }
+                                      placeholder="e.g., function twoSum(nums, target) {}"
+                                      className="premium-input font-mono"
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                  <Label>Starter Code (optional)</Label>
+                                  <Textarea
+                                    value={question.starterCode || ""}
+                                    onChange={(e) =>
+                                      updateQuestion(
+                                        question.id,
+                                        "starterCode",
+                                        e.target.value
+                                      )
+                                    }
+                                    placeholder="Provide starter code that candidates will see in the editor..."
+                                    rows={4}
+                                    className="premium-input font-mono"
+                                  />
+                                </div>
+
+                                <div className="space-y-3">
+                                  <div className="flex items-center justify-between">
+                                    <Label>Test Cases</Label>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        const current = question.testCases || [];
+                                        const next: TestCase = {
+                                          id: generateId(),
+                                          input: "",
+                                          expectedOutput: "",
+                                          hidden: false,
+                                          weight: 1,
+                                        };
+                                        updateQuestion(
+                                          question.id,
+                                          "testCases",
+                                          [...current, next]
+                                        );
+                                      }}
+                                    >
+                                      <Plus className="h-3 w-3 mr-1" />
+                                      Add Test Case
+                                    </Button>
+                                  </div>
+
+                                  {(question.testCases || []).length === 0 ? (
+                                    <p className="text-xs text-muted-foreground">
+                                      No test cases yet. Add at least a few
+                                      sample inputs and expected outputs to make
+                                      this coding question stronger.
+                                    </p>
+                                  ) : (
+                                    <div className="space-y-3">
+                                      {(question.testCases || []).map((tc, idx) => (
+                                        <div
+                                          key={tc.id}
+                                          className="border border-dashed rounded-md p-3 space-y-2"
+                                        >
+                                          <div className="flex items-center justify-between text-xs text-muted-foreground">
+                                            <span>Case {idx + 1}</span>
+                                            <div className="flex items-center gap-2">
+                                              <label className="flex items-center gap-1 cursor-pointer">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={tc.hidden}
+                                                  onChange={(e) => {
+                                                    const next =
+                                                      (question.testCases || []).map(
+                                                        (c) =>
+                                                          c.id === tc.id
+                                                            ? {
+                                                                ...c,
+                                                                hidden:
+                                                                  e.target
+                                                                    .checked,
+                                                              }
+                                                            : c
+                                                      );
+                                                    updateQuestion(
+                                                      question.id,
+                                                      "testCases",
+                                                      next
+                                                    );
+                                                  }}
+                                                />
+                                                <span>Hidden</span>
+                                              </label>
+                                              <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => {
+                                                  const next =
+                                                    (question.testCases || []).filter(
+                                                      (c) => c.id !== tc.id
+                                                    );
+                                                  updateQuestion(
+                                                    question.id,
+                                                    "testCases",
+                                                    next
+                                                  );
+                                                }}
+                                              >
+                                                <Trash2 className="h-3 w-3" />
+                                              </Button>
+                                            </div>
+                                          </div>
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                              <Label className="text-xs">
+                                                Input
+                                              </Label>
+                                              <Textarea
+                                                value={tc.input}
+                                                onChange={(e) => {
+                                                  const next =
+                                                    (question.testCases || []).map(
+                                                      (c) =>
+                                                        c.id === tc.id
+                                                          ? {
+                                                              ...c,
+                                                              input:
+                                                                e.target
+                                                                  .value,
+                                                            }
+                                                          : c
+                                                    );
+                                                  updateQuestion(
+                                                    question.id,
+                                                    "testCases",
+                                                    next
+                                                  );
+                                                }}
+                                                placeholder='e.g., "[1,2,3], 4"'
+                                                rows={2}
+                                                className="premium-input font-mono text-xs"
+                                              />
+                                            </div>
+                                            <div className="space-y-1">
+                                              <Label className="text-xs">
+                                                Expected Output
+                                              </Label>
+                                              <Textarea
+                                                value={tc.expectedOutput}
+                                                onChange={(e) => {
+                                                  const next =
+                                                    (question.testCases || []).map(
+                                                      (c) =>
+                                                        c.id === tc.id
+                                                          ? {
+                                                              ...c,
+                                                              expectedOutput:
+                                                                e.target
+                                                                  .value,
+                                                            }
+                                                          : c
+                                                    );
+                                                  updateQuestion(
+                                                    question.id,
+                                                    "testCases",
+                                                    next
+                                                  );
+                                                }}
+                                                placeholder='e.g., "[0,2]"'
+                                                rows={2}
+                                                className="premium-input font-mono text-xs"
+                                              />
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             )}
                           </CardContent>

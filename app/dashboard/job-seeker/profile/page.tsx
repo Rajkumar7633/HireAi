@@ -315,6 +315,36 @@ export default function JobSeekerProfilePage() {
   const [topProfiles, setTopProfiles] = useState<any[]>([]);
   const [media, setMedia] = useState<string[]>([]);
 
+  // Verified skills derived from skill assessment history
+  const [verifiedSkillNames, setVerifiedSkillNames] = useState<Set<string>>(
+    () => new Set<string>()
+  );
+  const [verifiedSkillCount, setVerifiedSkillCount] = useState<number>(0);
+
+  useEffect(() => {
+    const loadVerifiedSkills = async () => {
+      try {
+        const res = await fetch("/api/skills/history", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json().catch(() => ({ assessments: [] }));
+        const items = Array.isArray(data.assessments) ? data.assessments : [];
+        const set = new Set<string>();
+        for (const a of items) {
+          if (a && a.passed && typeof a.skillName === "string") {
+            const k = a.skillName.toLowerCase().trim();
+            if (k) set.add(k);
+          }
+        }
+        setVerifiedSkillNames(set);
+        setVerifiedSkillCount(set.size);
+      } catch {
+        // ignore; profile still works without this
+      }
+    };
+
+    loadVerifiedSkills();
+  }, []);
+
   // Handlers (use new names to avoid any scope/hoisting issues)
   const addProjectHandler = useCallback(() => {
     if (!newProject.title.trim()) return;
@@ -1155,15 +1185,48 @@ export default function JobSeekerProfilePage() {
 
         {/* Profile Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="min-h-[360px] h-full overflow-visible">
-            <CardContent className="p-4 text-center h-full flex flex-col items-center justify-center">
-              <div className="flex items-center justify-center w-12 h-12 bg-green-100 rounded-full mx-auto mb-2">
-                <CheckCircle className="h-6 w-6 text-green-600" />
+          <Card className="h-full flex flex-col overflow-visible border-green-200 bg-gradient-to-br from-green-50 to-emerald-50">
+            <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+                <CardTitle className="text-sm">ATS Score</CardTitle>
               </div>
-              <p className="text-2xl font-bold text-green-700">
-                {profile.atsScore}%
+            </CardHeader>
+            <CardContent className="pt-0 pb-4 flex flex-col items-center justify-start gap-1">
+              <p className="mt-4 text-3xl font-bold text-green-700">
+                {profile.atsScore || 0}%
               </p>
-              <p className="text-sm text-green-600">ATS Score</p>
+              <p className="text-[11px] font-medium text-green-800">
+                {typeof profile.atsScore === "number" && !Number.isNaN(profile.atsScore)
+                  ? bandLabel(Number(profile.atsScore))
+                  : "Not scored yet"}
+              </p>
+              <p className="text-[11px] text-green-700/80">Resume match quality</p>
+
+              {verifiedSkillCount > 0 && (
+                <div className="mt-4 w-full px-1">
+                  <div className="text-[11px] font-medium text-green-900/80 mb-1">
+                    Verified skills
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {Array.from(verifiedSkillNames)
+                      .slice(0, 4)
+                      .map((name) => (
+                        <span
+                          key={name}
+                          className="text-[11px] rounded-full bg-white/80 border border-green-200 px-2 py-0.5 text-green-800"
+                        >
+                          {name}
+                        </span>
+                      ))}
+                    {verifiedSkillCount > 4 && (
+                      <span className="text-[11px] rounded-full bg-green-100/80 px-2 py-0.5 text-green-800">
+                        +{verifiedSkillCount - 4} more
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -1255,14 +1318,21 @@ export default function JobSeekerProfilePage() {
                 </div>
                 <p className="text-xs text-muted-foreground">Your highest education and school details.</p>
               </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={() => setEditingSection(editingSection === "education" ? null : "education")}>
-                  {editingSection === "education" ? <X className="h-4 w-4" /> : <Edit3 className="h-4 w-4" />}
-                </Button>
-                {editingSection !== "education" && (
-                  <Button size="sm" onClick={() => setEditingSection("education")}>Edit</Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setEditingSection(
+                    editingSection === "education" ? null : "education"
+                  )
+                }
+              >
+                {editingSection === "education" ? (
+                  <X className="h-4 w-4" />
+                ) : (
+                  <Edit3 className="h-4 w-4" />
                 )}
-              </div>
+              </Button>
             </CardHeader>
             <CardContent className="flex-1">
               {editingSection === "education" ? (
@@ -1306,20 +1376,55 @@ export default function JobSeekerProfilePage() {
           </Card>
 
           {/* Profile Strength Tips */}
-          <Card className="border-teal-200 bg-teal-50/40 min-h-[360px] h-full flex flex-col overflow-visible">
+          <Card className="border-sky-200 bg-sky-50/40 min-h-[360px] h-full flex flex-col overflow-visible">
             <CardContent className="p-4 flex-1 flex flex-col">
               <div className="flex items-start justify-between gap-4 flex-wrap">
-                <div>
-                  <div className="text-sm font-medium text-teal-900">Profile Strength tips</div>
-                  <ul className="mt-2 text-sm text-teal-800 list-disc pl-5 space-y-1">
-                    {tips.length > 0 ? tips.map((tip, i) => <li key={i}>{tip}</li>) : <li>Great work! Keep your profile updated for recency points.</li>}
-                  </ul>
+                <div className="space-y-2">
+                  <div className="text-sm font-medium text-sky-950">Profile strength tips</div>
+                  <div className="mt-1 space-y-1.5">
+                    {(tips.length > 0 ? tips : [
+                      "Great work! Keep your profile updated for recency points.",
+                    ]).map((tip, i) => (
+                      <div key={i} className="flex items-start gap-2 text-xs text-sky-900">
+                        <span className="mt-1 h-1.5 w-1.5 rounded-full bg-sky-500" />
+                        <span>{tip}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-2 items-start justify-end">
-                  <Button className="w-full sm:w-auto" variant="secondary" size="sm" onClick={() => setEditingSection("experience")}>Add Experience</Button>
-                  <Button className="w-full sm:w-auto" variant="secondary" size="sm" onClick={() => setEditingSection("projects")}>Add Project</Button>
-                  <Button className="w-full sm:w-auto" variant="secondary" size="sm" onClick={() => setEditingSection("achievements")}>Add Achievement</Button>
-                  <Button className="w-full sm:w-auto" variant="ghost" size="sm" onClick={() => setShowDebug((v) => !v)}>{showDebug ? "Hide JSON" : "Show JSON"}</Button>
+                <div className="flex flex-col gap-2 items-stretch min-w-[140px]">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs justify-start"
+                    onClick={() => setEditingSection("experience")}
+                  >
+                    Add experience
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs justify-start"
+                    onClick={() => setEditingSection("projects")}
+                  >
+                    Add project
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs justify-start"
+                    onClick={() => setEditingSection("achievements")}
+                  >
+                    Add achievement
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs justify-start text-sky-900"
+                    onClick={() => setShowDebug((v) => !v)}
+                  >
+                    {showDebug ? "Hide JSON" : "Show JSON"}
+                  </Button>
                 </div>
               </div>
               {showDebug && (
@@ -1462,18 +1567,21 @@ export default function JobSeekerProfilePage() {
                 </div>
                 <p className="text-xs text-muted-foreground">Showcase your best work with links and tags.</p>
               </div>
-              <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setEditingSection(editingSection === "projects" ? null : "projects")}
+                onClick={() =>
+                  setEditingSection(
+                    editingSection === "projects" ? null : "projects"
+                  )
+                }
               >
-                {editingSection === "projects" ? <X className="h-4 w-4" /> : <Edit3 className="h-4 w-4" />}
+                {editingSection === "projects" ? (
+                  <X className="h-4 w-4" />
+                ) : (
+                  <Edit3 className="h-4 w-4" />
+                )}
               </Button>
-              {editingSection !== "projects" && (
-                <Button size="sm" onClick={() => setEditingSection("projects")}>Add</Button>
-              )}
-              </div>
             </CardHeader>
             <CardContent>
               {editingSection === "projects" ? (
@@ -1577,18 +1685,21 @@ export default function JobSeekerProfilePage() {
                 </div>
                 <p className="text-xs text-muted-foreground">Highlight awards and recognitions.</p>
               </div>
-              <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setEditingSection(editingSection === "achievements" ? null : "achievements")}
+                onClick={() =>
+                  setEditingSection(
+                    editingSection === "achievements" ? null : "achievements"
+                  )
+                }
               >
-                {editingSection === "achievements" ? <X className="h-4 w-4" /> : <Edit3 className="h-4 w-4" />}
+                {editingSection === "achievements" ? (
+                  <X className="h-4 w-4" />
+                ) : (
+                  <Edit3 className="h-4 w-4" />
+                )}
               </Button>
-              {editingSection !== "achievements" && (
-                <Button size="sm" onClick={() => setEditingSection("achievements")}>Add</Button>
-              )}
-              </div>
             </CardHeader>
             <CardContent>
               {editingSection === "achievements" ? (
@@ -1636,7 +1747,7 @@ export default function JobSeekerProfilePage() {
                 <Award className="h-6 w-6 text-blue-600" />
               </div>
               <p className="text-2xl font-bold text-blue-700">
-                {profile.skillsVerified}
+                {verifiedSkillCount}
               </p>
               <p className="text-sm text-blue-600">Skills Verified</p>
             </CardContent>
@@ -1930,20 +2041,50 @@ export default function JobSeekerProfilePage() {
                     </Button>
                   </div>
                 ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {profile.skills.length > 0 ? (
-                      profile.skills.map((skill, index) => (
-                        <Badge
-                          key={index}
-                          className="px-3 py-1 bg-purple-100 text-purple-800"
-                        >
-                          {skill}
-                        </Badge>
-                      ))
-                    ) : (
-                      <p className="text-gray-500">
-                        Add skills to showcase your expertise
-                      </p>
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-2">
+                      {profile.skills.length > 0 ? (
+                        profile.skills.map((skill, index) => {
+                          const key = skill.toLowerCase().trim();
+                          const isVerified = verifiedSkillNames.has(key);
+                          return (
+                            <Badge
+                              key={index}
+                              className={
+                                "px-3 py-1 " +
+                                (isVerified
+                                  ? "bg-green-100 text-green-800 border border-green-300"
+                                  : "bg-purple-100 text-purple-800")
+                              }
+                            >
+                              {skill}
+                              {isVerified && (
+                                <span className="ml-1 text-[10px] uppercase tracking-wide">
+                                  Verified
+                                </span>
+                              )}
+                            </Badge>
+                          );
+                        })
+                      ) : (
+                        <p className="text-gray-600">
+                          Add your key technical and soft skills to showcase your
+                          strengths.
+                        </p>
+                      )}
+                    </div>
+                    {profile.skills.length > 0 && (
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-md border border-purple-100 bg-purple-50/70 px-3 py-2">
+                        <p className="text-xs sm:text-sm text-purple-800">
+                          Verify your core skills with short assessments so recruiters can see
+                          trusted "Verified" badges on your profile.
+                        </p>
+                        <Button asChild size="sm" variant="outline" className="whitespace-nowrap">
+                          <Link href="/dashboard/job-seeker/skills">
+                            Go to Skill Verification
+                          </Link>
+                        </Button>
+                      </div>
                     )}
                   </div>
                 )}

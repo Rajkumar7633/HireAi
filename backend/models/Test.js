@@ -34,6 +34,46 @@ const TestSchema = new mongoose.Schema({
         type: Number,
         default: 1,
       },
+      language: {
+        type: String,
+        required: false,
+      },
+      starterCode: {
+        type: String,
+        required: false,
+      },
+      functionSignature: {
+        type: String,
+        required: false,
+      },
+      testCases: [
+        {
+          input: {
+            type: String,
+            required: false,
+          },
+          expectedOutput: {
+            type: String,
+            required: false,
+          },
+          hidden: {
+            type: Boolean,
+            default: false,
+          },
+          weight: {
+            type: Number,
+            default: 1,
+          },
+        },
+      ],
+      timeLimitMs: {
+        type: Number,
+        required: false,
+      },
+      memoryLimitMb: {
+        type: Number,
+        required: false,
+      },
     },
   ],
   durationMinutes: {

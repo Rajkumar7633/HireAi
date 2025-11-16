@@ -164,13 +164,22 @@ export default function RecruiterTestsPage() {
                   </Badge>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <Button variant="outline" size="sm" asChild>
-                    <Link
-                      href={`/dashboard/recruiter/tests/${test._id}/preview`}
-                    >
-                      Preview
-                    </Link>
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" asChild>
+                      <Link
+                        href={`/dashboard/recruiter/tests/${test._id}/preview`}
+                      >
+                        Preview
+                      </Link>
+                    </Button>
+                    <Button variant="outline" size="sm" asChild>
+                      <Link
+                        href={`/dashboard/recruiter/tests/${test._id}/results`}
+                      >
+                        Results
+                      </Link>
+                    </Button>
+                  </div>
                   <div className="flex gap-2">
                     <Button variant="outline" size="sm" asChild>
                       <Link

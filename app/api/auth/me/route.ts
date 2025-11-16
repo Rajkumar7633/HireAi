@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
         subscription: (user as any).subscription || null,
         features: (user as any).features || {},
         limits: (user as any).limits || {},
+        skills: (user as any).skills || [],
       },
     })
   } catch (error) {

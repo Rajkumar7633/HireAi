@@ -16,9 +16,16 @@ const DEFAULTS = {
 
 function planFromPrice(priceId) {
   if (!priceId) return null
+
+  // Be tolerant of env configuration: fall back to NEXT_PUBLIC_* if server-side vars are missing
+  const recruiterPriceId =
+    process.env.RECRUITER_PRO_PRICE || process.env.NEXT_PUBLIC_RECRUITER_PRO_PRICE || ''
+  const studentPriceId =
+    process.env.STUDENT_PLUS_PRICE || process.env.NEXT_PUBLIC_STUDENT_PLUS_PRICE || ''
+
   const map = {
-    [process.env.RECRUITER_PRO_PRICE || '']: { key: 'recruiter_pro', ...DEFAULTS.recruiter_pro },
-    [process.env.STUDENT_PLUS_PRICE || '']: { key: 'student_plus', ...DEFAULTS.student_plus },
+    [recruiterPriceId]: { key: 'recruiter_pro', ...DEFAULTS.recruiter_pro },
+    [studentPriceId]: { key: 'student_plus', ...DEFAULTS.student_plus },
   }
   return map[priceId] || null
 }

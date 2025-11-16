@@ -6,6 +6,7 @@ const JobApplication = require("../models/JobApplication")
 const Notification = require("../models/Notification")
 const sendEmail = require("../utils/emailService")
 const User = require("../models/User")
+const TestSubmission = require("../models/TestSubmission")
 
 // @route   POST /api/tests
 // @desc    Create a new test
@@ -33,6 +34,75 @@ router.post("/", auth, async (req, res) => {
 
     await newTest.save()
     res.json({ msg: "Test created successfully", test: newTest })
+  } catch (err) {
+    console.error(err.message)
+    res.status(500).send("Server Error")
+  }
+})
+
+// @route   GET /api/tests/:id/submissions
+// @desc    Get all submissions for a specific test (recruiter who owns the test or admin)
+// @access  Private (Recruiter/Admin)
+router.get("/:id/submissions", auth, async (req, res) => {
+  try {
+    const test = await Test.findById(req.params.id)
+    if (!test) {
+      return res.status(404).json({ msg: "Test not found" })
+    }
+
+    // Recruiter can only see their own tests, admin can see all
+    if (req.user.role === "recruiter" && test.recruiterId.toString() !== req.user.id) {
+      return res.status(401).json({ msg: "Not authorized to view submissions for this test" })
+    }
+
+    const submissions = await TestSubmission.find({ testId: req.params.id })
+      .populate("candidateId", "name email")
+      .populate("applicationId", "status testScore")
+      .sort({ createdAt: -1 })
+
+    res.json(submissions)
+  } catch (err) {
+    console.error(err.message)
+    res.status(500).send("Server Error")
+  }
+})
+
+// @route   GET /api/tests/:id/analytics
+// @desc    Get basic analytics for a specific test (attempts, average score, pass rate)
+// @access  Private (Recruiter/Admin)
+router.get("/:id/analytics", auth, async (req, res) => {
+  try {
+    const test = await Test.findById(req.params.id)
+    if (!test) {
+      return res.status(404).json({ msg: "Test not found" })
+    }
+
+    if (req.user.role === "recruiter" && test.recruiterId.toString() !== req.user.id) {
+      return res.status(401).json({ msg: "Not authorized to view analytics for this test" })
+    }
+
+    const submissions = await TestSubmission.find({ testId: req.params.id })
+
+    const totalAttempts = submissions.length
+    const totalScoreSum = submissions.reduce((sum, s) => sum + (s.percentage || 0), 0)
+    const averageScore = totalAttempts > 0 ? Math.round(totalScoreSum / totalAttempts) : 0
+    const passCount = submissions.filter((s) => (s.percentage || 0) >= 70).length
+    const passRate = totalAttempts > 0 ? Math.round((passCount / totalAttempts) * 100) : 0
+    const avgPlagiarismScore =
+      totalAttempts > 0
+        ? Math.round(
+            submissions.reduce((sum, s) => sum + (s.plagiarismScore || 0), 0) / totalAttempts
+          )
+        : 0
+
+    res.json({
+      testId: test._id,
+      title: test.title,
+      totalAttempts,
+      averageScore,
+      passRate,
+      avgPlagiarismScore,
+    })
   } catch (err) {
     console.error(err.message)
     res.status(500).send("Server Error")
@@ -232,7 +302,7 @@ router.post("/applications/:id/submit-test", auth, async (req, res) => {
     return res.status(403).json({ msg: "Access denied. Only job seekers can submit tests." })
   }
 
-  const { answers } = req.body // answers should be an array of { questionId, answer }
+  const { answers } = req.body // answers should be an array of { questionId, answer, language? }
 
   try {
     const application = await JobApplication.findById(req.params.id)
@@ -252,45 +322,93 @@ router.post("/applications/:id/submit-test", auth, async (req, res) => {
       return res.status(400).json({ msg: "No test assigned to this application" })
     }
 
-    // Simulate scoring
+    // Scoring + submission capture
     let score = 0
     const totalPoints = application.testId.questions.reduce((sum, q) => sum + q.points, 0)
 
+    const detailedAnswers = []
+
     for (const question of application.testId.questions) {
       const submittedAnswer = answers.find((a) => a.questionId === question._id.toString())
-      if (submittedAnswer) {
-        if (question.type === "multiple_choice") {
-          // For multiple choice, check if submitted answer matches correct answer
-          if (Array.isArray(question.correctAnswer)) {
-            // If multiple correct options
-            const submittedSet = new Set(submittedAnswer.answer)
-            const correctSet = new Set(question.correctAnswer)
-            const isCorrect =
-              submittedSet.size === correctSet.size && [...submittedSet].every((val) => correctSet.has(val))
-            if (isCorrect) {
-              score += question.points
-            }
-          } else {
-            // Single correct option
-            if (submittedAnswer.answer === question.correctAnswer) {
-              score += question.points
-            }
+      if (!submittedAnswer) {
+        continue
+      }
+
+      let questionScore = 0
+      let passedTestCases = 0
+      let totalTestCases = 0
+
+      if (question.type === "multiple_choice") {
+        // For multiple choice, check if submitted answer matches correct answer
+        if (Array.isArray(question.correctAnswer)) {
+          const submittedSet = new Set(submittedAnswer.answer)
+          const correctSet = new Set(question.correctAnswer)
+          const isCorrect =
+            submittedSet.size === correctSet.size && [...submittedSet].every((val) => correctSet.has(val))
+          if (isCorrect) {
+            questionScore = question.points
           }
-        } else if (question.type === "short_answer" || question.type === "code_snippet") {
-          // For short answer/code snippet, a simple check or manual review is needed.
-          // For simulation, let's give partial points if answer is not empty.
-          if (submittedAnswer.answer && submittedAnswer.answer.trim() !== "") {
-            score += question.points * 0.5 // Give half points for submission
+        } else {
+          if (submittedAnswer.answer === question.correctAnswer) {
+            questionScore = question.points
           }
         }
+      } else if (question.type === "short_answer") {
+        // Simple heuristic: give half points if non-empty
+        if (submittedAnswer.answer && submittedAnswer.answer.trim() !== "") {
+          questionScore = question.points * 0.5
+        }
+      } else if (question.type === "code_snippet") {
+        // For now, simulate test-case execution: reward half points if answer is non-empty.
+        // Later this can be replaced with real code execution & per-test-case scoring.
+        if (submittedAnswer.answer && submittedAnswer.answer.trim() !== "") {
+          questionScore = question.points * 0.5
+        }
+
+        if (Array.isArray(question.testCases) && question.testCases.length > 0) {
+          totalTestCases = question.testCases.length
+          // Mark all as passed for now when code is present; this is just a placeholder
+          passedTestCases = submittedAnswer.answer && submittedAnswer.answer.trim() !== "" ? totalTestCases : 0
+        }
       }
+
+      score += questionScore
+
+      detailedAnswers.push({
+        questionId: question._id,
+        questionType: question.type,
+        answer: submittedAnswer.answer,
+        language: submittedAnswer.language,
+        passedTestCases,
+        totalTestCases,
+        score: questionScore,
+      })
     }
 
     const percentageScore = totalPoints > 0 ? Math.round((score / totalPoints) * 100) : 0
 
+    // Save aggregate score on application (existing behavior)
     application.testScore = percentageScore
     application.status = "Reviewed" // Or "Test Completed"
     await application.save()
+
+    // Persist detailed submission for recruiter analytics and review
+    const submission = new TestSubmission({
+      testId: application.testId._id,
+      applicationId: application._id,
+      candidateId: application.jobSeekerId._id,
+      recruiterId: application.jobDescriptionId.recruiterId,
+      answers: detailedAnswers,
+      totalScore: score,
+      percentage: percentageScore,
+      status: "completed",
+      plagiarismScore: 0,
+      plagiarismFlags: [],
+      startedAt: new Date(),
+      submittedAt: new Date(),
+    })
+
+    await submission.save()
 
     // Notify recruiter
     const recruiter = await User.findById(application.jobDescriptionId.recruiterId)
@@ -317,7 +435,7 @@ router.post("/applications/:id/submit-test", auth, async (req, res) => {
       })
     }
 
-    res.json({ msg: "Test submitted successfully", application, score: percentageScore })
+    res.json({ msg: "Test submitted successfully", application, score: percentageScore, submissionId: submission._id })
   } catch (err) {
     console.error(err.message)
     res.status(500).send("Server Error")
