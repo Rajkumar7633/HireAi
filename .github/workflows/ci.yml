@@ -30,6 +30,8 @@ jobs:
           set -e
 
       - name: Build Next app
+        env:
+          JWT_SECRET: dummy-ci-jwt-secret
         run: npm run build
 
       - name: Log in to GitHub Container Registry
