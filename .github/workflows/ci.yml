@@ -32,6 +32,7 @@ jobs:
       - name: Build Next app
         env:
           JWT_SECRET: dummy-ci-jwt-secret
+          MONGODB_URI: mongodb://localhost:27017/dummy-ci-db
         run: npm run build
 
       - name: Log in to GitHub Container Registry
