@@ -42,7 +42,10 @@ export async function GET(request: NextRequest) {
       status: job.status || (job.isActive === false ? "inactive" : "active"),
     }))
 
-    return NextResponse.json({ jobDescriptions: transformedJobs })
+    // Return in both shapes for backwards compatibility:
+    // - `jobDescriptions`: used by some recruiter job listing UIs
+    // - `jobs`: used by the test results page assign-by-email dropdown
+    return NextResponse.json({ jobDescriptions: transformedJobs, jobs: transformedJobs })
   } catch (error) {
     console.error("Error fetching recruiter jobs:", error)
     return NextResponse.json({ message: "Internal server error" }, { status: 500 })

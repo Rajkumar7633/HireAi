@@ -74,6 +74,17 @@ export interface IApplication extends Document {
   aiExplanation?: string
   shortlisted?: boolean
   rejectionReason?: string
+  // Multi-round hiring workflow
+  currentStage?: string
+  rounds?: Array<{
+    roundName?: string
+    stageKey?: string
+    testId?: mongoose.Types.ObjectId
+    submissions?: mongoose.Types.ObjectId[]
+    status?: "pending" | "in_progress" | "passed" | "failed" | "skipped" | "completed"
+    latestScore?: number
+    notes?: string
+  }>
 }
 
 const ApplicationSchema = new Schema<IApplication>(
@@ -206,6 +217,34 @@ const ApplicationSchema = new Schema<IApplication>(
     aiExplanation: { type: String },
     shortlisted: { type: Boolean, default: false },
     rejectionReason: { type: String },
+    // Multi-round hiring workflow
+    currentStage: {
+      type: String,
+      default: "application",
+    },
+    rounds: [
+      {
+        roundName: String,
+        stageKey: String,
+        testId: {
+          type: Schema.Types.ObjectId,
+          ref: "Test",
+        },
+        submissions: [
+          {
+            type: Schema.Types.ObjectId,
+            ref: "TestSubmission",
+          },
+        ],
+        status: {
+          type: String,
+          enum: ["pending", "in_progress", "passed", "failed", "skipped", "completed"],
+          default: "pending",
+        },
+        latestScore: Number,
+        notes: String,
+      },
+    ],
   },
   {
     timestamps: true,

@@ -71,6 +71,71 @@ router.post("/", auth, async (req, res) => {
   }
 })
 
+// @route   PUT /api/applications/:id/stage
+// @desc    Update the stage/round of a job application and optionally mark a round as passed/failed
+// @access  Private (Recruiter)
+router.put("/applications/:id/stage", auth, async (req, res) => {
+  if (req.user.role !== "recruiter") {
+    return res.status(403).json({ msg: "Access denied. Only recruiters can update application stage." })
+  }
+
+  const { currentStage, roundStage: rawRoundStage, roundStatus, notes } = req.body || {}
+
+  try {
+    const application = await JobApplication.findById(req.params.id).populate(
+      "jobDescriptionId",
+      "title recruiterId",
+    )
+
+    if (!application) {
+      return res.status(404).json({ msg: "Application not found" })
+    }
+
+    // Note: recruiter role is already enforced above. We skip strict job ownership
+    // matching here to avoid blocking stage updates due to legacy data or ID mismatch.
+
+    // Update high-level currentStage if provided
+    if (typeof currentStage === "string" && currentStage.trim()) {
+      application.currentStage = currentStage.trim()
+    }
+
+    const roundStage =
+      typeof rawRoundStage === "string" && rawRoundStage.trim() ? rawRoundStage.trim() : null
+
+    if (roundStage) {
+      if (!Array.isArray(application.rounds)) {
+        application.rounds = []
+      }
+
+      let round = application.rounds.find((r) => r && r.stageKey === roundStage)
+      if (!round) {
+        round = {
+          roundName: "Round",
+          stageKey: roundStage,
+          submissions: [],
+          status: "pending",
+        }
+        application.rounds.push(round)
+      }
+
+      if (typeof roundStatus === "string" && roundStatus.trim()) {
+        round.status = roundStatus.trim()
+      }
+
+      if (typeof notes === "string" && notes.trim()) {
+        round.notes = notes.trim()
+      }
+    }
+
+    await application.save()
+
+    return res.json({ msg: "Application stage updated", application })
+  } catch (err) {
+    console.error("update-stage error", err)
+    return res.status(500).json({ msg: "Server Error" })
+  }
+})
+
 // @route   POST /api/tests/:id/auto-select
 // @desc    Auto-select best candidates for a test based on score and plagiarism and send next-round emails
 // @access  Private (Recruiter)
@@ -344,14 +409,14 @@ router.delete("/:id", auth, async (req, res) => {
 })
 
 // @route   POST /api/applications/:id/assign-test
-// @desc    Assign a test to a job application
+// @desc    Assign a test to a job application for a specific round/stage
 // @access  Private (Recruiter)
 router.post("/applications/:id/assign-test", auth, async (req, res) => {
   if (req.user.role !== "recruiter") {
     return res.status(403).json({ msg: "Access denied. Only recruiters can assign tests." })
   }
 
-  const { testId } = req.body
+  const { testId, roundStage: rawRoundStage, roundName: rawRoundName } = req.body
 
   try {
     const application = await JobApplication.findById(req.params.id)
@@ -372,8 +437,43 @@ router.post("/applications/:id/assign-test", auth, async (req, res) => {
       return res.status(404).json({ msg: "Test not found" })
     }
 
+    // Determine which round/stage this assignment belongs to.
+    const roundStage =
+      typeof rawRoundStage === "string" && rawRoundStage.trim() ? rawRoundStage.trim() : "test_round"
+    const roundName =
+      typeof rawRoundName === "string" && rawRoundName.trim() ? rawRoundName.trim() : "Test Round"
+
     application.testId = test._id
     application.status = "Test Assigned"
+
+    // Ensure currentStage is at least this round
+    if (!application.currentStage) {
+      application.currentStage = roundStage
+    }
+
+    // Ensure rounds array exists
+    if (!Array.isArray(application.rounds)) {
+      application.rounds = []
+    }
+
+    // Find or create the round entry
+    let round = application.rounds.find((r) => r && r.stageKey === roundStage)
+    if (!round) {
+      round = {
+        roundName,
+        stageKey: roundStage,
+        testId: test._id,
+        submissions: [],
+        status: "in_progress",
+      }
+      application.rounds.push(round)
+    } else {
+      // Keep existing submissions but update metadata
+      round.roundName = round.roundName || roundName
+      round.testId = test._id
+      round.status = "in_progress"
+    }
+
     await application.save()
 
     // Notify job seeker
@@ -415,7 +515,7 @@ router.post("/applications/:id/submit-test", auth, async (req, res) => {
     return res.status(403).json({ msg: "Access denied. Only job seekers can submit tests." })
   }
 
-  const { answers } = req.body // answers should be an array of { questionId, answer, language? }
+  const { answers, roundStage: rawRoundStage } = req.body // answers: [{ questionId, answer, language? }], roundStage optional
 
   try {
     const application = await JobApplication.findById(req.params.id)
@@ -434,6 +534,10 @@ router.post("/applications/:id/submit-test", auth, async (req, res) => {
     if (!application.testId) {
       return res.status(400).json({ msg: "No test assigned to this application" })
     }
+
+    // Determine which round/stage this submission belongs to.
+    // If frontend doesn't send a roundStage yet, fall back to a generic key so we can still track attempts.
+    const roundStage = typeof rawRoundStage === "string" && rawRoundStage.trim() ? rawRoundStage.trim() : "test_round"
 
     // Scoring + submission capture
     let score = 0
@@ -553,10 +657,14 @@ router.post("/applications/:id/submit-test", auth, async (req, res) => {
       console.error("Plagiarism similarity computation failed", plagErr)
     }
 
-    // Save aggregate score on application (existing behavior)
-    application.testScore = percentageScore
-    application.status = "Reviewed" // Or "Test Completed"
-    await application.save()
+    // Figure out attempt number for this candidate, test, and round
+    const previousAttemptsCount = await TestSubmission.countDocuments({
+      testId: application.testId._id,
+      applicationId: application._id,
+      candidateId: application.jobSeekerId._id,
+      roundStage,
+    })
+    const attemptNumber = previousAttemptsCount + 1
 
     // Persist detailed submission for recruiter analytics and review
     const submission = new TestSubmission({
@@ -564,6 +672,8 @@ router.post("/applications/:id/submit-test", auth, async (req, res) => {
       applicationId: application._id,
       candidateId: application.jobSeekerId._id,
       recruiterId: application.jobDescriptionId.recruiterId,
+      roundStage,
+      attemptNumber,
       answers: detailedAnswers,
       totalScore: score,
       percentage: percentageScore,
@@ -575,6 +685,50 @@ router.post("/applications/:id/submit-test", auth, async (req, res) => {
     })
 
     await submission.save()
+
+    // Save aggregate score on application (existing behavior plus per-round info)
+    application.testScore = percentageScore
+    application.status = "Reviewed" // Or "Test Completed"
+
+    // Ensure currentStage is at least set to this round
+    if (!application.currentStage) {
+      application.currentStage = roundStage
+    }
+
+    // Update / create a round entry for this stage
+    if (!Array.isArray(application.rounds)) {
+      application.rounds = []
+    }
+
+    let round = application.rounds.find((r) => r && r.stageKey === roundStage)
+    if (!round) {
+      round = {
+        roundName: "Test Round",
+        stageKey: roundStage,
+        testId: application.testId._id,
+        submissions: [],
+        status: "pending",
+      }
+      application.rounds.push(round)
+    }
+
+    // Make sure submissions array exists before pushing
+    if (!Array.isArray(round.submissions)) {
+      round.submissions = []
+    }
+    round.submissions.push(submission._id)
+
+    // Simple pass/fail based on percentage; can be tuned later per round
+    if (percentageScore >= 70) {
+      round.status = "passed"
+    } else {
+      round.status = "failed"
+    }
+
+    // Track latest score for this round for easy display in UIs
+    round.latestScore = percentageScore
+
+    await application.save()
 
     // Notify recruiter
     const recruiter = await User.findById(application.jobDescriptionId.recruiterId)

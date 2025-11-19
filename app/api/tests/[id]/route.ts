@@ -1,5 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
+import { connectDB } from "@/lib/mongodb"
+import Test from "@/models/Test"
+import Application from "@/models/Application"
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5001"
 
@@ -10,6 +13,34 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
   }
 
+  // Job seeker path: read directly from Mongo and enforce that this test
+  // is actually assigned to one of their applications.
+  if (session.role === "job_seeker") {
+    try {
+      await connectDB()
+
+      const hasApplication = await Application.exists({
+        jobSeekerId: session.userId,
+        testId: params.id,
+      })
+
+      if (!hasApplication) {
+        return NextResponse.json({ message: "Test not assigned to this user" }, { status: 403 })
+      }
+
+      const test = await Test.findById(params.id)
+      if (!test) {
+        return NextResponse.json({ message: "Test not found" }, { status: 404 })
+      }
+
+      return NextResponse.json(test, { status: 200 })
+    } catch (error) {
+      console.error("Error fetching test for job seeker:", error)
+      return NextResponse.json({ message: "Internal server error" }, { status: 500 })
+    }
+  }
+
+  // Recruiter / admin path: continue to proxy to backend tests route
   try {
     const { id } = params
     const token = request.cookies.get("auth-token")?.value

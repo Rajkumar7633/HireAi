@@ -43,6 +43,50 @@ const JobApplicationSchema = new mongoose.Schema({
     type: String,
     required: false,
   },
+  // High-level pipeline stage for this application (application, coding_round, tech_round_1, hr_round, offer, etc.)
+  currentStage: {
+    type: String,
+    default: "application",
+  },
+  // Detailed per-round history and links to test submissions
+  rounds: [
+    {
+      roundName: {
+        type: String,
+      },
+      // machine-friendly key, e.g. coding_round, tech_round_1, hr_round
+      stageKey: {
+        type: String,
+      },
+      testId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Test",
+      },
+      submissions: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "TestSubmission",
+        },
+      ],
+      status: {
+        type: String,
+        enum: ["pending", "in_progress", "passed", "failed", "skipped", "completed"],
+        default: "pending",
+      },
+      latestScore: {
+        type: Number,
+      },
+      notes: {
+        type: String,
+      },
+    },
+  ],
 })
+
+// Helpful indexes for recruiter queries and job seeker dashboards
+// These mirror the indexes defined in the Next.js Application schema and do not change behavior.
+JobApplicationSchema.index({ jobDescriptionId: 1, status: 1 })
+JobApplicationSchema.index({ jobDescriptionId: 1, shortlisted: 1, aiMatchScore: -1 })
+JobApplicationSchema.index({ jobSeekerId: 1, jobDescriptionId: 1 })
 
 module.exports = mongoose.model("JobApplication", JobApplicationSchema)

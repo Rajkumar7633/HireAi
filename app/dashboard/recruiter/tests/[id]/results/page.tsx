@@ -63,6 +63,8 @@ interface Submission {
   percentage?: number;
   plagiarismScore?: number;
   createdAt: string;
+  roundStage?: string;
+  attemptNumber?: number;
   candidateId?: {
     name?: string;
     email?: string;
@@ -175,6 +177,24 @@ export default function TestResultsPage() {
     if (value >= 40) return "Medium";
     if (value > 0) return "Low";
     return "Clean";
+  };
+
+  const formatStageLabel = (stage?: string) => {
+    if (!stage) return "-";
+    const map: Record<string, string> = {
+      application: "Application Submitted",
+      hr_shortlist: "HR Shortlisting",
+      coding_round: "Coding Test",
+      mcq_round: "MCQ/CS Test",
+      advanced_round: "Advanced Test",
+      tech_round_1: "Tech Round 1",
+      tech_round_2: "Tech Round 2",
+      tech_round_3: "Tech Round 3",
+      hr_round: "HR/Behaviour Round",
+      offer: "Final Offer",
+      test_round: "Test Round",
+    };
+    return map[stage] || stage;
   };
 
   const selectedSubmission =
@@ -481,7 +501,7 @@ export default function TestResultsPage() {
           <CardHeader>
             <CardTitle className="text-base">Submissions</CardTitle>
             <CardDescription>
-              Click a row to see detailed question-level performance.
+              Each row is a single attempt. Click to see question-level performance.
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
@@ -496,6 +516,8 @@ export default function TestResultsPage() {
                   <thead>
                     <tr className="border-b text-xs text-muted-foreground">
                       <th className="py-2 pr-4 text-left">Candidate</th>
+                      <th className="py-2 px-4 text-left">Round</th>
+                      <th className="py-2 px-4 text-left">Attempt</th>
                       <th className="py-2 px-4 text-left">Score</th>
                       <th className="py-2 px-4 text-left">Pass</th>
                       <th className="py-2 px-4 text-left">Status</th>
@@ -509,6 +531,8 @@ export default function TestResultsPage() {
                       const passed = score >= 70;
                       const status = s.applicationId?.status || "--";
                       const plagiarism = s.plagiarismScore ?? 0;
+                      const roundLabel = formatStageLabel(s.roundStage);
+                      const attempt = s.attemptNumber ?? 1;
                       const isSelected = selectedSubmissionId === s._id;
                       return (
                         <tr
@@ -533,6 +557,12 @@ export default function TestResultsPage() {
                                 </span>
                               )}
                             </div>
+                          </td>
+                          <td className="py-2 px-4 align-middle text-xs text-muted-foreground">
+                            {roundLabel}
+                          </td>
+                          <td className="py-2 px-4 align-middle text-xs text-muted-foreground">
+                            #{attempt}
                           </td>
                           <td className="py-2 px-4 align-middle">
                             <span className="font-medium">{score}%</span>

@@ -30,6 +30,13 @@ import {
 } from "@/components/ui/dialog";
 import { format } from "date-fns";
 
+interface RoundInfo {
+  roundName?: string;
+  stageKey?: string;
+  status?: string;
+  latestScore?: number;
+}
+
 interface Application {
   _id: string;
   jobSeekerId: {
@@ -64,6 +71,9 @@ interface Application {
   skillsMatched?: string[];
   missingSkills?: string[];
   aiExplanation?: string;
+  // Multi-round workflow fields (optional)
+  currentStage?: string;
+  rounds?: RoundInfo[];
 }
 
 export default function CandidatesPage() {
@@ -84,6 +94,7 @@ export default function CandidatesPage() {
   const [viewMode, setViewMode] = useState<"all" | "shortlisted">("all");
   const [shortlistedApps, setShortlistedApps] = useState<Application[]>([]);
   const [autoScreenRunning, setAutoScreenRunning] = useState(false);
+  const [roundSelections, setRoundSelections] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (jobId) {
@@ -108,7 +119,10 @@ export default function CandidatesPage() {
           const resumeObj = res && typeof res === "object"
             ? res
             : { _id: res || "", filename: a.resumeFilename || "", originalName: a.resumeOriginalName || "Resume" };
-          return { ...a, jobSeekerId: jobSeekerObj, resumeId: resumeObj } as Application;
+          // Preserve multi-round data if backend sends it
+          const currentStage = (a as any).currentStage as string | undefined;
+          const rounds = ((a as any).rounds || []) as RoundInfo[];
+          return { ...a, jobSeekerId: jobSeekerObj, resumeId: resumeObj, currentStage, rounds } as Application;
         });
         setApplications(normalized);
         setJobTitle(data.jobTitle);
@@ -131,6 +145,58 @@ export default function CandidatesPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleStageUpdate = async (applicationId: string, nextStage: string) => {
+    try {
+      const response = await fetch(`/api/applications/${applicationId}/stage`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ currentStage: nextStage }),
+      });
+
+      if (response.ok) {
+        toast({
+          title: "Stage Updated",
+          description: "Application stage has been updated.",
+        });
+        fetchCandidates();
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        toast({
+          title: "Update Failed",
+          description: (errorData as any).message || "Failed to update stage.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Stage update error:", error);
+      toast({
+        title: "Error",
+        description: "Network error. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const formatStageLabel = (stage?: string) => {
+    if (!stage) return "-";
+    const map: Record<string, string> = {
+      application: "Application Submitted",
+      hr_shortlist: "HR Shortlisting",
+      coding_round: "Coding Test",
+      mcq_round: "MCQ/CS Test",
+      advanced_round: "Advanced Test",
+      tech_round_1: "Tech Round 1",
+      tech_round_2: "Tech Round 2",
+      tech_round_3: "Tech Round 3",
+      hr_round: "HR/Behaviour Round",
+      offer: "Final Offer",
+      test_round: "Test Round",
+    };
+    return map[stage] || stage;
   };
 
   const fetchTests = async () => {
@@ -257,12 +323,25 @@ export default function CandidatesPage() {
 
   const handleAssignTest = async (applicationId: string, testId: string) => {
     try {
+      const roundStage = roundSelections[applicationId] || "coding_round";
+      const roundLabelMap: Record<string, string> = {
+        coding_round: "Coding Test",
+        mcq_round: "MCQ/CS Test",
+        advanced_round: "Advanced Test",
+        tech_round_1: "Tech Round 1",
+        tech_round_2: "Tech Round 2",
+        tech_round_3: "Tech Round 3",
+        hr_round: "HR/Behaviour Round",
+        test_round: "Test Round",
+      };
+      const roundName = roundLabelMap[roundStage] || "Test Round";
+
       const response = await fetch("/api/tests/assign", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ applicationId, testId }),
+        body: JSON.stringify({ applicationId, testId, roundStage, roundName }),
       });
 
       if (response.ok) {
@@ -446,17 +525,122 @@ export default function CandidatesPage() {
               <CardContent className="space-y-4">
                 {(application.aiMatchScore != null || application.atsScore != null) && (
                   <div className="flex items-center gap-2">
-                    {application.aiMatchScore != null && (<Badge variant="secondary">AI Match: {application.aiMatchScore}%</Badge>)}
-                    {application.atsScore != null && (<Badge variant="outline">ATS: {application.atsScore}%</Badge>)}
+                    {application.aiMatchScore != null && (
+                      <Badge variant="secondary">AI Match: {application.aiMatchScore}%</Badge>
+                    )}
+                    {application.atsScore != null && (
+                      <Badge variant="outline">ATS: {application.atsScore}%</Badge>
+                    )}
                   </div>
                 )}
-                <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
-                  <div className="flex items-center gap-1"><FileText className="h-4 w-4" /> Resume: {application.resumeId?.originalName || "Resume"}</div>
+
+                {/* Stage & rounds summary */}
+                <div className="flex flex-col gap-2 text-xs text-muted-foreground">
+                  <div>
+                    <span className="font-medium">Current stage:</span>{" "}
+                    {formatStageLabel(application.currentStage)}
+                  </div>
+                  {application.rounds && application.rounds.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {application.rounds.map((r, idx) => (
+                        <Badge
+                          key={r.stageKey || idx}
+                          variant={
+                            r.status === "passed"
+                              ? "secondary"
+                              : r.status === "failed"
+                              ? "destructive"
+                              : "outline"
+                          }
+                          className="text-[10px] uppercase tracking-wide"
+                        >
+                          {r.roundName || formatStageLabel(r.stageKey)}
+                          {r.status ? ` • ${r.status}` : ""}
+                          {typeof r.latestScore === "number" && ` • ${r.latestScore}%`}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                  <div className="text-[11px] text-muted-foreground/80">
+                    Typical flow: Application → HR Shortlisting → Coding/MCQ/Advanced Tests → Tech Rounds → HR → Final Offer.
+                  </div>
                 </div>
-                <div className="flex items-center justify-end gap-2">
-                  <Button variant="outline" size="sm" onClick={() => handleWhyMatched(application)}>Why matched</Button>
-                  <Button size="sm" onClick={() => { if (tests.length) handleAssignTest(application._id, tests[0]._id); }} disabled={!tests.length}>Assign Test</Button>
-                  <Link href={`/dashboard/job-seeker/profile/${application.jobSeekerId?._id}`} className="text-sm">View Profile</Link>
+
+                <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+                  <div className="flex items-center gap-1">
+                    <FileText className="h-4 w-4" />
+                    Resume: {application.resumeId?.originalName || "Resume"}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {/* Move candidate to a stage in the pipeline */}
+                  <Select
+                    value={application.currentStage || "application"}
+                    onValueChange={(value) => handleStageUpdate(application._id, value)}
+                  >
+                    <SelectTrigger className="w-40 text-xs">
+                      <SelectValue placeholder="Move to stage" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="application">Application Submitted</SelectItem>
+                      <SelectItem value="hr_shortlist">HR Shortlisting</SelectItem>
+                      <SelectItem value="coding_round">Coding Test</SelectItem>
+                      <SelectItem value="mcq_round">MCQ/CS Test</SelectItem>
+                      <SelectItem value="advanced_round">Advanced Test</SelectItem>
+                      <SelectItem value="tech_round_1">Tech Round 1</SelectItem>
+                      <SelectItem value="tech_round_2">Tech Round 2</SelectItem>
+                      <SelectItem value="tech_round_3">Tech Round 3</SelectItem>
+                      <SelectItem value="hr_round">HR/Behaviour Round</SelectItem>
+                      <SelectItem value="offer">Final Offer</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {/* Choose which round this test is for */}
+                  <Select
+                    value={roundSelections[application._id] || "coding_round"}
+                    onValueChange={(value) =>
+                      setRoundSelections((prev) => ({ ...prev, [application._id]: value }))
+                    }
+                  >
+                    <SelectTrigger className="w-40 text-xs">
+                      <SelectValue placeholder="Select round" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="coding_round">Coding Test</SelectItem>
+                      <SelectItem value="mcq_round">MCQ/CS Test</SelectItem>
+                      <SelectItem value="advanced_round">Advanced Test</SelectItem>
+                      <SelectItem value="tech_round_1">Tech Round 1</SelectItem>
+                      <SelectItem value="tech_round_2">Tech Round 2</SelectItem>
+                      <SelectItem value="tech_round_3">Tech Round 3</SelectItem>
+                      <SelectItem value="hr_round">HR/Behaviour Round</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      if (tests.length) handleAssignTest(application._id, tests[0]._id);
+                    }}
+                    disabled={!tests.length}
+                  >
+                    Assign Test
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleWhyMatched(application)}
+                  >
+                    Why matched
+                  </Button>
+
+                  <Link
+                    href={`/dashboard/job-seeker/profile/${application.jobSeekerId?._id}`}
+                    className="text-sm"
+                  >
+                    View Profile
+                  </Link>
                 </div>
               </CardContent>
             </Card>

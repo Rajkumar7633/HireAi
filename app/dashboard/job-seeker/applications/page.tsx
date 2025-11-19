@@ -19,6 +19,13 @@ import {
 import Link from "next/link";
 import { format } from "date-fns";
 
+interface RoundInfo {
+  roundName?: string;
+  stageKey?: string;
+  status?: string;
+  latestScore?: number;
+}
+
 interface JobApplication {
   _id: string;
   jobSeekerId: string;
@@ -43,6 +50,9 @@ interface JobApplication {
     | "Hired";
   testScore?: number;
   interviewDate?: string;
+  // Multi-round workflow (mirrors backend Application model; optional for backward compatibility)
+  currentStage?: string;
+  rounds?: RoundInfo[];
 }
 
 export default function MyApplicationsPage() {
@@ -140,6 +150,24 @@ export default function MyApplicationsPage() {
       default:
         return <Clock className="h-4 w-4" />;
     }
+  };
+
+  const formatStageLabel = (stage?: string) => {
+    if (!stage) return "-";
+    const map: Record<string, string> = {
+      application: "Application Submitted",
+      hr_shortlist: "HR Shortlisting",
+      coding_round: "Coding Test",
+      mcq_round: "MCQ/CS Test",
+      advanced_round: "Advanced Test",
+      tech_round_1: "Tech Round 1",
+      tech_round_2: "Tech Round 2",
+      tech_round_3: "Tech Round 3",
+      hr_round: "HR/Behaviour Round",
+      offer: "Final Offer",
+      test_round: "Test Round",
+    };
+    return map[stage] || stage;
   };
 
   if (loading) {
@@ -294,6 +322,45 @@ export default function MyApplicationsPage() {
                     </p>
                   )}
                 </div>
+
+                {/* Application progress timeline */}
+                <div className="mt-3 space-y-2 text-xs">
+                  <p className="font-medium text-slate-700">
+                    Application progress
+                  </p>
+                  <div className="flex items-center flex-wrap gap-2">
+                    <span className="text-[11px] text-muted-foreground">
+                      Current stage:
+                    </span>
+                    <Badge variant="outline" className="text-[11px]">
+                      {formatStageLabel(app.currentStage)}
+                    </Badge>
+                  </div>
+                  {app.rounds && app.rounds.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {app.rounds.map((r, idx) => (
+                        <Badge
+                          key={r.stageKey || idx}
+                          variant={
+                            r.status === "passed"
+                              ? "secondary"
+                              : r.status === "failed"
+                              ? "destructive"
+                              : "outline"
+                          }
+                          className="text-[10px] uppercase tracking-wide"
+                        >
+                          {r.roundName || formatStageLabel(r.stageKey)}
+                          {r.status ? ` • ${r.status}` : ""}
+                          {typeof r.latestScore === "number" && ` • ${r.latestScore}%`}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-[11px] text-muted-foreground/80 mt-1">
+                    Stages typically move from Application → HR Shortlisting → Tests → Technical Rounds → HR → Final Offer.
+                  </p>
+                </div>
                 <Separator />
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" size="sm" asChild>
@@ -302,8 +369,15 @@ export default function MyApplicationsPage() {
                       <ExternalLink className="ml-2 h-4 w-4" />
                     </Link>
                   </Button>
-                  {(app.status === "Test Assigned" ||
-                    app.status === "Assessment Assigned") && (
+                  {app.status === "Test Assigned" && (
+                    <Button variant="default" size="sm" asChild>
+                      <Link href={`/dashboard/job-seeker/tests/${app._id}`}>
+                        Take Test
+                        <ExternalLink className="ml-2 h-4 w-4" />
+                      </Link>
+                    </Button>
+                  )}
+                  {app.status === "Assessment Assigned" && (
                     <Button variant="default" size="sm" asChild>
                       <Link href={`/dashboard/job-seeker/assessments`}>
                         Take Test

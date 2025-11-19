@@ -38,7 +38,8 @@ interface ApplicationDetails {
     _id: string
     title: string
   }
-  testId: string
+  // testId may be just an id string or a populated document with _id
+  testId: string | { _id: string }
   testScore?: number
   status: string
 }
@@ -92,9 +93,15 @@ export default function TakeTestPage() {
       const response = await fetch(`/api/applications/${applicationId}`)
       if (response.ok) {
         const data = await response.json()
-        setApplication(data.application)
-        if (data.application.testId) {
-          fetchTestDetails(data.application.testId)
+        const app: ApplicationDetails = data.application
+        setApplication(app)
+
+        const rawTestId = app.testId as any
+        const testIdStr =
+          typeof rawTestId === "string" ? rawTestId : rawTestId && typeof rawTestId === "object" ? rawTestId._id : null
+
+        if (testIdStr) {
+          fetchTestDetails(testIdStr)
         } else {
           toast({
             title: "Error",

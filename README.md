@@ -39,13 +39,15 @@ App: http://localhost:3000
 
 - **Recruiter Workspace**
   - Candidate pipeline, reschedule, and status logic (scheduled, in‑progress, completed, cancelled, missed, expired).
+  - Multi‑round hiring with stage timeline and per‑round scores.
+  - Assign online coding tests to candidates by application or by email.
 
-- **Job Seeker Profile** (`/dashboard/job-seeker/profile`)
-  - Teal, polished profile header with initials avatar or image.
-  - Personal info, education, experience, projects, achievements.
-  - Profile strength tips and ATS score indicators.
+- **Job Seeker Experience**
+  - Profile + resume management.
+  - **My Applications** timeline with current stage and round badges.
+  - "Take Test" flows directly into the assigned coding test.
 
-- **Social Networking** (new)
+- **Social Networking**
   - **Search** (`/dashboard/job-seeker/social/search`): find people by name/title/email.
   - **Connections**: send requests, accept, view states (pending/outgoing/accepted).
   - **Feed** (`/dashboard/job-seeker/social/feed`): post achievements (text + up to 4 images).
@@ -57,7 +59,59 @@ App: http://localhost:3000
 
 ## Key Paths
 
-- **APIs**
+- **Hiring & Applications**
+  - Backend JobApplication model: `backend/models/JobApplication.js`
+    - Fields: `currentStage` (application, hr_shortlist, coding_round, tech_round_1, hr_round, offer, etc.)
+    - `rounds[]` with `{ roundName, stageKey, testId, submissions[], status, latestScore, notes }`.
+  - Frontend Application model: `models/Application.ts` mirrors these fields.
+  - Job seeker applications API: `app/api/applications/my-applications/route.ts`.
+  - Single application API: `app/api/applications/[id]/route.ts`.
+  - Stage update API: `app/api/applications/[id]/stage/route.ts`.
+
+- **Coding Tests & Submissions**
+  - Backend Test model: `backend/models/Test.js` (recruiter‑created tests).
+  - Backend TestSubmission model: `backend/models/TestSubmission.js`
+    - Tracks `roundStage` and `attemptNumber` for multi‑round/multi‑attempt.
+  - Backend routes: `backend/routes/test.js`
+    - `POST /api/applications/:id/assign-test` – assign test + update rounds.
+    - `POST /api/applications/:id/submit-test` – score test, update rounds/latestScore.
+    - `PUT  /api/applications/:id/stage` – update high‑level stage and round status.
+    - `GET  /api/tests/:id/submissions` – recruiter submissions list.
+    - `GET  /api/tests/:id/analytics` – attempts, average score, pass rate, plagiarism.
+    - `POST /api/tests/:id/auto-select` – auto‑shortlist based on score/plagiarism.
+
+- **Next.js API Proxies**
+  - Assign test to application (recruiter candidates page):
+    - `app/api/tests/assign/route.ts` – attaches `testId`, updates `currentStage` and `rounds`.
+  - Stage update from recruiter UI:
+    - `app/api/applications/[id]/stage/route.ts` – updates `currentStage` and optional round.
+  - Job seeker takes test:
+    - `app/api/applications/[id]/route.ts` – loads application (with populated `testId`).
+    - `app/api/tests/[id]/route.ts` – for `job_seeker` role, loads the test directly from Mongo only if an application with that `testId` exists for the current user.
+  - Recruiter tests list / details / analytics:
+    - `app/api/tests/my-tests/route.ts`
+    - `app/api/tests/[id]/submissions/route.ts`
+    - `app/api/tests/[id]/analytics/route.ts`
+
+- **Recruiter Pages**
+  - Candidates for a job: `app/dashboard/recruiter/job-descriptions/[id]/candidates/page.tsx`
+    - Shows `currentStage` + round badges (with `latestScore`).
+    - Dropdown to move stages via `/api/applications/[id]/stage`.
+    - "Assign Test" button uses `/api/tests/assign` with `roundStage`/`roundName`.
+  - Test results & analytics: `app/dashboard/recruiter/tests/[id]/results/page.tsx`
+    - Live summary + plagiarism overview.
+    - Submissions table includes Round + Attempt columns.
+    - Quick assign by email using `/api/tests/invite-by-email` and `/api/job-descriptions/my-jobs`.
+
+- **Job Seeker Pages**
+  - My applications timeline: `app/dashboard/job-seeker/applications/page.tsx`
+    - Shows `currentStage` and per‑round badges with `latestScore`.
+    - "Take Test" button for `Test Assigned` → `/dashboard/job-seeker/tests/{applicationId}`.
+  - Take coding test: `app/dashboard/job-seeker/tests/[id]/page.tsx`
+    - Loads application by id, resolves `testId`, loads test via `/api/tests/{testId}`.
+    - Submits answers to `/api/applications/{applicationId}/submit-test`.
+
+- **Social APIs**
   - Posts: `app/api/social/posts/route.ts`
   - Feed: `app/api/social/feed/route.ts`
   - Search: `app/api/social/search/route.ts`
@@ -65,18 +119,6 @@ App: http://localhost:3000
   - Connection Request: `app/api/social/connections/request/route.ts`
   - Connection Accept: `app/api/social/connections/accept/route.ts`
   - Camera Upload (sample): `app/api/camera/upload/route.ts`
-
-- **Models**
-  - `models/SocialPost.ts` (images, likes, likedBy, commentsCount)
-  - `models/SocialConnection.ts`
-  - `models/SocialConversation.ts`
-  - `models/SocialMessage.ts`
-  - `models/JobSeekerProfile.ts`
-
-- **Pages**
-  - Feed UI: `app/dashboard/job-seeker/social/feed/page.tsx`
-  - Search UI: `app/dashboard/job-seeker/social/search/page.tsx`
-  - Profile UI: `app/dashboard/job-seeker/profile/page.tsx`
 
 ---
 

@@ -63,6 +63,15 @@ const TestSubmissionSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
+    // Which round/stage of the hiring pipeline this submission belongs to (e.g. coding_round, tech_round_1)
+    roundStage: {
+      type: String,
+    },
+    // Attempt number within that round for this candidate (1, 2, ...)
+    attemptNumber: {
+      type: Number,
+      default: 1,
+    },
     answers: [AnswerSchema],
     totalScore: {
       type: Number,
