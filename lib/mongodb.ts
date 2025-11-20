@@ -188,9 +188,10 @@ mongoose.set("strictPopulate", false)
 
 import mongoose from "mongoose"
 
+const SKIP_DB_FOR_BUILD = process.env.DISABLE_DB_FOR_BUILD === "1"
 const MONGODB_URI = process.env.MONGODB_URI
 
-if (!MONGODB_URI) {
+if (!MONGODB_URI && !SKIP_DB_FOR_BUILD) {
   throw new Error("Please define the MONGODB_URI environment variable inside .env.local")
 }
 
@@ -203,6 +204,10 @@ if (!cached) {
 mongoose.set("bufferCommands", false)
 
 export async function connectDB() {
+  if (SKIP_DB_FOR_BUILD) {
+    console.warn("DISABLE_DB_FOR_BUILD=1: skipping MongoDB connection during build")
+    return { connection: { readyState: 1 } } as any
+  }
   // Always check connection state first
   if (cached.conn && cached.conn.connection.readyState === 1) {
     return cached.conn

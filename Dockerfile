@@ -12,7 +12,8 @@ COPY . .
 # expect JWT_SECRET and MONGODB_URI don't fail during `npm run build`.
 # These can be overridden at runtime in ECS / docker-compose.
 ENV JWT_SECRET=dummy-docker-build-secret \
-    MONGODB_URI=mongodb://localhost:27017/dummy-docker-build-db
+    MONGODB_URI=mongodb://localhost:27017/dummy-docker-build-db \
+    DISABLE_DB_FOR_BUILD=1
 
 RUN npm run build
 
