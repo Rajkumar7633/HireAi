@@ -7,6 +7,13 @@ WORKDIR /app
 COPY package*.json ./
 COPY node_modules ./node_modules
 COPY . .
+
+# Provide safe default env vars for build-time so Next.js API routes that
+# expect JWT_SECRET and MONGODB_URI don't fail during `npm run build`.
+# These can be overridden at runtime in ECS / docker-compose.
+ENV JWT_SECRET=dummy-docker-build-secret \
+    MONGODB_URI=mongodb://localhost:27017/dummy-docker-build-db
+
 RUN npm run build
 
 FROM node:20-alpine AS runner
