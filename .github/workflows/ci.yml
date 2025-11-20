@@ -55,7 +55,7 @@ jobs:
 
       - name: Build Docker images and push to GHCR & ECR
         run: |
-          IMAGE_NAMESPACE=ghcr.io/${{ github.repository }}
+          IMAGE_NAMESPACE=ghcr.io/rajkumar7633/hireai
           AWS_ACCOUNT_ID=${{ secrets.AWS_ACCOUNT_ID }}
           AWS_REGION=${{ secrets.AWS_REGION }}
 
