@@ -82,13 +82,15 @@ jobs:
                        -f backend/Dockerfile .
 
           if [ "${{ github.event_name }}" = "push" ]; then
-            echo "Pushing images to GitHub Container Registry..."
-            docker push "${IMAGE_NAMESPACE}-frontend:latest"
-            docker push "${IMAGE_NAMESPACE}-frontend:${GITHUB_SHA}"
-            docker push "${IMAGE_NAMESPACE}-backend:latest"
-            docker push "${IMAGE_NAMESPACE}-backend:${GITHUB_SHA}"
+            echo "Pushing images to GitHub Container Registry (non-blocking)..."
+            set +e
+            docker push "${IMAGE_NAMESPACE}-frontend:latest" || echo "Failed to push ${IMAGE_NAMESPACE}-frontend:latest to GHCR; continuing."
+            docker push "${IMAGE_NAMESPACE}-frontend:${GITHUB_SHA}" || echo "Failed to push ${IMAGE_NAMESPACE}-frontend:${GITHUB_SHA} to GHCR; continuing."
+            docker push "${IMAGE_NAMESPACE}-backend:latest" || echo "Failed to push ${IMAGE_NAMESPACE}-backend:latest to GHCR; continuing."
+            docker push "${IMAGE_NAMESPACE}-backend:${GITHUB_SHA}" || echo "Failed to push ${IMAGE_NAMESPACE}-backend:${GITHUB_SHA} to GHCR; continuing."
+            set -e
 
-            echo "Pushing images to Amazon ECR..."
+            echo "Pushing images to Amazon ECR (required)..."
             docker push "${ECR_FRONTEND_REPO}:latest"
             docker push "${ECR_FRONTEND_REPO}:${GITHUB_SHA}"
             docker push "${ECR_BACKEND_REPO}:latest"
