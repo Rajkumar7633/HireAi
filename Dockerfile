@@ -23,12 +23,11 @@ ENV NODE_ENV=production
 # Next.js uses this at runtime
 ENV PORT=3000
 
-# Only copy what we need to run
+# Only copy what we need to run plus the already-resolved node_modules
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/package.json ./package.json
-
-RUN npm install --omit=dev
+COPY --from=builder /app/node_modules ./node_modules
 
 EXPOSE 3000
 CMD ["npm", "start"]
