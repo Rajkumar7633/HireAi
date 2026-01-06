@@ -3,7 +3,7 @@
 import { Label } from "@/components/ui/label";
 
 import { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -70,6 +70,7 @@ interface BenchmarkData {
 
 export default function AssessmentResultsPage() {
   const params = useParams();
+  const router = useRouter();
   const assessmentId = params.id as string;
   const [results, setResults] = useState<AssessmentResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -355,7 +356,14 @@ export default function AssessmentResultsPage() {
                     <Share2 className="h-4 w-4 mr-2" />
                     Share Results
                   </Button>
-                  <Button variant="outline">
+                  <Button
+                    variant="outline"
+                    onClick={() =>
+                      router.push(
+                        `/dashboard/job-seeker/assessments/${assessmentId}/results/report`
+                      )
+                    }
+                  >
                     <BarChart3 className="h-4 w-4 mr-2" />
                     Detailed Report
                   </Button>

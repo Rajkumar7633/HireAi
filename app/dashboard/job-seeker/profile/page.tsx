@@ -321,6 +321,26 @@ export default function JobSeekerProfilePage() {
   );
   const [verifiedSkillCount, setVerifiedSkillCount] = useState<number>(0);
 
+  // Aggregate Profile Rating (0–10) based on multiple signals
+  const profileRating = useMemo(() => {
+    const completeness = Number(profile.profileCompleteness || 0); // 0–100
+    const atsScore = Number(profile.atsScore || 0); // 0–100
+    const years = Number(profile.yearsOfExperience || 0); // cap at 10 years for scoring
+    const skillsScore = Math.min(verifiedSkillCount, 15) * (100 / 15); // 0–100 based on verified skills
+
+    const expScore = Math.min(years, 10) * 10; // 0–100
+
+    // Weighted blend -> 0–100
+    const composite =
+      completeness * 0.4 + // profile filled out
+      atsScore * 0.3 + // resume quality
+      expScore * 0.2 + // experience depth
+      skillsScore * 0.1; // verified skills
+
+    // Convert to 0–10 rating with 1 decimal place
+    return Math.round((composite / 10) * 10) / 10 || 0;
+  }, [profile.profileCompleteness, profile.atsScore, profile.yearsOfExperience, verifiedSkillCount]);
+
   useEffect(() => {
     const loadVerifiedSkills = async () => {
       try {
@@ -849,24 +869,24 @@ export default function JobSeekerProfilePage() {
   };
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="max-w-6xl mx-auto space-y-6">
+    <div className="min-h-screen bg-slate-50 p-6">
+      <div className="max-w-6xl mx-auto space-y-8">
         {/* Header Section */}
-        <Card className="border-teal-200 bg-gradient-to-r from-teal-50 to-cyan-50">
+        <Card className="border border-teal-100 shadow-sm bg-gradient-to-r from-teal-50/80 via-sky-50/80 to-white">
           <CardContent className="p-6">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-6">
-                <div className="w-24 h-24 rounded-full bg-teal-600 flex items-center justify-center text-white text-2xl font-bold">
+            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+              <div className="flex items-center gap-5">
+                <div className="w-20 h-20 rounded-full bg-teal-600 flex items-center justify-center text-white text-2xl font-bold shadow-sm">
                   {headerInitials}
                 </div>
                 <div className="min-w-0">
-                  <h1 className="text-3xl font-bold text-gray-900">
+                  <h1 className="text-2xl md:text-3xl font-semibold text-slate-900">
                     {profile.firstName} {profile.lastName}
                   </h1>
-                  <p className="text-xl text-teal-700 font-medium">
+                  <p className="text-sm md:text-base text-teal-700 font-medium mt-1">
                     {profile.currentTitle}
                   </p>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-gray-600">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-sm text-slate-600">
                     <div className="flex items-center gap-1 min-w-0">
                       <MapPin className="h-4 w-4" />
                       <span className="break-words">{profile.location}</span>
@@ -882,18 +902,21 @@ export default function JobSeekerProfilePage() {
                   </div>
                 </div>
               </div>
-              <div className="text-right">
-                <div className="flex items-center gap-2 mb-2">
+              <div className="text-right space-y-2">
+                <div className="inline-flex items-center gap-2 px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium">
                   <TrendingUp className="h-5 w-5 text-green-600" />
-                  <span className="text-sm font-medium">Profile Strength</span>
+                  <span>Profile strength</span>
                 </div>
-                <div className="w-32">
+                <div className="w-40 ml-auto">
                   <Progress
                     value={profile.profileCompleteness}
-                    className="h-2"
+                    className="h-2 rounded-full"
                   />
-                  <p className="text-sm text-gray-600 mt-1">
+                  <p className="text-xs text-slate-600 mt-1">
                     {profile.profileCompleteness}% Complete
+                  </p>
+                  <p className="text-[11px] text-slate-500">
+                    Last updated: {lastSavedLabel}
                   </p>
                 </div>
               </div>
@@ -939,13 +962,13 @@ export default function JobSeekerProfilePage() {
         </Card>
 
         {/* Social overview */}
-        <Card>
+        <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle>Social overview</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Quick post */}
-            <div className="rounded border p-3 bg-white">
+            <div className="rounded-md border border-slate-200 p-3 bg-white">
               <div className="text-sm mb-2">Share something</div>
               <Textarea rows={3} placeholder="I just shipped a new feature..." value={composer.text} onChange={(e) => setComposer((c) => ({ ...c, text: e.target.value }))} />
               <div className="flex items-center gap-3 mt-2">
@@ -966,13 +989,21 @@ export default function JobSeekerProfilePage() {
             </div>
 
       {/* ATS Resume Score */}
-      <div className="bg-white rounded border p-6 mt-6">
+      <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-6 mt-6">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="font-semibold">ATS Resume Score</div>
-            <div className="text-sm text-muted-foreground">Analyze your resume against best practices and an optional Job Description.</div>
+            <div className="font-semibold text-slate-900">ATS Resume Score</div>
+            <div className="text-sm text-muted-foreground max-w-xl">
+              Analyze your resume against best practices and an optional job description. Higher scores indicate stronger alignment.
+            </div>
           </div>
-          <button className="px-3 py-1.5 border rounded text-sm" onClick={scoreResume} disabled={scoring}>{scoring ? 'Scoring…' : 'Re-score'}</button>
+          <button
+            className="px-3 py-1.5 border rounded-md text-sm bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-60"
+            onClick={scoreResume}
+            disabled={scoring}
+          >
+            {scoring ? 'Scoring…' : 'Re-score'}
+          </button>
         </div>
         <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="md:col-span-2 space-y-3">
@@ -1770,7 +1801,7 @@ export default function JobSeekerProfilePage() {
               <div className="flex items-center justify-center w-12 h-12 bg-orange-100 rounded-full mx-auto mb-2">
                 <Star className="h-6 w-6 text-orange-600" />
               </div>
-              <p className="text-2xl font-bold text-orange-700">8.7</p>
+              <p className="text-2xl font-bold text-orange-700">{profileRating.toFixed(1)}</p>
               <p className="text-sm text-orange-600">Profile Rating</p>
             </CardContent>
           </Card>
