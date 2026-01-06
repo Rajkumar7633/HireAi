@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useEffect, useMemo, useState } from "react"
-import { useSession } from "@/hooks/use-session"
+import { useSession } from "../../hooks/use-session"
 
 const RECRUITER_PRICE = process.env.NEXT_PUBLIC_RECRUITER_PRO_PRICE || ""
 const STUDENT_PRICE = process.env.NEXT_PUBLIC_STUDENT_PLUS_PRICE || ""

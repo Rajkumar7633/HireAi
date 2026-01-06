@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import User from "@/models/User"
+export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {

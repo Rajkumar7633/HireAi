@@ -4,10 +4,10 @@ export const dynamic = "force-dynamic";
 
 import { useSearchParams, useRouter } from "next/navigation";
 import { Suspense, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { useToast } from "@/hooks/use-toast";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
+import { Input } from "../../../components/ui/input";
+import { Button } from "../../../components/ui/button";
+import { useToast } from "../../../hooks/use-toast";
 
 function SetupForm() {
   const searchParams = useSearchParams();
