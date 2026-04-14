@@ -174,7 +174,6 @@ const VideoRoomSchema = new mongoose.Schema<IVideoRoom>({
   roomId: {
     type: String,
     required: true,
-    unique: true,
   },
   interviewId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -264,7 +263,7 @@ const VideoRoomSchema = new mongoose.Schema<IVideoRoom>({
 })
 
 // Only keep one index definition for roomId
-VideoRoomSchema.index({ roomId: 1 });
+VideoRoomSchema.index({ roomId: 1 }, { unique: true });
 VideoRoomSchema.index({ interviewId: 1 })
 VideoRoomSchema.index({ hostId: 1 })
 

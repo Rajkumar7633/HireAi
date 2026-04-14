@@ -63,7 +63,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const processedAnswers = []
 
     for (const question of assessment.questions || []) {
-      const qid = String((question as any)._id)
+      const qid = String((question as any).questionId || (question as any)._id)
       const userAnswer = answers[qid]
       maxScore += question.points || 10
 
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           if (userAnswer === question.correctAnswer) {
             questionScore = question.points || 10
           }
-        } else if (question.type === "short_answer" || question.type === "code") {
+        } else if (question.type === "short_answer" || question.type === "code" || question.type === "code_snippet") {
           // Simple text/code matching for demo - in real app would use AI scoring
           const similarity = calculateTextSimilarity(String(userAnswer), String(question.correctAnswer || ""))
           questionScore = Math.round((similarity / 100) * (question.points || 10))
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
         totalScore += questionScore
         processedAnswers.push({
-          questionId: question._id,
+          questionId: (question as any).questionId || (question as any)._id,
           answer: userAnswer,
           isCorrect: questionScore > 0,
           points: questionScore,
@@ -172,13 +172,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           ? "Assessment auto-submitted due to time limit"
           : "Assessment submitted successfully",
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error("[v0] Error submitting assessment:", error)
     return NextResponse.json(
       {
         success: false,
         message: "Failed to submit assessment",
-        error: error.message,
+        error: error?.message || "Unknown error",
       },
       { status: 500 },
     )

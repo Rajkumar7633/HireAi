@@ -34,9 +34,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     // Build a lookup for question metadata
     const questionMeta: Record<string, any> = {}
-    ;(assessment?.questions || []).forEach((q: any) => {
-      questionMeta[q._id?.toString?.() || String(q._id)] = q
-    })
+      ; (assessment?.questions || []).forEach((q: any) => {
+        questionMeta[q._id?.toString?.() || String(q._id)] = q
+      })
 
     const results = {
       assessmentId,
@@ -52,6 +52,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       correctAnswers,
       proctoringScore: application.proctoringData?.score ?? 100,
       proctoringReport: application.proctoringData?.report || null,
+      proctoringSummary: (application.proctoringData as any)?.summary || null,
       questionResults: (application.answers || []).map((a: any) => {
         const meta = questionMeta[a.questionId] || {}
         return {

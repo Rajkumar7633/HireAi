@@ -710,6 +710,30 @@ export default function JobSeekerProfilePage() {
   };
 
   const handleSaveSection = async (section: string) => {
+    // If user filled the experience form but forgot to click "Add", include it once
+    let payloadProfile: JobSeekerProfile = profile;
+    if (
+      section === "experience" &&
+      newExperience.company.trim() &&
+      newExperience.role.trim() &&
+      newExperience.startDate.trim()
+    ) {
+      const expEntry = {
+        company: newExperience.company.trim(),
+        role: newExperience.role.trim(),
+        startDate: newExperience.startDate.trim(),
+        endDate: newExperience.current ? undefined : newExperience.endDate.trim() || undefined,
+        current: Boolean(newExperience.current),
+        description: newExperience.description.trim() || undefined,
+      };
+      payloadProfile = {
+        ...profile,
+        experiences: [...profile.experiences, expEntry],
+      };
+      setProfile(payloadProfile);
+      setNewExperience({ company: "", role: "", startDate: "", endDate: "", current: false, description: "" });
+    }
+
     setLoading(true);
     try {
       console.log("[v0] Saving profile section:", section);
@@ -718,7 +742,7 @@ export default function JobSeekerProfilePage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(profile),
+        body: JSON.stringify(payloadProfile),
       });
 
       if (!response.ok) {
@@ -731,7 +755,7 @@ export default function JobSeekerProfilePage() {
 
       // Normalize to ensure arrays always exist after save
       const normalized = {
-        ...profile,
+        ...payloadProfile,
         ...data,
         skills: Array.isArray(data.skills) ? data.skills : [],
         projects: Array.isArray(data.projects) ? data.projects : [],

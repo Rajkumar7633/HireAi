@@ -1,0 +1,271 @@
+HireAI — Features A to Z (Admin/College, Recruiter/Employer, Job Seeker)
+
+Note:
+- This is a complete feature inventory for pitching. You can mark each item as LIVE or ROADMAP based on your current product status.
+- If you want, tell me what’s live today and I’ll convert this into an “as-is” + “roadmap” version.
+
+A) Platform / Core (shared for everyone)
+1) Authentication & Accounts
+- Sign up / sign in
+- Role-based access: Job Seeker, Recruiter, College Admin/Placement Cell, Super Admin
+- Password reset / email verification (optional)
+
+2) Role-Based Dashboards
+- Dedicated dashboards per role (job seeker, recruiter, college admin)
+- Personalized navigation + quick actions
+
+3) Notifications & Communication
+- In-app notifications
+- Email notifications (assignment, schedule, reminders)
+- Status update notifications (application stage updates)
+
+4) Real-Time Status Tracking (Transparency Layer)
+- Stage-wise pipeline status: Applied → Shortlisted → Test → Interview → Offer/Rejected
+- Timeline/audit trail for actions taken
+- Candidate-visible status + recruiter-visible pipeline
+
+5) File & Document Management
+- Resume upload
+- Portfolio attachments (optional)
+- Exported resume storage (optional)
+
+6) Search, Filters, Sorting
+- Candidate search (recruiter/admin)
+- Job search (job seeker)
+- Filters by skills, experience, location, score, test performance
+
+7) Analytics & Reports (Core)
+- Funnel analytics (applications → shortlist → interview → offer)
+- Outcome tracking (callback rate, placement rate)
+- Export reports (CSV/PDF) (optional)
+
+8) Security & Compliance (Core)
+- Data privacy controls
+- Access logs (optional)
+- Rate limiting / abuse protection (optional)
+
+
+B) Job Seeker Features (Candidate Experience)
+1) Job Seeker Profile
+- Personal info, education, experience
+- Skills & interests
+- Social links (GitHub/LinkedIn/portfolio)
+
+2) Resume Builder (ATS-first)
+- Professional sections: Personal Info, Summary, Skills, Experience, Projects, Education, Certifications, Awards, Languages, Interests
+- Live preview
+- Export: PDF / HTML / DOC
+- Autosave (local storage)
+
+3) Advanced Resume Section Manager (Unique Differentiator)
+- Drag-and-drop reorder resume sections
+- Move up/down controls
+- Show/hide sections
+- Lock sections
+- Reset to default ordering
+- Edit mode vs preview mode
+
+4) Application Center
+- Browse jobs
+- Apply to jobs
+- Track all applications in one place
+
+5) Real-Time Application Status (Full Transparency)
+- View stage-wise status per job
+- View upcoming steps: test schedule/interview schedule
+- Receive status change notifications
+
+6) Assessments & Tests
+- Attempt coding/MCQ/aptitude tests (based on assessment type)
+- View assignment details
+- Track completion and results (if enabled)
+
+7) Video Interview
+- Join scheduled interview
+- Interview room access (if enabled)
+- Interview guidelines + readiness checklist (optional)
+
+8) Candidate Scoring / Profile Score (Readiness Score)
+- Score based on profile completeness, skills, projects, assessments, and interview feedback (configurable)
+- Recommendations to improve score (optional)
+
+9) Internal Networking (LinkedIn-like inside HireAI)
+- Build a professional profile that is discoverable
+- Connect with peers/alumni/mentors (optional)
+- Messaging (optional)
+- Referrals / recommendations (optional)
+
+
+C) Recruiter / Employer Features (Hiring Workflow)
+1) Recruiter Organization Setup
+- Company profile
+- Recruiter team members & permissions (optional)
+
+2) Job Posting & Management
+- Create job postings
+- Define requirements: skills, experience, location, compensation range (optional)
+- Manage job lifecycle: open/paused/closed
+
+3) Applicant Tracking (ATS Pipeline)
+- View applicants per job
+- Candidate stages: Applied → Shortlisted → Test → Interview → Offer/Rejected
+- Bulk actions: shortlist/reject/invite to test (optional)
+
+4) ATS Shortlisting & Filters
+- Resume-based shortlisting (keywords/requirements)
+- Profile score-based filters
+- Skill matching
+- Knockout questions (optional)
+
+5) Assessments / Tests Management
+- Create/assign assessments
+- Auto-email invites
+- Monitor completion
+- View results and rankings
+
+6) Interview Scheduling
+- Schedule interviews
+- Send calendar/email notifications (optional)
+- Reschedule/cancel
+
+7) Video Interviews (Same Platform)
+- Create/join video interview rooms (if enabled)
+- Structured interview scorecard (optional)
+- Record notes and feedback
+
+8) Shortlisting Speed & Workflow Automation
+- Auto-advance candidates based on test thresholds (optional)
+- SLA reminders for recruiters (optional)
+
+9) Collaboration
+- Internal comments on candidate profile
+- Share candidate profile with hiring managers (optional)
+- Role-based permissions
+
+10) Reporting (Recruiter)
+- Time-to-shortlist, time-to-hire
+- Conversion rates stage-wise
+- Source performance (optional)
+
+
+D) College / Placement Cell Admin Features (First Selling Model)
+1) College Onboarding
+- College profile
+- Departments/branches/batches
+- Admin roles: placement officer, coordinators
+
+2) Student Management
+- Add/import students (CSV) (optional)
+- Manage student profiles
+- Track profile completion
+
+2.1) Multi-Year Student Tracking (Fresher → Final Year)
+- Track performance year-wise/semester-wise
+- Readiness timeline (resume quality, skill progress, assessments, interview readiness)
+- Year-based cohorts: 1st year, 2nd year, 3rd year, final year
+- Placement eligibility readiness by year and department
+
+3) Placement Dashboard
+- Cohort readiness dashboard
+- Students by profile score
+- Students by skill tags
+
+3.1) Performance & Readiness Analytics (College)
+- Leaderboards by batch/branch/skill/test
+- Heatmaps: strong/weak skills by cohort
+- Top performers list for shortlisting
+- At-risk students list (low readiness) with action suggestions
+
+4) Placement Drives / Campus Hiring
+- Create drives (company-wise)
+- Eligibility criteria (CGPA/branch/skills)
+- Manage applications per drive
+
+4.1) Drive Operations (Automation)
+- Bulk eligibility filtering and shortlisting
+- Slot allocation for tests/interviews (optional)
+- Auto reminders for students (email/in-app) (optional)
+- Stage-wise drive pipeline view (Applied → Test → Interview → Offer)
+
+5) Tests for Students
+- Assign assessments to batches
+- Track completion and top performers
+
+5.1) Internal College Testing (Non-placement)
+- Internal tests for semester readiness / training programs
+- Department-wise tests and results
+- Attendance/completion tracking
+- Training plans for improvement (optional)
+
+6) Interview Management
+- Schedule interviews for drives
+- Coordinate student interview slots
+- Track interview outcomes
+
+6.1) Interview Practice & Preparation (Optional)
+- Mock interview scheduling
+- Interview readiness checklist per student
+- Faculty/alumni panel interview assignments (optional)
+
+7) Transparency & Student Status
+- Students see stage-wise status per drive
+- Placement cell sees full pipeline across drives
+
+7.1) Student Records & Audit Trail
+- Central record of: applications, test attempts, interview rounds, outcomes
+- Audit trail of placement cell actions (shortlist/reject/schedule)
+- Downloadable student dossier for committees (optional)
+
+8) Outcomes & Reporting (College)
+- Placement rate
+- Offers per student
+- Company participation
+- Exportable reports for management
+
+8.1) Workforce Reduction & Productivity Features
+- Single dashboard replacing spreadsheets + multiple tools
+- Bulk operations for thousands of students (import, eligibility, invites)
+- Templates for drive workflows (repeatable SOP)
+- Automated reminders and follow-ups (optional)
+- Reduced placement cell coordination time via centralized pipeline
+
+
+E) Super Admin (Platform Operator)
+1) Role & Access Control
+- Create/manage roles
+- Manage permissions
+
+2) Tenant / Organization Management
+- Manage colleges
+- Manage companies
+- Manage users (students/job seekers/recruiters)
+
+3) Platform Health
+- Monitor usage
+- Logs (optional)
+- Abuse prevention (optional)
+
+
+F) Integrations (Optional but high-value)
+- Email (SMTP)
+- Storage (S3/Cloudinary)
+- Calendar integration (Google/Microsoft) (optional)
+- LinkedIn/GitHub import (optional)
+
+
+G) Unique Differentiators (What makes HireAI “India-first”)
+- End-to-end hiring on one platform (job → test → interview → offer)
+- Full transparency with real-time stage status (candidate + recruiter + college)
+- College placements OS as GTM wedge: colleges buy, students onboard, employers follow talent
+- ATS-first resume builder + section reordering controls (rare in most builders)
+
+
+H) Optional Roadmap Enhancers (for VC narrative)
+- ATS “X-Ray” (simulate parser + keyword gap)
+- AI job description tailoring suggestions
+- Candidate benchmark vs job requirements
+- Proctoring signals for tests
+- Offer letter workflow
+- Background verification integrations
+- Referral engine
+- Multi-tenant billing & invoicing

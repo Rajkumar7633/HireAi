@@ -38,6 +38,7 @@ export default function SecurityCenterClient({ initialRole }: { initialRole: str
   const [openHistory, setOpenHistory] = useState(false)
   const [history, setHistory] = useState<any[]>([])
   const [lookupQ, setLookupQ] = useState("")
+  const [resolved, setResolved] = useState<{ type: 'user' | 'job' | null; id: string | null }>({ type: null, id: null })
   const banned = Boolean((roles as any)?.banned)
   const onHold = Boolean((roles as any)?.on_hold)
   const validId = modId.trim().length > 0
@@ -135,8 +136,8 @@ export default function SecurityCenterClient({ initialRole }: { initialRole: str
       const r = await fetch(`/api/admin/moderation/lookup?query=${encodeURIComponent(lookupQ)}`, { cache:'no-store' })
       if (r.ok) {
         const j = await r.json()
-        if (j.userId) { setModType('user'); setModId(j.userId) }
-        else if (j.jobId) { setModType('job'); setModId(j.jobId) }
+        if (j.userId) { setModType('user'); setModId(j.userId); setResolved({ type: 'user', id: j.userId }) }
+        else if (j.jobId) { setModType('job'); setModId(j.jobId); setResolved({ type: 'job', id: j.jobId }) }
         else { toast({ title: 'Not found', description: 'No user/job matched' }); return }
         // After filling ID, load status history and toast status
         setTimeout(async ()=>{ 
@@ -291,6 +292,22 @@ export default function SecurityCenterClient({ initialRole }: { initialRole: str
               <div className="flex flex-wrap items-center gap-3">
                 <Input className="h-9 w-64 bg-white" placeholder="Quick lookup (email or slug)" value={lookupQ} onChange={(e)=>setLookupQ(e.target.value)} />
                 <Button size="sm" variant="outline" onClick={quickLookup} disabled={!!loading.lookup}>{loading.lookup? 'Looking…':'Lookup'}</Button>
+                {resolved.id && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Resolved: {resolved.type} • <span className="font-mono">{resolved.id}</span></span>
+                    <Button size="sm" variant="outline" onClick={()=>{ try { navigator.clipboard.writeText(resolved.id || '') } catch {} }}>Copy ID</Button>
+                    {resolved.type === 'user' && (
+                      <Button size="sm" asChild>
+                        <a href={`/dashboard/admin/users/${resolved.id}`} target="_blank" rel="noopener noreferrer">Open User</a>
+                      </Button>
+                    )}
+                    {resolved.type === 'job' && (
+                      <Button size="sm" asChild>
+                        <a href={`/dashboard/admin/jobs/${resolved.id}`} target="_blank" rel="noopener noreferrer">Open Job</a>
+                      </Button>
+                    )}
+                  </div>
+                )}
                 <div className="ml-auto flex flex-wrap gap-2">
                   <Button size="sm" variant="destructive" disabled={!validId || !validReason || !!loading.ban || banned} onClick={banEntity}>{loading.ban? 'Banning…':'Ban'}</Button>
                   <Button size="sm" variant="outline" disabled={!validId || !!loading.unban || (!banned && !onHold)} onClick={unbanEntity}>{loading.unban? 'Unbanning…':'Unban'}</Button>

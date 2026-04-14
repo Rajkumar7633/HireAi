@@ -33,6 +33,7 @@ import { MultiSelect } from "@/components/ui/multi-select";
 import { Badge } from "@/components/ui/badge";
 import { ResumePreview } from "@/components/resume-preview";
 import { TemplateSelector } from "@/components/template-selector";
+import { SectionDragDrop } from "@/components/resume/SectionDragDrop";
 import { exportToPDF, exportToHTML } from "@/utils/pdf-export";
 import { exportToDoc } from "@/utils/doc-export";
 import { format, parseISO } from "date-fns";
@@ -212,6 +213,20 @@ export default function ResumeBuilderPage() {
     languages: true,
     interests: true,
   });
+
+  // Advanced section management for drag-drop
+  const [sectionOrder, setSectionOrder] = useState([
+    { id: 'personal', title: 'Personal Information', visible: true, locked: false, order: 0 },
+    { id: 'summary', title: 'Professional Summary', visible: sections.summary, locked: false, order: 1 },
+    { id: 'experience', title: 'Professional Experience', visible: sections.experience, locked: false, order: 2 },
+    { id: 'education', title: 'Education', visible: sections.education, locked: false, order: 3 },
+    { id: 'skills', title: 'Technical Skills', visible: sections.skills, locked: false, order: 4 },
+    { id: 'projects', title: 'Projects', visible: sections.projects, locked: false, order: 5 },
+    { id: 'certifications', title: 'Certifications', visible: sections.certifications, locked: false, order: 6 },
+    { id: 'awards', title: 'Awards & Achievements', visible: sections.awards, locked: false, order: 7 },
+    { id: 'languages', title: 'Languages', visible: sections.languages, locked: false, order: 8 },
+    { id: 'interests', title: 'Interests', visible: sections.interests, locked: false, order: 9 }
+  ]);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -654,6 +669,73 @@ export default function ResumeBuilderPage() {
     }));
   };
 
+  // Advanced Section Management Functions
+  const handleSectionToggle = (sectionId: string) => {
+    setSectionOrder(prev => 
+      prev.map(section => 
+        section.id === sectionId 
+          ? { ...section, visible: !section.visible }
+          : section
+      )
+    );
+    
+    // Also update the legacy sections state
+    setSections(prev => ({
+      ...prev,
+      [sectionId]: !prev[sectionId as keyof typeof prev]
+    }));
+  };
+
+  const handleSectionLock = (sectionId: string) => {
+    setSectionOrder(prev => 
+      prev.map(section => 
+        section.id === sectionId 
+          ? { ...section, locked: !section.locked }
+          : section
+      )
+    );
+  };
+
+  const handleSectionsChange = (newSections: any[]) => {
+    setSectionOrder(newSections);
+    
+    // Update legacy sections state
+    const updatedSections = newSections.reduce((acc, section) => {
+      acc[section.id] = section.visible;
+      return acc;
+    }, {} as any);
+    
+    setSections(updatedSections);
+  };
+
+  // Get section components for drag-drop
+  const getSectionComponents = () => {
+    return sectionOrder.map(section => ({
+      ...section,
+      component: (
+        <Card className="shadow-md border">
+          <CardHeader>
+            <CardTitle className="text-lg">{section.title}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center py-8 text-gray-500">
+              {section.id === 'personal' && 'Personal Information Section'}
+              {section.id === 'summary' && 'Professional Summary Section'}
+              {section.id === 'experience' && `Experience Section (${resume.experience.length} items)`}
+              {section.id === 'education' && `Education Section (${resume.education.length} items)`}
+              {section.id === 'skills' && `Skills Section (${resume.skills.length} items)`}
+              {section.id === 'projects' && `Projects Section (${resume.projects.length} items)`}
+              {section.id === 'certifications' && `Certifications Section (${resume.certifications.length} items)`}
+              {section.id === 'awards' && `Awards Section (${resume.awards.length} items)`}
+              {section.id === 'languages' && 'Languages Section'}
+              {section.id === 'interests' && 'Interests Section'}
+            </div>
+          </CardContent>
+        </Card>
+      )
+    }));
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full min-h-[400px]">
@@ -739,6 +821,14 @@ export default function ResumeBuilderPage() {
               </Button>
             </div>
           </div>
+
+          {/* Advanced Section Manager */}
+          <SectionDragDrop
+            sections={getSectionComponents()}
+            onSectionsChange={handleSectionsChange}
+            onSectionToggle={handleSectionToggle}
+            onSectionLock={handleSectionLock}
+          />
 
           {/* Template Selection */}
           <Card>
@@ -826,106 +916,140 @@ export default function ResumeBuilderPage() {
           )}
 
           {/* Personal Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Personal Information</CardTitle>
-              <CardDescription>
-                Your contact details and professional profiles
+          <Card className="shadow-lg border-0">
+            <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b">
+              <CardTitle className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                  <span className="text-white font-bold">1</span>
+                </div>
+                Personal Information
+              </CardTitle>
+              <CardDescription className="text-gray-600">
+                Professional contact details - ATS systems scan this first
               </CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <CardContent className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="name" className="text-sm font-semibold text-gray-700 flex items-center gap-1">
+                    Full Name <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="name"
+                    value={resume.personalInfo.name}
+                    onChange={(e) => updatePersonalInfo("name", e.target.value)}
+                    placeholder="John Michael Doe"
+                    className="transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium"
+                  />
+                  <p className="text-xs text-gray-500">Use your full legal name as it appears on documents</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="text-sm font-semibold text-gray-700 flex items-center gap-1">
+                    Email Address <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={resume.personalInfo.email}
+                    onChange={(e) => updatePersonalInfo("email", e.target.value)}
+                    placeholder="john.doe@email.com"
+                    className="transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <p className="text-xs text-gray-500">Use a professional email address</p>
+                </div>
               <div className="space-y-2">
-                <Label htmlFor="name">Full Name *</Label>
-                <Input
-                  id="name"
-                  value={resume.personalInfo.name}
-                  onChange={(e) => updatePersonalInfo("name", e.target.value)}
-                  placeholder="John Doe"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email Address *</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={resume.personalInfo.email}
-                  onChange={(e) => updatePersonalInfo("email", e.target.value)}
-                  placeholder="john.doe@email.com"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone Number</Label>
+                <Label htmlFor="phone" className="text-sm font-semibold text-gray-700">Phone Number</Label>
                 <Input
                   id="phone"
+                  type="tel"
                   value={resume.personalInfo.phone || ""}
                   onChange={(e) => updatePersonalInfo("phone", e.target.value)}
                   placeholder="+1 (555) 123-4567"
+                  className="transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
+                <p className="text-xs text-gray-500">Format: +1 (555) 123-4567 or (555) 123-4567</p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="address">Location</Label>
+                <Label htmlFor="address" className="text-sm font-semibold text-gray-700">Location</Label>
                 <Input
                   id="address"
                   value={resume.personalInfo.address || ""}
-                  onChange={(e) =>
-                    updatePersonalInfo("address", e.target.value)
-                  }
+                  onChange={(e) => updatePersonalInfo("address", e.target.value)}
                   placeholder="San Francisco, CA"
+                  className="transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
+                <p className="text-xs text-gray-500">City, State or City, Country format preferred</p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="linkedin">LinkedIn Profile</Label>
+                <Label htmlFor="linkedin" className="text-sm font-semibold text-gray-700">LinkedIn Profile</Label>
                 <Input
                   id="linkedin"
                   value={resume.personalInfo.linkedin || ""}
-                  onChange={(e) =>
-                    updatePersonalInfo("linkedin", e.target.value)
-                  }
+                  onChange={(e) => updatePersonalInfo("linkedin", e.target.value)}
                   placeholder="linkedin.com/in/johndoe"
+                  className="transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
+                <p className="text-xs text-gray-500">Full LinkedIn URL recommended</p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="github">GitHub Profile</Label>
+                <Label htmlFor="github" className="text-sm font-semibold text-gray-700">GitHub Profile</Label>
                 <Input
                   id="github"
                   value={resume.personalInfo.github || ""}
                   onChange={(e) => updatePersonalInfo("github", e.target.value)}
                   placeholder="github.com/johndoe"
+                  className="transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
+                <p className="text-xs text-gray-500">Essential for technical roles</p>
               </div>
               <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="portfolio">Portfolio Website</Label>
+                <Label htmlFor="portfolio" className="text-sm font-semibold text-gray-700">Portfolio Website</Label>
                 <Input
                   id="portfolio"
                   value={resume.personalInfo.portfolio || ""}
-                  onChange={(e) =>
-                    updatePersonalInfo("portfolio", e.target.value)
-                  }
-                  placeholder="www.johndoe.com"
+                  onChange={(e) => updatePersonalInfo("portfolio", e.target.value)}
+                  placeholder="https://johndoe.com"
+                  className="transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
+                <p className="text-xs text-gray-500">Personal website or online portfolio</p>
+              </div>
               </div>
             </CardContent>
           </Card>
 
           {/* Professional Summary */}
           {sections.summary && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Professional Summary</CardTitle>
-              <CardDescription>
-                A compelling 2-3 sentence overview highlighting your key
-                achievements and value proposition
+          <Card className="shadow-lg border-0">
+            <CardHeader className="bg-gradient-to-r from-green-50 to-emerald-50 border-b">
+              <CardTitle className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center">
+                  <span className="text-white font-bold">2</span>
+                </div>
+                Professional Summary
+              </CardTitle>
+              <CardDescription className="text-gray-600">
+                3-4 line executive summary - Most critical section for ATS scanning
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <Textarea
-                placeholder="Results-driven Software Engineer with 5+ years of experience building scalable systems at high-growth startups. Led development of microservices architecture serving 10M+ users, improving system performance by 40%. Passionate about solving complex technical challenges and mentoring engineering teams."
-                value={resume.summary || ""}
-                onChange={(e) =>
-                  setResume({ ...resume, summary: e.target.value })
-                }
-                rows={4}
-              />
+            <CardContent className="p-6">
+              <div className="space-y-3">
+                <Textarea
+                  placeholder="Results-driven Software Engineer with 5+ years of experience building scalable systems at high-growth startups. Led development of microservices architecture serving 10M+ users, improving system performance by 40%. Passionate about solving complex technical challenges and mentoring engineering teams."
+                  value={resume.summary || ""}
+                  onChange={(e) => setResume({ ...resume, summary: e.target.value })}
+                  rows={5}
+                  className="transition-all duration-200 focus:ring-2 focus:ring-green-500 focus:border-green-500 resize-none"
+                />
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <h4 className="font-semibold text-amber-800 text-sm mb-2">✨ ATS Optimization Tips:</h4>
+                  <ul className="text-xs text-amber-700 space-y-1">
+                    <li>• Include 2-3 key achievements with quantifiable results</li>
+                    <li>• Use industry keywords from the job description</li>
+                    <li>• Keep it under 4 lines (recruiters scan this in 6 seconds)</li>
+                    <li>• Start with your years of experience and specialization</li>
+                  </ul>
+                </div>
+              </div>
             </CardContent>
           </Card>
           )}
@@ -959,26 +1083,39 @@ export default function ResumeBuilderPage() {
 
           {/* Experience */}
           {sections.experience && (
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Professional Experience</CardTitle>
-                <CardDescription>
-                  List your work history with quantified achievements
-                </CardDescription>
+          <Card className="shadow-lg border-0">
+            <CardHeader className="bg-gradient-to-r from-purple-50 to-indigo-50 border-b">
+              <div className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                    <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center">
+                      <span className="text-white font-bold">3</span>
+                    </div>
+                    Professional Experience
+                  </CardTitle>
+                  <CardDescription className="text-gray-600">
+                    Reverse chronological order - Most important section for recruiters
+                  </CardDescription>
+                </div>
+                <Button 
+                  type="button" 
+                  onClick={addExperience} 
+                  size="sm"
+                  className="bg-purple-600 hover:bg-purple-700 transition-all duration-200"
+                >
+                  <Plus className="mr-2 h-4 w-4" /> Add Experience
+                </Button>
               </div>
-              <Button type="button" onClick={addExperience} size="sm">
-                <Plus className="mr-2 h-4 w-4" /> Add Experience
-              </Button>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="p-6">
               {resume.experience.length === 0 && (
-                <div className="text-center py-8 text-muted-foreground">
-                  <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>
-                    No experience added yet. Click "Add Experience" to get
-                    started.
-                  </p>
+                <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                  <FileText className="h-16 w-16 mx-auto mb-4 text-gray-400" />
+                  <h3 className="text-lg font-semibold text-gray-700 mb-2">No Experience Added</h3>
+                  <p className="text-gray-500 mb-4">Add your work experience to showcase your professional journey</p>
+                  <Button onClick={addExperience} className="bg-purple-600 hover:bg-purple-700">
+                    <Plus className="mr-2 h-4 w-4" /> Add Your First Experience
+                  </Button>
                 </div>
               )}
               {resume.experience.map((exp, index) => (
@@ -1015,39 +1152,43 @@ export default function ResumeBuilderPage() {
                       </Button>
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <Label htmlFor={`exp-title-${index}`}>Job Title *</Label>
+                      <Label htmlFor={`exp-title-${index}`} className="text-sm font-semibold text-gray-700 flex items-center gap-1">
+                        Job Title <span className="text-red-500">*</span>
+                      </Label>
                       <Input
                         id={`exp-title-${index}`}
                         value={exp.title}
-                        onChange={(e) =>
-                          updateExperience(index, "title", e.target.value)
-                        }
+                        onChange={(e) => updateExperience(index, "title", e.target.value)}
                         placeholder="Senior Software Engineer"
+                        className="transition-all duration-200 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 font-medium"
                       />
+                      <p className="text-xs text-gray-500">Use official job title, be specific</p>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor={`exp-company-${index}`}>Company *</Label>
+                      <Label htmlFor={`exp-company-${index}`} className="text-sm font-semibold text-gray-700 flex items-center gap-1">
+                        Company <span className="text-red-500">*</span>
+                      </Label>
                       <Input
                         id={`exp-company-${index}`}
                         value={exp.company}
-                        onChange={(e) =>
-                          updateExperience(index, "company", e.target.value)
-                        }
-                        placeholder="Google"
+                        onChange={(e) => updateExperience(index, "company", e.target.value)}
+                        placeholder="Google, Microsoft, etc."
+                        className="transition-all duration-200 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 font-medium"
                       />
+                      <p className="text-xs text-gray-500">Full company name, recognizable brands preferred</p>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor={`exp-location-${index}`}>Location</Label>
+                      <Label htmlFor={`exp-location-${index}`} className="text-sm font-semibold text-gray-700">Location</Label>
                       <Input
                         id={`exp-location-${index}`}
                         value={exp.location || ""}
-                        onChange={(e) =>
-                          updateExperience(index, "location", e.target.value)
-                        }
-                        placeholder="Mountain View, CA"
+                        onChange={(e) => updateExperience(index, "location", e.target.value)}
+                        placeholder="San Francisco, CA or Remote"
+                        className="transition-all duration-200 focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                       />
+                      <p className="text-xs text-gray-500">City, State or "Remote"</p>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor={`exp-start-${index}`}>Start Date *</Label>

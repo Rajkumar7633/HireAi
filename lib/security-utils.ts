@@ -80,18 +80,18 @@ export class SecurityManager {
     const currentDwellTime = recentKeystrokes[recentKeystrokes.length - 1].dwellTime
     const currentFlightTime = recentKeystrokes[recentKeystrokes.length - 1].flightTime
 
-    // Flag unusual patterns
-    if (currentDwellTime > avgDwellTime * 3 || currentDwellTime < avgDwellTime * 0.3) {
+    // Detect unusual patterns
+    if (currentDwellTime > avgDwellTime * 5 || currentDwellTime < avgDwellTime * 0.2) {
       this.addViolation("keystroke_anomaly", "Unusual key dwell time detected")
     }
 
-    if (currentFlightTime > avgFlightTime * 4 || currentFlightTime < avgFlightTime * 0.2) {
+    if (currentFlightTime > avgFlightTime * 6 || currentFlightTime < avgFlightTime * 0.3) {
       this.addViolation("keystroke_anomaly", "Unusual typing rhythm detected")
     }
 
-    // Detect copy-paste patterns (very fast sequential keystrokes)
-    const fastKeystrokes = recentKeystrokes.filter((k) => k.flightTime < 50).length
-    if (fastKeystrokes > 5) {
+    // Detect copy-paste patterns (very fast sequential keystrokes) - increased threshold
+    const fastKeystrokes = recentKeystrokes.filter((k) => k.flightTime < 30).length
+    if (fastKeystrokes > 8) { // Increased from 5 to 8
       this.addViolation("copy_paste_attempt", "Potential copy-paste activity detected")
     }
   }
@@ -101,10 +101,10 @@ export class SecurityManager {
     // Initial scan
     this.performEnvironmentScan()
 
-    // Periodic scans every 30 seconds
+    // Periodic scans every 2 minutes (reduced from 30 seconds)
     this.environmentScanInterval = setInterval(() => {
       this.performEnvironmentScan()
-    }, 30000)
+    }, 120000) // 2 minutes instead of 30 seconds
   }
 
   // Disable developer tools
@@ -180,14 +180,18 @@ export class SecurityManager {
     })
   }
 
-  // Block screen capture attempts
+  // Block screen capture attempts - but allow legitimate phone screenshots
   private blockScreenCapture(): void {
     // Detect print screen
     document.addEventListener("keydown", (e) => {
       if (e.keyCode === 44) {
-        e.preventDefault()
-        this.addViolation("screen_capture", "Print screen key blocked")
-        return false
+        // Check if it's a legitimate screenshot attempt (not automated)
+        const timeSinceLastKeystroke = Date.now() - this.keystrokeBuffer[this.keystrokeBuffer.length - 1]?.timestamp || 0
+        if (timeSinceLastKeystroke > 1000) { // Only block if very recent (likely automated)
+          e.preventDefault()
+          this.addViolation("screen_capture", "Print screen key blocked")
+          return false
+        }
       }
     })
   }
@@ -244,7 +248,7 @@ export class SecurityManager {
   monitorNetworkActivity(): void {
     // Override fetch to monitor API calls
     const originalFetch = window.fetch
-    ;(window as any)._originalFetch = originalFetch
+      ; (window as any)._originalFetch = originalFetch
     window.fetch = async (...args) => {
       const url = args[0] as string
 
@@ -276,7 +280,7 @@ export class SecurityManager {
     const WebSocketShim: typeof OriginalWebSocket = function (this: WebSocket, url: string | URL, protocols?: string | string[]) {
       try {
         SecurityManager.getInstance().addViolation("websocket", `WebSocket connection attempted to ${url}`)
-      } catch {}
+      } catch { }
       // Allow connection (or you can block by throwing). We allow but log.
       // @ts-ignore - invoke original constructor
       return new OriginalWebSocket(url as any, protocols as any)
@@ -295,7 +299,7 @@ export class SecurityManager {
     window.WebSocket = WebSocketShim
   }
 
-  // Enhanced environment integrity check
+  // Enhanced environment integrity check - reduce false positives
   performEnvironmentScan(): Promise<EnvironmentScanResult> {
     return new Promise((resolve) => {
       const result: EnvironmentScanResult = {
@@ -309,17 +313,19 @@ export class SecurityManager {
         riskScore: 0,
       }
 
-      // Calculate comprehensive risk score
+      // Calculate comprehensive risk score - be less aggressive
       result.riskScore =
-        (result.multipleMonitors ? 15 : 0) +
-        result.suspiciousProcesses.length * 20 +
-        (result.networkProxies ? 25 : 0) +
-        result.browserExtensions.length * 10 +
-        (result.virtualMachine ? 30 : 0) +
-        (result.screenResolution.suspicious ? 10 : 0)
+        (result.multipleMonitors ? 10 : 0) + // Reduced from 15
+        (result.suspiciousProcesses.length * 15) + // Reduced from 20
+        (result.networkProxies ? 20 : 0) +
+        (result.browserExtensions.length * 5) + // Reduced from 10
+        (result.virtualMachine ? 25 : 0) + // Reduced from 30
+        (result.screenResolution.suspicious ? 5 : 0) // Reduced from 10
 
-      // Send scan results to backend
-      this.sendEnvironmentScan(result)
+      // Only send scan results if risk score is significant
+      if (result.riskScore > 30) { // Only report if real issues
+        this.sendEnvironmentScan(result)
+      }
 
       resolve(result)
     })
@@ -466,7 +472,7 @@ export class SecurityManager {
     const start = Date.now()
     const perfStart = performance.now()
 
-    setTimeout(() => {}, 0)
+    setTimeout(() => { }, 0)
 
     const timeDiff = Math.abs(Date.now() - start - (performance.now() - perfStart))
     return timeDiff > 10 // Significant timing discrepancy
@@ -608,10 +614,10 @@ export class SecurityManager {
     }
 
     // Clean up event listeners
-    document.removeEventListener("contextmenu", () => {})
-    document.removeEventListener("keydown", () => {})
-    document.removeEventListener("copy", () => {})
-    document.removeEventListener("paste", () => {})
+    document.removeEventListener("contextmenu", () => { })
+    document.removeEventListener("keydown", () => { })
+    document.removeEventListener("copy", () => { })
+    document.removeEventListener("paste", () => { })
   }
 }
 

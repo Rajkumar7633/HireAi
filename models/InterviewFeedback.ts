@@ -20,8 +20,8 @@ export interface IInterviewFeedback extends mongoose.Document {
 }
 
 const InterviewFeedbackSchema = new Schema<IInterviewFeedback>({
-  interviewId: { type: String, index: true, required: true },
-  roomId: { type: String, index: true, required: true },
+  interviewId: { type: String, required: true },
+  roomId: { type: String, required: true },
   recruiterFeedback: {
     rating: Number,
     strengths: String,
@@ -37,5 +37,6 @@ const InterviewFeedbackSchema = new Schema<IInterviewFeedback>({
 });
 
 InterviewFeedbackSchema.index({ interviewId: 1 });
+InterviewFeedbackSchema.index({ roomId: 1 });
 
 export default models.InterviewFeedback || model<IInterviewFeedback>("InterviewFeedback", InterviewFeedbackSchema);

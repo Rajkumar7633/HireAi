@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5001"
+import jwt from "jsonwebtoken"
+import { connectDB } from "@/lib/mongodb"
+import User from "@/models/User"
 
 export async function POST(request: NextRequest) {
     try {
@@ -9,34 +10,66 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ message: "No refresh token" }, { status: 401 })
         }
 
-        const r = await fetch(`${BACKEND_URL}/api/auth/refresh`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ refreshToken }),
-            cache: "no-store",
+        // Verify refresh token
+        const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET!) as any
+
+        // Connect to database and get user
+        await connectDB()
+        const user = await User.findById(decoded.userId)
+        if (!user) {
+            return NextResponse.json({ message: "User not found" }, { status: 401 })
+        }
+
+        // Generate new access token
+        const accessToken = jwt.sign(
+            {
+                userId: user._id,
+                email: user.email,
+                role: user.role
+            },
+            process.env.JWT_SECRET!,
+            { expiresIn: "20m" }
+        )
+
+        // Generate new refresh token
+        const newRefreshToken = jwt.sign(
+            {
+                userId: user._id,
+                email: user.email,
+                role: user.role
+            },
+            process.env.JWT_SECRET!,
+            { expiresIn: "14d" }
+        )
+
+        const res = NextResponse.json({
+            accessToken,
+            refreshToken: newRefreshToken,
+            user: {
+                id: user._id,
+                email: user.email,
+                role: user.role,
+                name: user.name
+            }
+        }, { status: 200 })
+
+        // Set new cookies
+        res.cookies.set("auth-token", accessToken, {
+            httpOnly: true,
+            path: "/",
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "lax",
+            maxAge: 60 * 20, // 20 minutes
         })
 
-        const data = await r.json()
+        res.cookies.set("refresh-token", newRefreshToken, {
+            httpOnly: true,
+            path: "/",
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "lax",
+            maxAge: 60 * 60 * 24 * 14, // 14 days
+        })
 
-        const res = NextResponse.json(data, { status: r.status })
-        if (r.ok && (data as any)?.accessToken) {
-            res.cookies.set("auth-token", (data as any).accessToken, {
-                httpOnly: true,
-                path: "/",
-                secure: process.env.NODE_ENV === "production",
-                sameSite: "lax",
-                maxAge: 60 * 20, // 20 minutes
-            })
-        }
-        if (r.ok && (data as any)?.refreshToken) {
-            res.cookies.set("refresh-token", (data as any).refreshToken, {
-                httpOnly: true,
-                path: "/",
-                secure: process.env.NODE_ENV === "production",
-                sameSite: "lax",
-                maxAge: 60 * 60 * 24 * 14, // 14 days
-            })
-        }
         return res
     } catch (error) {
         console.error("Refresh error:", error)

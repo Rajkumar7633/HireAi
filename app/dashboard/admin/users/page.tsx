@@ -31,6 +31,7 @@ export default function AdminUsersPage() {
   const [density, setDensity] = useState<'comfortable' | 'compact'>('comfortable')
   const [sortBy, setSortBy] = useState<'name' | 'role' | 'createdAt'>('name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [showAdmins, setShowAdmins] = useState(false)
 
   const qs = useMemo(() => {
     const p = new URLSearchParams()
@@ -51,6 +52,11 @@ export default function AdminUsersPage() {
     })
     return arr
   }, [users, sortBy, sortDir])
+
+  // Visible list: hide admins unless explicitly shown
+  const displayUsers = useMemo(() => {
+    return sortedUsers.filter((u: any) => showAdmins || u.role !== 'admin')
+  }, [sortedUsers, showAdmins])
 
   const fetchUsers = async (signal?: AbortSignal) => {
     try {
@@ -110,6 +116,7 @@ export default function AdminUsersPage() {
   }, [query, role, limit])
 
   const totalPages = total && limit ? Math.max(1, Math.ceil(total / limit)) : undefined
+  const hasPreview = !!preview
 
   return (
     <div className="flex-1 space-y-6 p-0">
@@ -192,6 +199,12 @@ export default function AdminUsersPage() {
                 <option value={50}>50</option>
               </select>
             </div>
+            <div className="col-span-6 md:col-span-3 flex items-end">
+              <label className="inline-flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={showAdmins} onChange={(e)=> setShowAdmins(e.target.checked)} />
+                <span>Show admins</span>
+              </label>
+            </div>
             <div className="col-span-6 md:col-span-3">
               <Label>Density</Label>
               <div className="flex gap-2 mt-1">
@@ -216,7 +229,7 @@ export default function AdminUsersPage() {
             <div className="col-span-12 flex items-center justify-end">
               <Button variant="outline" size="sm" className="gap-2" onClick={() => {
                 const headers = ["id","name","email","role"]
-                const rows = sortedUsers.map((u) => [u.id || u._id, (u.name || "").toString().replaceAll(',', ' '), u.email, u.role])
+                const rows = displayUsers.map((u) => [u.id || u._id, (u.name || "").toString().replaceAll(',', ' '), u.email, u.role])
                 const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n")
                 const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
                 const url = URL.createObjectURL(blob)
@@ -250,16 +263,16 @@ export default function AdminUsersPage() {
           )}
           {!loading && !error && users.length > 0 && (
             <div className="grid grid-cols-12 gap-6">
-              <div className="col-span-12 lg:col-span-7 space-y-2">
+              <div className={`col-span-12 ${hasPreview ? 'lg:col-span-7' : 'lg:col-span-12'} space-y-2`}>
                 <div className="flex items-center gap-2">
-                  <input type="checkbox" aria-label="Select all" checked={users.length > 0 && users.every((u) => selected[u.id || u._id])} onChange={(e) => {
+                  <input type="checkbox" aria-label="Select all" checked={displayUsers.length > 0 && displayUsers.every((u) => selected[u.id || u._id])} onChange={(e) => {
                     const next: Record<string, boolean> = {}
-                    if (e.target.checked) users.forEach((u) => { next[u.id || u._id] = true })
+                    if (e.target.checked) displayUsers.forEach((u) => { next[u.id || u._id] = true })
                     setSelected(next)
                   }} />
                   <span className="text-sm">Select all</span>
                 </div>
-                {sortedUsers.map((u, idx) => {
+                {displayUsers.map((u, idx) => {
                   const id = u.id || u._id
                   const isSelected = !!selected[id]
                   return (
@@ -287,6 +300,7 @@ export default function AdminUsersPage() {
                   )
                 })}
               </div>
+              {hasPreview && (
               <div className="col-span-12 lg:col-span-5">
                 <div className="rounded-2xl border p-6 bg-card h-full">
                   {!preview ? (
@@ -312,8 +326,8 @@ export default function AdminUsersPage() {
                           <div className="text-xs text-muted-foreground">Created</div>
                           <div className="text-sm font-medium">{(preview.createdAt || '').toString().slice(0,10) || '—'}</div>
                         </div>
-                        <div className="rounded-lg border p-3">
-                          <div className="text-xs text-muted-foreground">ID</div>
+                        <div className="rounded-lg bg-[#0b1220] p-3">
+                          <div className="text-xs text-white/70">ID</div>
                           <div className="text-xs font-mono truncate">{preview.id || preview._id || '—'}</div>
                         </div>
                       </div>
@@ -331,6 +345,7 @@ export default function AdminUsersPage() {
                   )}
                 </div>
               </div>
+              )}
             </div>
           )}
 
@@ -340,6 +355,26 @@ export default function AdminUsersPage() {
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</Button>
                 <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>Next</Button>
+              </div>
+            </div>
+          )}
+
+          {Object.values(selected).some(Boolean) && (
+            <div className="sticky bottom-2 mt-4">
+              <div className="mx-auto max-w-screen-xl">
+                <div className="rounded-xl border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-3 shadow-lg flex items-center justify-between">
+                  <div className="text-sm">{Object.values(selected).filter(Boolean).length} selected</div>
+                  <div className="flex items-center gap-2">
+                    <select className="h-9 px-3 border rounded" value={bulkRole} onChange={(e) => setBulkRole(e.target.value)}>
+                      <option value="">Set role…</option>
+                      <option value="admin">Admin</option>
+                      <option value="recruiter">Recruiter</option>
+                      <option value="job_seeker">Job Seeker</option>
+                    </select>
+                    <Button variant="outline" size="sm" disabled={!bulkRole} onClick={() => { setConfirmAction('role'); setConfirmOpen(true) }}>Apply</Button>
+                    <Button variant="destructive" size="sm" onClick={() => { setConfirmAction('delete'); setConfirmOpen(true) }}>Delete</Button>
+                  </div>
+                </div>
               </div>
             </div>
           )}

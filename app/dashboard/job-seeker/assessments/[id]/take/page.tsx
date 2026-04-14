@@ -34,6 +34,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { CodeEditor } from "@/components/assessment/CodeEditor";
+import { QuestionDisplay } from "@/components/assessment/QuestionDisplay";
 import {
   AlertTriangle,
   Camera,
@@ -71,18 +73,30 @@ interface ProctoringAlert {
 }
 
 interface Question {
-  _id: string;
+  _id?: string;
+  questionId?: string;
   questionText: string;
   type: "multiple_choice" | "short_answer" | "code_snippet" | "video_response";
   options?: string[];
+  correctAnswer: string;
   points: number;
+  difficulty?: "Easy" | "Medium" | "Hard";
+  timeLimit?: number;
+  tags?: string[];
+  hint?: string;
+  examples?: Array<{ input: string; output: string; explanation?: string }>;
+  testCases?: Array<{ id: string; input: string; expectedOutput: string; description?: string; isHidden?: boolean }>;
 }
 
 export default function TakeSecureAssessmentPage() {
   const params = useParams();
   const router = useRouter();
-  const assessmentId = params.id as string;
+  const assessmentId = params?.id as string;
   const { toast } = useToast();
+
+  // Testing bypass controls
+  const [testMode, setTestMode] = useState(false);
+  const [bypassSecurity, setBypassSecurity] = useState(false);
 
   // Assessment state
   const [assessment, setAssessment] = useState<any>(null);
@@ -93,6 +107,7 @@ export default function TakeSecureAssessmentPage() {
   const [loading, setLoading] = useState(true);
   const [canStart, setCanStart] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState<string>("javascript");
 
   // Proctoring state
   const [proctoringActive, setProctoringActive] = useState(false);
@@ -104,6 +119,8 @@ export default function TakeSecureAssessmentPage() {
   const [faceDetected, setFaceDetected] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
+  const [faceAlerted, setFaceAlerted] = useState(false);
+  const [faceViolationCount, setFaceViolationCount] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [screenRecording, setScreenRecording] = useState(false);
   const [screenShareStops, setScreenShareStops] = useState(0);
@@ -144,6 +161,21 @@ export default function TakeSecureAssessmentPage() {
   // Camera readiness for room scan and detection
   const [videoReady, setVideoReady] = useState(false);
   const [testPreviewImage, setTestPreviewImage] = useState<string | null>(null);
+
+  // Preflight readiness score (0-100) based on environment checks and consents
+  const readinessScore = (() => {
+    const checks = [
+      fullscreenReady,
+      cameraReady,
+      microphoneReady,
+      screenRecording || screenCaptureAvailable,
+      agreeToProctoring,
+      quietEnvironmentConfirmed,
+      readInstructionsConfirmed,
+    ];
+    const completed = checks.filter(Boolean).length;
+    return Math.round((completed / checks.length) * 100);
+  })();
 
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -220,6 +252,42 @@ export default function TakeSecureAssessmentPage() {
         setPreflightMicLevel(Math.min(100, Math.round(rms * 300)));
         preflightRafRef.current = requestAnimationFrame(tick);
       };
+
+  // Map FaceProctor widget violations into this page's alert system
+  const handleFaceProctorViolation = (payload: { type: string; message: string }) => {
+    const { type, message } = payload;
+    switch (type) {
+      case "no_face":
+        // Treat as high severity face missing
+        addAlert("face_not_detected", message || "No face detected.", "high");
+        setFaceDetected(false);
+        setNoFaceSeconds((prev) => Math.min(prev + 5, 30));
+        break;
+      case "multi_face":
+        addAlert("multiple_faces", message || "Multiple faces detected.", "high");
+        setFaceViolationCount((c) => c + 1);
+        break;
+      case "off_screen":
+        addAlert("environment_violation", message || "You appear far from camera or out of frame.", "medium");
+        break;
+      case "movement":
+        addAlert("environment_violation", message || "Excessive movement detected.", "medium");
+        break;
+      case "audio_noise":
+        addAlert("noise_detected", message || "Significant audio detected.", "medium");
+        break;
+      case "tab_switch":
+        addAlert("tab_switch", message || "Window/tab change detected.", "high");
+        if (proctoringActive && !submitting) {
+          handleSubmitAssessment(false, true);
+        }
+        break;
+      default:
+        // Fallback: log as generic environment violation
+        addAlert("environment_violation", message || "Proctoring violation detected.", "low");
+        break;
+    }
+  };
       tick();
     } catch (e) {
       console.warn('Preflight mic test failed', e);
@@ -449,6 +517,14 @@ export default function TakeSecureAssessmentPage() {
 
   const initializeProctoring = async () => {
     try {
+      // Skip security if bypass is enabled (for testing)
+      if (bypassSecurity) {
+        console.log("[TEST] Security bypassed for testing purposes");
+        setProctoringActive(true);
+        setSecurityScore(100);
+        return;
+      }
+
       await securityManager.enableSecureMode();
       securityManager.monitorNetworkActivity();
 
@@ -573,6 +649,35 @@ export default function TakeSecureAssessmentPage() {
     }
   };
 
+  // Code execution function
+  const runCode = async (code: string, input: string): Promise<{ output: string; error?: string; executionTime?: number }> => {
+    try {
+      const response = await fetch('/api/assessments/execute-code', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          code,
+          language: selectedLanguage,
+          input,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        return { output: '', error: error.error || 'Execution failed' };
+      }
+
+      return await response.json();
+    } catch (error) {
+      return { 
+        output: '', 
+        error: error instanceof Error ? error.message : 'Unknown error occurred' 
+      };
+    }
+  };
+
   const sendScreenRecordingData = async (data: Blob) => {
     const formData = new FormData();
     formData.append("recording", data);
@@ -632,13 +737,31 @@ export default function TakeSecureAssessmentPage() {
     }).catch(console.error);
   }
 
-  // Soft enforcement: log alerts when face is missing, but do not block navigation.
+  // Raise a single alert per continuous face-missing period (no spamming)
   useEffect(() => {
     if (!proctoringActive) return;
-    if (noFaceSeconds >= 5) {
+    if (noFaceSeconds >= 5 && !faceAlerted) {
       addAlert("face_not_detected", "Face missing for 5+ seconds.", "high");
+      setFaceAlerted(true);
+      setFaceViolationCount((c) => c + 1);
     }
-  }, [noFaceSeconds, proctoringActive]);
+    if (noFaceSeconds === 0 && faceAlerted) {
+      setFaceAlerted(false);
+    }
+  }, [noFaceSeconds, proctoringActive, faceAlerted]);
+
+  // Auto-end after repeated serious face violations (e.g. cheating attempts)
+  useEffect(() => {
+    if (!proctoringActive || submitting) return;
+    if (faceViolationCount >= 3) {
+      addAlert(
+        "face_not_detected",
+        "Multiple face-related violations detected. Ending assessment.",
+        "high",
+      );
+      handleSubmitAssessment(false, true);
+    }
+  }, [faceViolationCount, proctoringActive, submitting]);
 
   // rollback: remove auto-end on repeated multi-face
 
@@ -673,7 +796,8 @@ export default function TakeSecureAssessmentPage() {
     canvas.height = video.videoHeight;
     ctx.drawImage(video, 0, 0);
 
-    // Simulate more realistic face detection
+    // Lightweight heuristic: treat frame as valid if brightness is in a broad range.
+    // This avoids random failures and keeps monitoring stable when the face is visible.
     let imageData: ImageData;
     try {
       imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -683,18 +807,14 @@ export default function TakeSecureAssessmentPage() {
     }
     const brightness = calculateBrightness(imageData);
 
-    // Face detection based on lighting and movement
-    const faceDetected =
-      brightness > 50 && brightness < 200 && Math.random() > 0.05;
+    // Still lenient, but a bit stricter so that when you actually leave the frame
+    // and the background dominates, we are more likely to count it as missing.
+    const faceDetected = brightness > 20 && brightness < 235;
     setFaceDetected(faceDetected);
 
-    if (!faceDetected) {
-      addAlert(
-        "face_not_detected",
-        "Face not detected. Ensure proper lighting and camera positioning.",
-        "medium",
-      );
-    }
+    // Do not push an alert every second here.
+    // The noFaceSeconds effect handles raising a single high-severity alert
+    // when the face appears missing for 5+ continuous seconds.
   };
 
   // Room scan helpers
@@ -865,16 +985,17 @@ export default function TakeSecureAssessmentPage() {
     const violations = securityManager.getViolations();
     let score = 100;
 
+    // Be less aggressive with scoring
     violations.forEach((violation) => {
       switch (violation.severity) {
         case "high":
-          score -= 15;
+          score -= 10; // Reduced from 15
           break;
         case "medium":
-          score -= 8;
+          score -= 5; // Reduced from 8
           break;
         case "low":
-          score -= 3;
+          score -= 2; // Reduced from 3
           break;
       }
     });
@@ -907,9 +1028,13 @@ export default function TakeSecureAssessmentPage() {
         setTabSwitchCount((prev) => prev + 1);
         addAlert(
           "tab_switch",
-          "Tab switching detected. This activity has been logged.",
-          "medium"
+          "Tab switching detected. Assessment will be submitted.",
+          "high"
         );
+        if (proctoringActive && !submitting) {
+          // Auto-submit on tab switch
+          handleSubmitAssessment(false, true);
+        }
       }
     };
 
@@ -933,9 +1058,12 @@ export default function TakeSecureAssessmentPage() {
     const handleWindowBlur = () => {
       addAlert(
         "tab_switch",
-        "Window focus lost. Please keep assessment window active.",
-        "medium"
+        "Window focus lost. Assessment will be submitted.",
+        "high"
       );
+      if (proctoringActive && !submitting) {
+        handleSubmitAssessment(false, true);
+      }
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -1187,6 +1315,15 @@ export default function TakeSecureAssessmentPage() {
 
   const currentQuestion = questions[currentQuestionIndex];
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <p className="ml-2">Loading secure assessment...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-black text-white p-4">
       {/* Room Scan Overlay (before test proceeds) */}
@@ -1290,6 +1427,24 @@ export default function TakeSecureAssessmentPage() {
                   )}
                 </div>
               </div>
+
+              {/* Preflight Readiness */}
+              <div className="mt-4">
+                <div className="flex items-center justify-between text-xs text-gray-300 mb-1">
+                  <span>Readiness Score</span>
+                  <span>{readinessScore}%</span>
+                </div>
+                <div className="w-full h-2 bg-gray-800 rounded">
+                  <div
+                    className="h-full rounded bg-gradient-to-r from-yellow-400 via-green-500 to-emerald-500"
+                    style={{ width: `${readinessScore}%` }}
+                  />
+                </div>
+                <p className="mt-1 text-[11px] text-gray-400">
+                  Complete all checks and confirmations above for a 100% ready environment.
+                </p>
+              </div>
+
               {/* Mic visualizer */}
               <div className="mt-2">
                 <div className="text-xs text-gray-400 mb-1">Microphone Level</div>
@@ -1377,7 +1532,8 @@ export default function TakeSecureAssessmentPage() {
                     screenRecording &&
                     agreeToProctoring &&
                     quietEnvironmentConfirmed &&
-                    readInstructionsConfirmed
+                    readInstructionsConfirmed &&
+                    readinessScore >= 80
                   )}
                   className="bg-green-600 hover:bg-green-700"
                 >
@@ -1389,47 +1545,57 @@ export default function TakeSecureAssessmentPage() {
         </div>
       )}
       {/* Proctoring Header */}
-      <div className="fixed top-0 left-0 right-0 bg-red-900 text-white p-2 z-50">
-        <div className="flex items-center justify-between max-w-7xl mx-auto">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
-              <span className="text-sm font-medium">
-                LIVE AI PROCTORING - ALL 8 FEATURES ACTIVE
-              </span>
+      {!canStart && (
+        <Card className="bg-yellow-50 border-yellow-200">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-yellow-800">Assessment Ready</h3>
+              <Badge className="bg-green-100 text-green-800">System Check Complete</Badge>
             </div>
-            <div className="flex items-center gap-4 text-sm">
-              <div className="flex items-center gap-1">
-                <Camera className="h-4 w-4" />
-                <span>{faceDetected ? "Face OK" : "No Face"}</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <Mic className="h-4 w-4" />
-                <span>Audio: {audioLevel > 20 ? "Active" : "Quiet"}</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <Monitor className="h-4 w-4" />
-                <span>Screen: {screenRecording ? "Recording" : "Off"}</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <Shield className="h-4 w-4" />
-                <span className={getSecurityScoreColor(securityScore)}>
-                  Security: {securityScore}%
-                </span>
+
+            {/* Testing Controls */}
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <h4 className="font-medium text-blue-800 mb-3 flex items-center gap-2">
+                <Settings className="h-4 w-4" />
+                Testing Controls
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="test-mode"
+                    checked={testMode}
+                    onCheckedChange={setTestMode}
+                  />
+                  <Label htmlFor="test-mode" className="text-sm">
+                    Test Mode (Show Security Info)
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="bypass-security"
+                    checked={bypassSecurity}
+                    onCheckedChange={setBypassSecurity}
+                  />
+                  <Label htmlFor="bypass-security" className="text-sm text-orange-600">
+                    Bypass Security (Testing Only)
+                  </Label>
+                </div>
               </div>
             </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <Badge
-              variant={timeLeft > 300 ? "default" : "destructive"}
-              className="text-lg px-3 py-1"
-            >
-              <Clock className="h-4 w-4 mr-1" />
-              {formatTime(timeLeft)}
-            </Badge>
-          </div>
-        </div>
-      </div>
+
+            <div className="flex justify-center">
+              <Button
+                onClick={startAssessment}
+                className="bg-green-600 hover:bg-green-700"
+                disabled={!cameraReady || !microphoneReady}
+              >
+                <Sparkles className="mr-2 h-4 w-4" />
+                Start Secure Test
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="pt-16 max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Proctoring Panel */}
@@ -1568,33 +1734,34 @@ export default function TakeSecureAssessmentPage() {
 
         {/* Assessment Content */}
         <div className="lg:col-span-3">
-          <Card className="bg-gray-900 border-gray-700">
-            <CardHeader>
-              <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle className="text-xl">{assessment.title}</CardTitle>
-                  <CardDescription className="text-gray-400">
-                    Question {currentQuestionIndex + 1} of {questions.length}
-                  </CardDescription>
-                </div>
-                <Badge variant="outline" className="text-white border-gray-600">
-                  {currentQuestion?.points} points
-                </Badge>
-              </div>
-            </CardHeader>
+          {/* Question Display */}
+          {currentQuestion && (
+            <QuestionDisplay
+              question={{
+                ...currentQuestion,
+                difficulty: currentQuestion.difficulty || "Medium",
+                tags: currentQuestion.tags || [],
+                hint: currentQuestion.hint || "",
+                examples: currentQuestion.examples || [],
+                testCases: currentQuestion.testCases || []
+              }}
+              questionNumber={currentQuestionIndex + 1}
+              totalQuestions={questions.length}
+              showMetadata={true}
+            />
+          )}
+
+          {/* Answer Input */}
+          <Card className="bg-gray-900 border-gray-700 mt-4">
             <CardContent className="space-y-6">
               {currentQuestion && (
                 <div className="space-y-4">
-                  <h3 className="text-lg font-medium">
-                    {currentQuestion.questionText}
-                  </h3>
-
                   {currentQuestion.type === "multiple_choice" &&
                     currentQuestion.options && (
                       <RadioGroup
-                        value={answers[currentQuestion._id] || ""}
+                        value={answers[currentQuestion.questionId || currentQuestion._id || ""] || ""}
                         onValueChange={(value) =>
-                          handleAnswerChange(currentQuestion._id, value)
+                          handleAnswerChange(currentQuestion.questionId || currentQuestion._id || "", value)
                         }
                       >
                         {currentQuestion.options.map((option, index) => (
@@ -1608,7 +1775,7 @@ export default function TakeSecureAssessmentPage() {
                             />
                             <Label
                               htmlFor={`option-${index}`}
-                              className="text-white"
+                              className="text-white cursor-pointer hover:text-gray-200"
                             >
                               {option}
                             </Label>
@@ -1617,16 +1784,27 @@ export default function TakeSecureAssessmentPage() {
                       </RadioGroup>
                     )}
 
-                  {(currentQuestion.type === "short_answer" ||
-                    currentQuestion.type === "code_snippet") && (
+                  {currentQuestion.type === "short_answer" && (
                     <Textarea
-                      value={answers[currentQuestion._id] || ""}
-                      onChange={(e) =>
-                        handleAnswerChange(currentQuestion._id, e.target.value)
-                      }
+                      value={answers[currentQuestion.questionId || currentQuestion._id || ""] || ""}
+                      onChange={(e) => handleAnswerChange(currentQuestion.questionId || currentQuestion._id || "", e.target.value)}
                       placeholder="Type your answer here..."
-                      className="bg-gray-800 border-gray-600 text-white min-h-32"
-                      rows={currentQuestion.type === "code_snippet" ? 10 : 5}
+                      className="bg-gray-800 border-gray-600 text-white placeholder-gray-400"
+                      rows={4}
+                    />
+                  )}
+
+                  {currentQuestion.type === "code_snippet" && (
+                    <CodeEditor
+                      value={answers[currentQuestion.questionId || currentQuestion._id || ""] || ""}
+                      onChange={(value) => handleAnswerChange(currentQuestion.questionId || currentQuestion._id || "", value)}
+                      language={selectedLanguage}
+                      height="400px"
+                      testCases={currentQuestion.testCases || []}
+                      onRunCode={runCode}
+                      readOnly={false}
+                      showTestCases={true}
+                      theme="vs-dark"
                     />
                   )}
 

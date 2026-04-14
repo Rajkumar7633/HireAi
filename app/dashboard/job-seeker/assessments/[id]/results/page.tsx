@@ -44,6 +44,13 @@ interface AssessmentResult {
   correctAnswers: number;
   proctoringScore: number;
   proctoringReport: any;
+  proctoringSummary?: {
+    totalFaceMissingSeconds?: number;
+    multiFaceEventsCount?: number;
+    screenShareStops?: number;
+    totalAlerts?: number;
+    endedBy?: string;
+  } | null;
   questionResults: QuestionResult[];
   benchmarkData: BenchmarkData;
   candidateReview?: { rating: number; comment?: string; submittedAt: string } | null;
@@ -333,6 +340,67 @@ export default function AssessmentResultsPage() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Proctoring Summary (compact) */}
+            {results.proctoringSummary && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Shield className="h-5 w-5" />
+                    Proctoring Summary
+                  </CardTitle>
+                  <CardDescription>
+                    Key security signals captured during your assessment session.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                    <div className="space-y-1">
+                      <div className="text-muted-foreground">Total Alerts</div>
+                      <div className="text-lg font-semibold">
+                        {results.proctoringSummary.totalAlerts ??
+                          results.proctoringReport?.violations?.totalAlerts ??
+                          0}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-muted-foreground">Tab Switches</div>
+                      <div className="text-lg font-semibold">
+                        {results.proctoringReport?.violations?.tabSwitches ?? 0}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-muted-foreground">Screen Share Stops</div>
+                      <div className="text-lg font-semibold">
+                        {results.proctoringSummary.screenShareStops ?? 0}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                    <div className="space-y-1">
+                      <div className="text-muted-foreground">Face Missing (seconds)</div>
+                      <div className="text-lg font-semibold">
+                        {results.proctoringSummary.totalFaceMissingSeconds ?? 0}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-muted-foreground">Multi-face Events</div>
+                      <div className="text-lg font-semibold">
+                        {results.proctoringSummary.multiFaceEventsCount ?? 0}
+                      </div>
+                    </div>
+                    {results.proctoringSummary.endedBy && (
+                      <div className="space-y-1">
+                        <div className="text-muted-foreground">Session Ended By</div>
+                        <div className="text-sm font-medium capitalize">
+                          {results.proctoringSummary.endedBy}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             <Card>
               <CardHeader>
