@@ -305,7 +305,7 @@ export default function LoginPage() {
                     <input type="checkbox" className="h-4 w-4 rounded border-white/40 bg-white/40" />
                     Remember me
                   </label>
-                  <a href="#" className="text-blue-600 hover:underline">Forgot password?</a>
+                  <a href="/auth/forgot-password" className="text-blue-600 hover:underline">Forgot password?</a>
                 </div>
 
                 <Button type="submit" className="w-full h-11 text-base transition-transform active:scale-[0.99] hover:shadow-2xl bg-[var(--brand)] hover:opacity-90 text-white font-semibold tracking-wide" disabled={otpPhase ? verifying : loading}>

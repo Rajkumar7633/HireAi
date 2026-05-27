@@ -20,6 +20,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       .populate("jobDescriptionId", "title location")
       .populate("resumeId", "filename")
       .populate("testId")
+      .populate("jobSeekerId", "name email")
+      .populate("assessmentId", "title questions durationMinutes totalQuestions totalPoints")
 
     if (!application) {
       return NextResponse.json({ message: "Application not found" }, { status: 404 })

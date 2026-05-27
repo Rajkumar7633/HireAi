@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
       })
         .populate({
           path: "assessmentId",
-          select: "title description durationMinutes totalPoints questions",
+          select: "title description durationMinutes totalPoints questions securityFeatures requiresProctoring",
           options: { strictPopulate: false },
         })
         .select("assessmentId status assignedAt startedAt completedAt score answers timeSpent expiresAt")
@@ -70,6 +70,14 @@ export async function GET(request: NextRequest) {
           const assessment = app.assessmentId
 
           if (assessment) {
+            const defaultFeatures = [
+              "AI Face Recognition",
+              "Multi-Face Detection",
+              "Audio Monitoring",
+              "Screen Recording",
+              "Tab Switch Detection",
+              "Copy/Paste Block",
+            ]
             return {
               _id: assessment._id,
               title: assessment.title,
@@ -92,16 +100,14 @@ export async function GET(request: NextRequest) {
               timeSpent: app.timeSpent || 0,
               jobTitle: "Technical Assessment",
               companyName: "HireAI",
-              requiresProctoring: true,
-              securityFeatures: [
-                "AI Face Recognition",
-                "Screen Recording",
-                "Tab Switch Detection",
-                "Copy-Paste Prevention",
-              ],
+              requiresProctoring: typeof (assessment as any).requiresProctoring === "boolean" ? (assessment as any).requiresProctoring : true,
+              securityFeatures: ((assessment as any).securityFeatures && (assessment as any).securityFeatures.length > 0)
+                ? (assessment as any).securityFeatures
+                : defaultFeatures,
               applicationId: app._id,
             }
           }
+
           return null
         })
         .filter(Boolean)

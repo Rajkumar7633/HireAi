@@ -1,717 +1,411 @@
-"use client";
+"use client"
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useState, useEffect, useCallback } from "react"
+import { useParams, useRouter } from "next/navigation"
+import Link from "next/link"
+import { format } from "date-fns"
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+} from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { useToast } from "@/hooks/use-toast"
 import {
   Loader2,
   ArrowLeft,
-  BarChart2,
   Users,
-  Percent,
+  TrendingUp,
+  Trophy,
   AlertTriangle,
-  ListChecks,
-} from "lucide-react";
-
-interface TestAnalytics {
-  testId: string;
-  title: string;
-  totalAttempts: number;
-  averageScore: number;
-  passRate: number;
-  avgPlagiarismScore: number;
-}
-
-interface TestQuestion {
-  _id: string;
-  questionText: string;
-  type: "multiple_choice" | "short_answer" | "code_snippet";
-  points: number;
-}
-
-interface RecruiterJobSummary {
-  _id: string;
-  title: string;
-}
-
-interface SubmissionAnswer {
-  questionId: string;
-  questionType: string;
-  score: number;
-  passedTestCases?: number;
-  totalTestCases?: number;
-}
+  CheckCircle2,
+  XCircle,
+  RefreshCw,
+  Zap,
+  BarChart3,
+  Flag,
+} from "lucide-react"
 
 interface Submission {
-  _id: string;
-  percentage?: number;
-  plagiarismScore?: number;
-  createdAt: string;
-  roundStage?: string;
-  attemptNumber?: number;
-  candidateId?: {
-    name?: string;
-    email?: string;
-  };
-  applicationId?: {
-    status?: string;
-    testScore?: number;
-  };
-  answers?: SubmissionAnswer[];
+  _id: string
+  candidateId: { _id: string; name: string; email: string } | null
+  applicationId: { _id: string; status: string; testScore?: number } | null
+  percentage: number
+  totalScore: number
+  plagiarismScore: number
+  plagiarismFlags: string[]
+  roundStage?: string
+  attemptNumber: number
+  submittedAt: string
+  status: string
+}
+
+interface Analytics {
+  testId: string
+  title: string
+  totalAttempts: number
+  averageScore: number
+  passRate: number
+  avgPlagiarismScore: number
 }
 
 export default function TestResultsPage() {
-  const params = useParams();
-  const router = useRouter();
-  const rawId = (params as any)?.id as string | undefined;
-  const testId = rawId || "";
+  const params = useParams()
+  const router = useRouter()
+  const testId = params.id as string
+  const { toast } = useToast()
 
-  const [analytics, setAnalytics] = useState<TestAnalytics | null>(null);
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [questions, setQuestions] = useState<TestQuestion[]>([]);
-  const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
-  const [jobs, setJobs] = useState<RecruiterJobSummary[]>([]);
-  const [assignJobId, setAssignJobId] = useState<string>("");
-  const [assignEmail, setAssignEmail] = useState<string>("");
-  const [assignLoading, setAssignLoading] = useState(false);
-  const [assignError, setAssignError] = useState<string | null>(null);
-  const [assignSuccess, setAssignSuccess] = useState<string | null>(null);
-  const [autoMinScore, setAutoMinScore] = useState(70);
-  const [autoMaxPlag, setAutoMaxPlag] = useState(40);
-  const [autoTopN, setAutoTopN] = useState(3);
-  const [autoLoading, setAutoLoading] = useState(false);
-  const [autoMessage, setAutoMessage] = useState<string | null>(null);
+  const [submissions, setSubmissions] = useState<Submission[]>([])
+  const [analytics, setAnalytics] = useState<Analytics | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [autoSelecting, setAutoSelecting] = useState(false)
+  const [sortBy, setSortBy] = useState<"score" | "date" | "plagiarism">("score")
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
+  const [autoSelectOpen, setAutoSelectOpen] = useState(false)
 
-  const loadResults = async () => {
-    if (!testId) return;
-
-      setLoading(true);
-      setError(null);
-      try {
-        const [analyticsRes, submissionsRes, testRes, jobsRes] = await Promise.all([
-          fetch(`/api/tests/${testId}/analytics`),
-          fetch(`/api/tests/${testId}/submissions`),
-          fetch(`/api/tests/${testId}`),
-          fetch("/api/job-descriptions/my-jobs"),
-        ]);
-
-        if (!analyticsRes.ok) {
-          const e = await analyticsRes.json().catch(() => ({}));
-          throw new Error(e.message || "Failed to load analytics");
-        }
-        if (!submissionsRes.ok) {
-          const e = await submissionsRes.json().catch(() => ({}));
-          throw new Error(e.message || "Failed to load submissions");
-        }
-
-        if (!testRes.ok) {
-          const e = await testRes.json().catch(() => ({}));
-          throw new Error(e.message || "Failed to load test definition");
-        }
-
-        if (!jobsRes.ok) {
-          const e = await jobsRes.json().catch(() => ({}));
-          throw new Error(e.message || "Failed to load jobs");
-        }
-
-        const analyticsData = (await analyticsRes.json()) as TestAnalytics;
-        const submissionsData = (await submissionsRes.json()) as Submission[];
-        const testData = (await testRes.json()) as { questions?: TestQuestion[] };
-        const jobsData = (await jobsRes.json()) as { jobs?: RecruiterJobSummary[] };
-
-        setAnalytics(analyticsData);
-        setSubmissions(submissionsData);
-        setQuestions((testData.questions as TestQuestion[]) || []);
-        setJobs(jobsData.jobs || []);
-      } catch (err: any) {
-        console.error("Error loading test results", err);
-        setError(err.message || "Something went wrong while loading results.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-  useEffect(() => {
-    void loadResults();
-  }, [testId]);
-
-  // Lightweight polling so recruiters see near real-time updates
-  useEffect(() => {
-    if (!testId) return;
-
-    const interval = setInterval(() => {
-      void loadResults();
-    }, 15000);
-
-    return () => clearInterval(interval);
-  }, [testId]);
-
-  const bandForScore = (score: number) => {
-    if (score >= 85) return "Excellent";
-    if (score >= 70) return "Good";
-    if (score >= 50) return "Fair";
-    return "Needs review";
-  };
-
-  const plagiarismBand = (value: number | undefined) => {
-    if (value == null) return "Not checked";
-    if (value >= 80) return "High";
-    if (value >= 40) return "Medium";
-    if (value > 0) return "Low";
-    return "Clean";
-  };
-
-  const formatStageLabel = (stage?: string) => {
-    if (!stage) return "-";
-    const map: Record<string, string> = {
-      application: "Application Submitted",
-      hr_shortlist: "HR Shortlisting",
-      coding_round: "Coding Test",
-      mcq_round: "MCQ/CS Test",
-      advanced_round: "Advanced Test",
-      tech_round_1: "Tech Round 1",
-      tech_round_2: "Tech Round 2",
-      tech_round_3: "Tech Round 3",
-      hr_round: "HR/Behaviour Round",
-      offer: "Final Offer",
-      test_round: "Test Round",
-    };
-    return map[stage] || stage;
-  };
-
-  const selectedSubmission =
-    selectedSubmissionId && submissions.length > 0
-      ? submissions.find((s) => s._id === selectedSubmissionId) || null
-      : null;
-
-  const findQuestion = (id: string) =>
-    questions.find((q) => q._id === id) || null;
-
-  const handleAssign = async () => {
-    setAssignError(null);
-    setAssignSuccess(null);
-
-    if (!assignJobId || !assignEmail) {
-      setAssignError("Select a job and enter candidate email.");
-      return;
-    }
-
+  const fetchData = useCallback(async () => {
+    setLoading(true)
     try {
-      setAssignLoading(true);
-      const res = await fetch("/api/tests/invite-by-email", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ jobId: assignJobId, testId, email: assignEmail }),
-      });
+      const [subRes, analyticsRes] = await Promise.allSettled([
+        fetch(`/api/tests/${testId}/submissions`, { cache: "no-store" }),
+        fetch(`/api/tests/${testId}/analytics`, { cache: "no-store" }),
+      ])
 
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        setAssignError(data.message || "Failed to assign test.");
-        return;
+      if (subRes.status === "fulfilled" && subRes.value.ok) {
+        const data: Submission[] = await subRes.value.json()
+        setSubmissions(data)
+      } else {
+        const err = subRes.status === "fulfilled"
+          ? await subRes.value.json().catch(() => ({}))
+          : {}
+        toast({
+          title: "Error loading submissions",
+          description: (err as any).message || "Could not fetch submissions.",
+          variant: "destructive",
+        })
       }
 
-      setAssignSuccess("Test assigned successfully.");
-      setAssignEmail("");
-    } catch (err: any) {
-      setAssignError(err?.message || "Failed to assign test.");
+      if (analyticsRes.status === "fulfilled" && analyticsRes.value.ok) {
+        const data: Analytics = await analyticsRes.value.json()
+        setAnalytics(data)
+      }
+    } catch (err) {
+      console.error("Error fetching test results:", err)
+      toast({ title: "Network Error", description: "Could not load results.", variant: "destructive" })
     } finally {
-      setAssignLoading(false);
+      setLoading(false)
     }
-  };
+  }, [testId, toast])
 
-  const handleAutoSelect = async () => {
-    setAutoMessage(null);
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
+
+  const handleAutoSelect = async (minScore: number, topN: number) => {
+    setAutoSelecting(true)
     try {
-      setAutoLoading(true);
       const res = await fetch(`/api/tests/${testId}/auto-select`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          minScore: autoMinScore,
-          maxPlagiarism: autoMaxPlag,
-          topN: autoTopN,
-        }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setAutoMessage(data.message || "Auto-select failed.");
-        return;
+        body: JSON.stringify({ minScore, maxPlagiarism: 40, topN }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        toast({
+          title: "Auto-select Complete",
+          description: `${data.selectedCount} candidate(s) shortlisted and notified via email.`,
+        })
+        fetchData()
+      } else {
+        const err = await res.json().catch(() => ({}))
+        toast({ title: "Auto-select Failed", description: (err as any).msg || "Unknown error.", variant: "destructive" })
       }
-
-      const count = data.selectedCount ?? 0;
-      setAutoMessage(`Auto-select completed. Shortlisted ${count} candidate${
-        count === 1 ? "" : "s"
-      }.`);
-
-      // Refresh results after auto-select
-      void loadResults();
-    } catch (err: any) {
-      setAutoMessage(err?.message || "Auto-select failed.");
+    } catch (err) {
+      toast({ title: "Network Error", description: "Could not run auto-select.", variant: "destructive" })
     } finally {
-      setAutoLoading(false);
+      setAutoSelecting(false)
     }
-  };
+  }
 
+  const scoreBadge = (score: number) => {
+    if (score >= 80) return <Badge className="bg-green-100 text-green-800 border-green-200">{score}% 🏆</Badge>
+    if (score >= 70) return <Badge className="bg-blue-100 text-blue-800 border-blue-200">{score}% ✅</Badge>
+    if (score >= 50) return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">{score}% ⚠️</Badge>
+    return <Badge className="bg-red-100 text-red-800 border-red-200">{score}% ❌</Badge>
+  }
+
+  const plagiarismBadge = (score: number, flags: string[]) => {
+    const highFlag = flags.includes("high_similarity_to_other_candidate")
+    if (highFlag || score >= 80) return <Badge variant="destructive" className="flex items-center gap-1"><Flag className="h-3 w-3" />{score}%</Badge>
+    if (score >= 40) return <Badge className="bg-orange-100 text-orange-800">{score}%</Badge>
+    return <Badge variant="outline" className="text-green-700">{score}%</Badge>
+  }
+
+  const sortedSubmissions = [...submissions].sort((a, b) => {
+    let valA: number, valB: number
+    if (sortBy === "score") { valA = a.percentage; valB = b.percentage }
+    else if (sortBy === "plagiarism") { valA = a.plagiarismScore; valB = b.plagiarismScore }
+    else { valA = new Date(a.submittedAt).getTime(); valB = new Date(b.submittedAt).getTime() }
+    return sortDir === "desc" ? valB - valA : valA - valB
+  })
+
+  const toggleSort = (col: "score" | "date" | "plagiarism") => {
+    if (sortBy === col) setSortDir((d) => (d === "desc" ? "asc" : "desc"))
+    else { setSortBy(col); setSortDir("desc") }
+  }
+
+  // ─── Loading ───────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="mr-2 h-5 w-5 animate-spin text-primary" />
-        <span className="text-sm text-muted-foreground">Loading test results...</span>
+      <div className="flex flex-col items-center justify-center h-full gap-4">
+        <Loader2 className="h-10 w-10 animate-spin text-purple-600" />
+        <p className="text-muted-foreground">Loading test results...</p>
       </div>
-    );
+    )
   }
 
-  if (error) {
-    return (
-      <div className="p-6 max-w-3xl mx-auto space-y-4">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => router.push("/dashboard/recruiter/tests")}
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to tests
-        </Button>
-        <Card>
-          <CardHeader>
-            <CardTitle>Unable to load results</CardTitle>
-            <CardDescription>{error}</CardDescription>
-          </CardHeader>
-        </Card>
-      </div>
-    );
-  }
-
+  // ─── Main UI ───────────────────────────────────────────────────────────────
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => router.push("/dashboard/recruiter/tests")}
-            className="mb-2 pl-0"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back to tests
+    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/dashboard/recruiter/tests">
+              <ArrowLeft className="mr-2 h-4 w-4" /> Back to Tests
+            </Link>
           </Button>
-          <h1 className="text-2xl font-bold">
-            {analytics?.title || "Test Results"}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Overview of candidate performance, attempts, and plagiarism checks.
-          </p>
+          <div>
+            <h1 className="text-2xl font-bold">{analytics?.title || "Test Results"}</h1>
+            <p className="text-sm text-muted-foreground">Submission analytics and candidate rankings</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={fetchData}>
+            <RefreshCw className="mr-2 h-4 w-4" /> Refresh
+          </Button>
+          {/* Auto-select dialog */}
+          <Dialog open={autoSelectOpen} onOpenChange={setAutoSelectOpen}>
+            <DialogTrigger asChild>
+              <Button
+                size="sm"
+                className="bg-purple-600 hover:bg-purple-700"
+                disabled={autoSelecting || submissions.length === 0}
+              >
+                {autoSelecting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Zap className="mr-2 h-4 w-4" />
+                )}
+                Auto-Select Top Candidates
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Auto-Select Top Candidates</DialogTitle>
+                <DialogDescription>
+                  This will shortlist the top 3 candidates with score ≥ 70% and plagiarism ≤ 40%, 
+                  update their application status to <strong>Shortlisted</strong>, and 
+                  send them a congratulations email automatically.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex justify-end gap-2 mt-4">
+                <Button variant="outline" onClick={() => setAutoSelectOpen(false)}>Cancel</Button>
+                <Button
+                  onClick={() => {
+                    handleAutoSelect(70, 3);
+                    setAutoSelectOpen(false);
+                  }}
+                  className="bg-purple-600 hover:bg-purple-700"
+                >
+                  Confirm & Shortlist
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
-      {/* Quick assign by email */}
+      {/* Analytics cards */}
+      {analytics && (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <Card className="border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Total Attempts</p>
+                <p className="text-3xl font-bold text-blue-700">{analytics.totalAttempts}</p>
+              </div>
+              <Users className="h-10 w-10 text-blue-400" />
+            </CardContent>
+          </Card>
+          <Card className="border-green-200 bg-gradient-to-br from-green-50 to-emerald-50">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Average Score</p>
+                <p className="text-3xl font-bold text-green-700">{analytics.averageScore}%</p>
+              </div>
+              <BarChart3 className="h-10 w-10 text-green-400" />
+            </CardContent>
+          </Card>
+          <Card className="border-yellow-200 bg-gradient-to-br from-yellow-50 to-orange-50">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Pass Rate (≥70%)</p>
+                <p className="text-3xl font-bold text-yellow-700">{analytics.passRate}%</p>
+              </div>
+              <TrendingUp className="h-10 w-10 text-yellow-400" />
+            </CardContent>
+          </Card>
+          <Card className="border-purple-200 bg-gradient-to-br from-purple-50 to-pink-50">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Avg Plagiarism</p>
+                <p className="text-3xl font-bold text-purple-700">{analytics.avgPlagiarismScore}%</p>
+              </div>
+              <Trophy className="h-10 w-10 text-purple-400" />
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Submissions table */}
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Assign this test</CardTitle>
-          <CardDescription className="text-xs">
-            Select a job and enter a candidate's email to assign this test.
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Candidate Submissions
+            <Badge variant="secondary" className="ml-2">{submissions.length}</Badge>
+          </CardTitle>
+          <CardDescription>
+            Click column headers to sort. Plagiarism ≥ 80% is flagged 🚩.
           </CardDescription>
         </CardHeader>
-        <CardContent className="pt-0 space-y-3">
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-1">
-              <span className="text-xs font-medium text-muted-foreground">
-                Job
-              </span>
-              <Select
-                value={assignJobId}
-                onValueChange={(v) => setAssignJobId(v)}
-              >
-                <SelectTrigger className="h-9 text-xs">
-                  <SelectValue placeholder="Select job" />
-                </SelectTrigger>
-                <SelectContent>
-                  {jobs.map((job) => (
-                    <SelectItem key={job._id} value={job._id}>
-                      {job.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        <CardContent>
+          {submissions.length === 0 ? (
+            <div className="py-16 text-center text-muted-foreground space-y-3">
+              <Users className="h-12 w-12 mx-auto opacity-30" />
+              <p className="text-lg font-medium">No submissions yet</p>
+              <p className="text-sm">Candidates haven't completed this test yet.</p>
             </div>
-            <div className="space-y-1">
-              <span className="text-xs font-medium text-muted-foreground">
-                Candidate email
-              </span>
-              <Input
-                type="email"
-                placeholder="candidate@example.com"
-                value={assignEmail}
-                onChange={(e) => setAssignEmail(e.target.value)}
-                className="h-9 text-xs"
-              />
-            </div>
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 flex-1 text-[11px] text-muted-foreground">
-              {assignError && (
-                <span className="text-destructive">{assignError}</span>
-              )}
-              {!assignError && assignSuccess && (
-                <>
-                  <span className="text-emerald-600">{assignSuccess}</span>
-                  {assignJobId && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-2 text-[11px]"
-                      onClick={() =>
-                        router.push(`/dashboard/recruiter/jobs/${assignJobId}`)
-                      }
+          ) : (
+            <div className="overflow-x-auto rounded-md border border-gray-200">
+              <table className="min-w-full text-sm divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Candidate</th>
+                    <th
+                      className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-purple-700 select-none"
+                      onClick={() => toggleSort("score")}
                     >
-                      View job
-                    </Button>
-                  )}
-                </>
-              )}
-            </div>
-            <Button
-              size="sm"
-              className="text-xs"
-              onClick={handleAssign}
-              disabled={assignLoading}
-            >
-              {assignLoading && (
-                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-              )}
-              Assign test
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Summary cards + auto-select controls */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Users className="h-4 w-4 text-primary" />
-              <CardTitle className="text-sm">Total Attempts</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <p className="text-2xl font-semibold">
-              {analytics?.totalAttempts ?? 0}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <div className="flex items-center gap-2">
-              <BarChart2 className="h-4 w-4 text-emerald-600" />
-              <CardTitle className="text-sm">Average Score</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="flex items-baseline gap-2">
-              <p className="text-2xl font-semibold">
-                {analytics?.averageScore ?? 0}%
-              </p>
-              {analytics && (
-                <Badge variant="outline" className="text-xs">
-                  {bandForScore(analytics.averageScore)}
-                </Badge>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Percent className="h-4 w-4 text-amber-600" />
-              <CardTitle className="text-sm">Pass Rate</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="flex items-baseline gap-2">
-              <p className="text-2xl font-semibold">
-                {analytics?.passRate ?? 0}%
-              </p>
-              {analytics && (
-                <span className="text-xs text-muted-foreground">
-                  Threshold  70%
-                </span>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Plagiarism summary */}
-      <Card>
-        <CardHeader className="pb-2 flex flex-row items-center justify-between">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-red-500" />
-            <CardTitle className="text-sm">Plagiarism Overview</CardTitle>
-          </div>
-          {analytics && (
-            <Badge
-              variant={
-                analytics.avgPlagiarismScore >= 80
-                  ? "destructive"
-                  : analytics.avgPlagiarismScore >= 40
-                  ? "secondary"
-                  : "outline"
-              }
-            >
-              Avg: {analytics.avgPlagiarismScore}% (
-              {plagiarismBand(analytics.avgPlagiarismScore)})
-            </Badge>
-          )}
-        </CardHeader>
-        <CardContent className="pt-0 text-xs text-muted-foreground">
-          <p>
-            Scores are based on similarity between submissions. High values
-            indicate potentially copied code and should be reviewed manually.
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Submissions table + breakdown */}
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.3fr)]">
-        <Card className="order-1 lg:order-none">
-          <CardHeader>
-            <CardTitle className="text-base">Submissions</CardTitle>
-            <CardDescription>
-              Each row is a single attempt. Click to see question-level performance.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0">
-            {submissions.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-6">
-                No submissions yet. Once candidates complete this test, their
-                results will appear here.
-              </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-xs text-muted-foreground">
-                      <th className="py-2 pr-4 text-left">Candidate</th>
-                      <th className="py-2 px-4 text-left">Round</th>
-                      <th className="py-2 px-4 text-left">Attempt</th>
-                      <th className="py-2 px-4 text-left">Score</th>
-                      <th className="py-2 px-4 text-left">Pass</th>
-                      <th className="py-2 px-4 text-left">Status</th>
-                      <th className="py-2 px-4 text-left">Plagiarism</th>
-                      <th className="py-2 px-4 text-left">Submitted</th>
+                      Score {sortBy === "score" ? (sortDir === "desc" ? "↓" : "↑") : ""}
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Progress</th>
+                    <th
+                      className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-purple-700 select-none"
+                      onClick={() => toggleSort("plagiarism")}
+                    >
+                      Plagiarism {sortBy === "plagiarism" ? (sortDir === "desc" ? "↓" : "↑") : ""}
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Flags</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th
+                      className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-purple-700 select-none"
+                      onClick={() => toggleSort("date")}
+                    >
+                      Submitted {sortBy === "date" ? (sortDir === "desc" ? "↓" : "↑") : ""}
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Attempt</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {sortedSubmissions.map((sub, idx) => (
+                    <tr
+                      key={sub._id}
+                      className={sub.plagiarismScore >= 80 ? "bg-red-50" : sub.percentage >= 70 ? "bg-green-50/30" : ""}
+                    >
+                      <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{idx + 1}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div>
+                          <p className="font-semibold text-gray-900">{sub.candidateId?.name || "Unknown"}</p>
+                          <p className="text-xs text-gray-500">{sub.candidateId?.email || "—"}</p>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">{scoreBadge(sub.percentage)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap w-32">
+                        <Progress
+                          value={sub.percentage}
+                          className="h-2"
+                        />
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {plagiarismBadge(sub.plagiarismScore, sub.plagiarismFlags)}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {sub.plagiarismFlags && sub.plagiarismFlags.length > 0 ? (
+                          <div className="flex flex-col gap-0.5">
+                            {sub.plagiarismFlags.map((flag, i) => (
+                              <Badge key={i} variant="outline" className="text-[10px] text-orange-700 border-orange-200 bg-orange-50 w-fit">
+                                {flag.replace(/_/g, " ")}
+                              </Badge>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {sub.percentage >= 70 ? (
+                          <Badge className="bg-green-100 text-green-800 flex w-fit items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3" /> Passed
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-red-700 border-red-200 bg-red-50 flex w-fit items-center gap-1">
+                            <XCircle className="h-3 w-3" /> Failed
+                          </Badge>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
+                        {format(new Date(sub.submittedAt), "MMM dd, yyyy HH:mm")}
+                      </td>
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
+                        <Badge variant="secondary">#{sub.attemptNumber}</Badge>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {submissions.map((s) => {
-                      const score = s.percentage ?? s.applicationId?.testScore ?? 0;
-                      const passed = score >= 70;
-                      const status = s.applicationId?.status || "--";
-                      const plagiarism = s.plagiarismScore ?? 0;
-                      const roundLabel = formatStageLabel(s.roundStage);
-                      const attempt = s.attemptNumber ?? 1;
-                      const isSelected = selectedSubmissionId === s._id;
-                      return (
-                        <tr
-                          key={s._id}
-                          className={`border-b last:border-0 cursor-pointer transition-colors hover:bg-muted/40 ${
-                            isSelected ? "bg-muted/60" : ""
-                          }`}
-                          onClick={() =>
-                            setSelectedSubmissionId(
-                              isSelected ? null : s._id,
-                            )
-                          }
-                        >
-                          <td className="py-2 pr-4 align-middle">
-                            <div className="flex flex-col">
-                              <span className="font-medium text-sm">
-                                {s.candidateId?.name || s.candidateId?.email || "Unknown"}
-                              </span>
-                              {s.candidateId?.email && (
-                                <span className="text-[11px] text-muted-foreground">
-                                  {s.candidateId.email}
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-2 px-4 align-middle text-xs text-muted-foreground">
-                            {roundLabel}
-                          </td>
-                          <td className="py-2 px-4 align-middle text-xs text-muted-foreground">
-                            #{attempt}
-                          </td>
-                          <td className="py-2 px-4 align-middle">
-                            <span className="font-medium">{score}%</span>
-                          </td>
-                          <td className="py-2 px-4 align-middle">
-                            <Badge
-                              variant={passed ? "secondary" : "outline"}
-                              className="text-[11px]"
-                            >
-                              {passed ? "Pass" : "Review"}
-                            </Badge>
-                          </td>
-                          <td className="py-2 px-4 align-middle">
-                            {status === "Shortlisted" ? (
-                              <Badge variant="secondary" className="text-[11px] bg-emerald-600 text-white">
-                                Shortlisted
-                              </Badge>
-                            ) : (
-                              <span className="text-[11px] text-muted-foreground">
-                                {status}
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2 px-4 align-middle">
-                            <span className="flex items-center gap-2">
-                              <span>{plagiarism}%</span>
-                              <Badge
-                                variant={
-                                  plagiarism >= 80
-                                    ? "destructive"
-                                    : plagiarism >= 40
-                                    ? "secondary"
-                                    : "outline"
-                                }
-                                className="text-[11px]"
-                              >
-                                {plagiarismBand(plagiarism)}
-                              </Badge>
-                            </span>
-                          </td>
-                          <td className="py-2 px-4 align-middle text-xs text-muted-foreground">
-                            {new Date(s.createdAt).toLocaleString()}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Plagiarism warning */}
+      {submissions.some((s) => s.plagiarismScore >= 80) && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-4 flex items-center gap-3">
+            <AlertTriangle className="h-5 w-5 text-red-600 shrink-0" />
+            <div>
+              <p className="font-semibold text-red-800">Plagiarism Detected</p>
+              <p className="text-sm text-red-700">
+                One or more submissions have high similarity scores (≥80%). Please review these carefully before shortlisting.
+              </p>
+            </div>
           </CardContent>
         </Card>
-
-        <Card className="order-2 lg:order-none">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <ListChecks className="h-4 w-4 text-primary" />
-              Question Breakdown
-            </CardTitle>
-            <CardDescription className="text-xs">
-              See how this candidate performed on each question.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0">
-            {!selectedSubmission ? (
-              <p className="py-6 text-sm text-muted-foreground">
-                Select a submission from the table to view per-question results.
-              </p>
-            ) : !selectedSubmission.answers ||
-              selectedSubmission.answers.length === 0 ? (
-              <p className="py-6 text-sm text-muted-foreground">
-                No detailed answers were recorded for this attempt.
-              </p>
-            ) : (
-              <div className="space-y-3 max-h-[420px] overflow-auto pr-1">
-                {selectedSubmission.answers.map((answer, idx) => {
-                  const q = findQuestion(answer.questionId);
-                  const score = answer.score ?? 0;
-                  const band = bandForScore(
-                    questions.length > 0 && q?.points
-                      ? Math.round((score / q.points) * 100)
-                      : score,
-                  );
-                  const isCode = answer.questionType === "code_snippet";
-                  return (
-                    <div
-                      key={`${selectedSubmission._id}-${answer.questionId}-${idx}`}
-                      className="rounded-md border p-3 text-xs space-y-1 bg-muted/40"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="space-y-0.5">
-                          <div className="flex items-center gap-2">
-                            <span className="rounded bg-primary/5 px-2 py-0.5 text-[10px] font-medium text-primary">
-                              Q{idx + 1}
-                            </span>
-                            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                              {answer.questionType.replace("_", " ")}
-                            </span>
-                          </div>
-                          <p className="text-[11px] font-medium">
-                            {q?.questionText || "Question text not available"}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs font-semibold">
-                            {score}
-                            {q?.points != null ? ` / ${q.points}` : " pts"}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground">
-                            {band}
-                          </p>
-                        </div>
-                      </div>
-
-                      {isCode && (
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2 flex-1 text-[11px] text-muted-foreground">
-                            {assignError && (
-                              <span className="text-destructive">{assignError}</span>
-                            )}
-                            {!assignError && assignSuccess && (
-                              <>
-                                <span className="text-emerald-600">{assignSuccess}</span>
-                                {assignJobId && (
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 px-2 text-[11px]"
-                                    onClick={() =>
-                                      router.push(`/dashboard/recruiter/jobs/${assignJobId}`)
-                                    }
-                                  >
-                                    View job
-                                  </Button>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      )}
     </div>
-  );
+  )
 }

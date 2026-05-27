@@ -13,6 +13,9 @@ coverage/
 # Editor
 .vscode/
 .idea/
+.env
+.env.local
+.env.docker
 
 # Ignore uploaded resumes
 uploads/resumes/

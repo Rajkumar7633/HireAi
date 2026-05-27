@@ -315,7 +315,17 @@ export default function AssessmentsManagementPage() {
                           AI Proctored
                         </Badge>
                       )}
+                      {assessment.securityFeatures?.length > 0 && (
+                        <Badge
+                          variant="outline"
+                          className="text-purple-600 bg-purple-50 border-purple-200"
+                        >
+                          <Shield className="h-3 w-3 mr-1" />
+                          {assessment.securityFeatures.length} Security Feature{assessment.securityFeatures.length !== 1 ? "s" : ""}
+                        </Badge>
+                      )}
                     </div>
+
                   </div>
                   <div className="text-right">
                     <div className="text-2xl font-bold text-green-600">

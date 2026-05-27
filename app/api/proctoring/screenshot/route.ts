@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
+import Application from "@/models/Application"
 
 export async function POST(request: NextRequest) {
   try {
@@ -59,8 +60,20 @@ export async function POST(request: NextRequest) {
     // const uploadResult = await uploadToCloudStorage(base64Data, screenshotRecord.url)
     console.log("[v0] Screenshot would be uploaded to:", screenshotRecord.url)
 
-    // In production: await ScreenshotRecord.create(screenshotRecord)
-    console.log("[v0] Screenshot metadata stored:", screenshotRecord)
+    // Store in Application's proctoringData.screenshots
+    await Application.updateOne(
+      {
+        jobSeekerId: session.userId,
+        assessmentId,
+      },
+      {
+        $push: {
+          "proctoringData.screenshots": screenshot,
+        },
+      }
+    )
+
+    console.log("[v0] Screenshot stored in MongoDB Application document")
 
     return NextResponse.json({
       success: true,

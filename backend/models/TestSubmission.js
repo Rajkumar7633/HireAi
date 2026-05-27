@@ -91,6 +91,12 @@ const TestSubmissionSchema = new mongoose.Schema(
       default: 0,
     },
     plagiarismFlags: [String],
+    integrityAudit: {
+      score: { type: Number, default: 100 },
+      summary: { type: String, default: "No anomalies detected." },
+      flags: [String],
+      logs: [mongoose.Schema.Types.Mixed]
+    },
     startedAt: {
       type: Date,
       default: Date.now,

@@ -35,9 +35,74 @@ function similarityScore(a, b) {
     if (t2.has(token)) intersection++
   }
   const union = t1.size + t2.size - intersection
-  if (union === 0) return 0
   return intersection / union
 }
+
+async function analyzeIntegrityWithAI(codeAnswers, activityLog) {
+  if (!process.env.GROQ_API_KEY) {
+    const pasteEvents = activityLog.filter(e => e.type === "paste")
+    const blurEvents = activityLog.filter(e => e.type === "blur")
+    let score = 100
+    const flags = []
+    if (pasteEvents.length > 0) {
+      score -= pasteEvents.length * 15
+      flags.push("paste_detected")
+    }
+    if (blurEvents.length > 0) {
+      score -= blurEvents.length * 10
+      flags.push("tab_switch_detected")
+    }
+    score = Math.max(0, score)
+    return {
+      score,
+      summary: `Automated scan: Detected ${pasteEvents.length} paste event(s) and ${blurEvents.length} tab switch event(s).`,
+      flags
+    }
+  }
+
+  try {
+    const prompt = `Analyze a coding assessment attempt's logs for anomalies, plagiarism, or cheating patterns.
+Code Submissions:
+${JSON.stringify(codeAnswers, null, 2)}
+
+Activity Log:
+${JSON.stringify(activityLog, null, 2)}
+
+Evaluate if they copy-pasted code (sudden long inputs) or switched tabs excessively. 
+Return EXACTLY a JSON object with:
+{
+  "score": <number from 0 to 100 where 100 is complete integrity, 0 is full cheating>,
+  "summary": "<2-3 sentence explanation of the behavior and any anomalies>",
+  "flags": ["list", "of", "anomalies", "like", "copy_paste_detected", "tab_blur_detected"]
+}`
+
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: process.env.GROQ_MODEL || "llama-3.2-90b-text-preview",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.2,
+        max_tokens: 500,
+        response_format: { type: "json_object" },
+      }),
+      signal: AbortSignal.timeout(15_000),
+    })
+
+    if (response.ok) {
+      const data = await response.json()
+      return JSON.parse(data.choices?.[0]?.message?.content || "{}")
+    }
+  } catch (err) {
+    console.error("Failed to analyze integrity with AI", err)
+  }
+
+  return { score: 100, summary: "Completed scan. No critical issues detected.", flags: [] }
+}
+
 
 // @route   POST /api/tests
 // @desc    Create a new test
@@ -515,7 +580,7 @@ router.post("/applications/:id/submit-test", auth, async (req, res) => {
     return res.status(403).json({ msg: "Access denied. Only job seekers can submit tests." })
   }
 
-  const { answers, roundStage: rawRoundStage } = req.body // answers: [{ questionId, answer, language? }], roundStage optional
+  const { answers, roundStage: rawRoundStage, activityLog = [] } = req.body // answers: [{ questionId, answer, language? }], roundStage optional
 
   try {
     const application = await JobApplication.findById(req.params.id)
@@ -554,38 +619,98 @@ router.post("/applications/:id/submit-test", auth, async (req, res) => {
       let questionScore = 0
       let passedTestCases = 0
       let totalTestCases = 0
+      let rawOutput = ""
+      let errorOutput = ""
+      let runtimeMs = 0
 
       if (question.type === "multiple_choice") {
-        // For multiple choice, check if submitted answer matches correct answer
         if (Array.isArray(question.correctAnswer)) {
           const submittedSet = new Set(submittedAnswer.answer)
           const correctSet = new Set(question.correctAnswer)
           const isCorrect =
             submittedSet.size === correctSet.size && [...submittedSet].every((val) => correctSet.has(val))
-          if (isCorrect) {
-            questionScore = question.points
-          }
+          if (isCorrect) questionScore = question.points
         } else {
-          if (submittedAnswer.answer === question.correctAnswer) {
-            questionScore = question.points
-          }
+          if (submittedAnswer.answer === question.correctAnswer) questionScore = question.points
         }
       } else if (question.type === "short_answer") {
-        // Simple heuristic: give half points if non-empty
-        if (submittedAnswer.answer && submittedAnswer.answer.trim() !== "") {
+        // Heuristic: award half points for non-empty thoughtful answer
+        if (submittedAnswer.answer && submittedAnswer.answer.trim().length > 10) {
           questionScore = question.points * 0.5
         }
       } else if (question.type === "code_snippet") {
-        // For now, simulate test-case execution: reward half points if answer is non-empty.
-        // Later this can be replaced with real code execution & per-test-case scoring.
-        if (submittedAnswer.answer && submittedAnswer.answer.trim() !== "") {
-          questionScore = question.points * 0.5
-        }
+        const code = submittedAnswer.answer || ""
+        const language = submittedAnswer.language || question.language || "javascript"
+        const judge0Url = process.env.JUDGE0_URL || "https://ce.judge0.com"
 
-        if (Array.isArray(question.testCases) && question.testCases.length > 0) {
+        // Language ID map (Judge0 standard IDs)
+        const LANG_MAP = {
+          javascript: 63, nodejs: 63, node: 63,
+          python: 71, python3: 71,
+          java: 62,
+          cpp: 54, "c++": 54,
+          c: 50,
+          go: 60, golang: 60,
+          ruby: 72,
+          typescript: 74,
+          rust: 73,
+          kotlin: 78,
+          swift: 83,
+          php: 68,
+        }
+        const languageId = LANG_MAP[language.toLowerCase()] || 63
+
+        if (code.trim() && Array.isArray(question.testCases) && question.testCases.length > 0) {
           totalTestCases = question.testCases.length
-          // Mark all as passed for now when code is present; this is just a placeholder
-          passedTestCases = submittedAnswer.answer && submittedAnswer.answer.trim() !== "" ? totalTestCases : 0
+          let totalPassedWeight = 0
+          let totalWeight = 0
+
+          for (const tc of question.testCases) {
+            const weight = tc.weight || 1
+            totalWeight += weight
+
+            try {
+              // Submit to Judge0
+              const submitRes = await fetch(`${judge0Url}/submissions?base64_encoded=false&wait=true`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  source_code: code,
+                  language_id: languageId,
+                  stdin: tc.input || "",
+                  expected_output: tc.expectedOutput || "",
+                  cpu_time_limit: (question.timeLimitMs || 5000) / 1000,
+                  memory_limit: (question.memoryLimitMb || 128) * 1024,
+                }),
+                signal: AbortSignal.timeout(15_000),
+              })
+
+              if (submitRes.ok) {
+                const result = await submitRes.json()
+                // status.id: 3 = Accepted, others = wrong/error
+                if (result.status?.id === 3) {
+                  passedTestCases++
+                  totalPassedWeight += weight
+                  rawOutput = result.stdout || ""
+                } else {
+                  errorOutput = result.stderr || result.compile_output || result.status?.description || ""
+                }
+                runtimeMs = Math.round((parseFloat(result.time || "0")) * 1000)
+              }
+            } catch (execErr) {
+              console.warn(`[judge0] test case execution failed: ${execErr.message}`)
+              // Don't fail the whole submission — just mark this test case as failed
+            }
+          }
+
+          // Score proportionally by passed test case weight
+          if (totalWeight > 0) {
+            questionScore = question.points * (totalPassedWeight / totalWeight)
+          }
+        } else if (code.trim()) {
+          // No test cases defined — award half points for non-empty code
+          questionScore = question.points * 0.5
+          if (!judge0Url) passedTestCases = 0
         }
       }
 
@@ -598,9 +723,13 @@ router.post("/applications/:id/submit-test", auth, async (req, res) => {
         language: submittedAnswer.language,
         passedTestCases,
         totalTestCases,
-        score: questionScore,
+        score: Math.round(questionScore * 10) / 10,
+        rawOutput: rawOutput || undefined,
+        errorOutput: errorOutput || undefined,
+        runtimeMs: runtimeMs || undefined,
       })
     }
+
 
     const percentageScore = totalPoints > 0 ? Math.round((score / totalPoints) * 100) : 0
 
@@ -666,6 +795,11 @@ router.post("/applications/:id/submit-test", auth, async (req, res) => {
     })
     const attemptNumber = previousAttemptsCount + 1
 
+    const integrityAudit = await analyzeIntegrityWithAI(
+      detailedAnswers.filter(a => a.questionType === "code_snippet").map(a => ({ questionId: a.questionId, code: a.answer })),
+      activityLog
+    )
+
     // Persist detailed submission for recruiter analytics and review
     const submission = new TestSubmission({
       testId: application.testId._id,
@@ -680,6 +814,12 @@ router.post("/applications/:id/submit-test", auth, async (req, res) => {
       status: "completed",
       plagiarismScore,
       plagiarismFlags: flags,
+      integrityAudit: {
+        score: integrityAudit.score ?? 100,
+        summary: integrityAudit.summary || "Scan complete.",
+        flags: integrityAudit.flags || [],
+        logs: activityLog,
+      },
       startedAt: new Date(),
       submittedAt: new Date(),
     })

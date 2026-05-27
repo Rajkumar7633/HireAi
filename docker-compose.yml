@@ -1,38 +1,149 @@
 version: "3.9"
+
+# ─── Named networks ─────────────────────────────────────────────────────────
+networks:
+  hireai-internal:
+    driver: bridge
+  hireai-public:
+    driver: bridge
+
+# ─── Named volumes ──────────────────────────────────────────────────────────
+volumes:
+  mongo-data:
+    driver: local
+  redis-data:
+    driver: local
+  uploads-data:
+    driver: local
+
+# ─── Services ───────────────────────────────────────────────────────────────
 services:
+
+  # ── MongoDB ──────────────────────────────────────────────────────────────
   mongo:
     image: mongo:7
+    container_name: hireai-mongo
     restart: unless-stopped
-    ports:
-      - "27017:27017"
+    networks:
+      - hireai-internal
     volumes:
       - mongo-data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: hireai
+    # Only expose to host in development; remove in production
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
 
+  # ── Redis (session cache / analytics cache) ───────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: hireai-redis
+    restart: unless-stopped
+    networks:
+      - hireai-internal
+    volumes:
+      - redis-data:/data
+    command: >
+      redis-server
+        --maxmemory 256mb
+        --maxmemory-policy allkeys-lru
+        --save 60 1
+        --loglevel warning
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Backend (Express + Socket.io) ─────────────────────────────────────────
   backend:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    container_name: hireai-backend
     restart: unless-stopped
+    networks:
+      - hireai-internal
+    volumes:
+      - uploads-data:/app/uploads
+    env_file:
+      - .env.docker
     environment:
-      - PORT=5001
-      - MONGODB_URI=mongodb://mongo:27017/hireai
-      - FRONTEND_URL=http://frontend:3000
+      NODE_ENV: production
+      PORT: "5001"
+      MONGODB_URI: mongodb://mongo:27017/hireai
+      REDIS_URL: redis://redis:6379
+      FRONTEND_URL: http://nginx:80
     depends_on:
-      - mongo
-    ports:
-      - "5001:5001"
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Not exposed to host directly — all traffic goes through Nginx
+    expose:
+      - "5001"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5001/health | grep -q '\"status\":\"ok\"' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
 
+  # ── Frontend (Next.js) ────────────────────────────────────────────────────
   frontend:
     build:
       context: .
       dockerfile: Dockerfile
+    container_name: hireai-frontend
     restart: unless-stopped
+    networks:
+      - hireai-internal
+    env_file:
+      - .env.docker
     environment:
-      - NEXT_PUBLIC_BACKEND_URL=http://backend:5001
+      NODE_ENV: production
+      NEXT_PUBLIC_BACKEND_URL: http://backend:5001
     depends_on:
-      - backend
-    ports:
-      - "3000:3000"
+      backend:
+        condition: service_healthy
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ > /dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
-volumes:
-  mongo-data:
+  # ── Nginx (reverse proxy / load balancer) ─────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: hireai-nginx
+    restart: unless-stopped
+    networks:
+      - hireai-internal
+      - hireai-public
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/nginx-health | grep -q '\"status\":\"ok\"' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

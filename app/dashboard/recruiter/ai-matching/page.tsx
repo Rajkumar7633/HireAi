@@ -10,8 +10,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, MessageSquare, Eye } from "lucide-react";
+import { Loader2, MessageSquare, Eye, Brain } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { RadarChart } from "@/components/ui/radar-chart";
 
 interface MatchCandidate {
   userId: string;
@@ -48,6 +49,7 @@ export default function RecruiterAIMatchingPage() {
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeSubject, setComposeSubject] = useState("");
   const [composeBody, setComposeBody] = useState("");
+  const [expandedRadar, setExpandedRadar] = useState<Record<string, boolean>>({});
 
   // Fetch AI status and lists once
   useEffect(() => {
@@ -382,39 +384,85 @@ export default function RecruiterAIMatchingPage() {
           ) : (
             <div className="space-y-3">
               {results.map((r) => (
-                <div key={r.userId} className="flex items-center justify-between border rounded-md p-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <Checkbox checked={!!selected[r.userId]} onCheckedChange={(v) => setSelected((prev) => ({ ...prev, [r.userId]: !!v }))} />
-                      <div className="font-medium">{r.name}</div>
+                <div key={r.userId} className="flex flex-col border rounded-md p-4 bg-card shadow-sm space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Checkbox checked={!!selected[r.userId]} onCheckedChange={(v) => setSelected((prev) => ({ ...prev, [r.userId]: !!v }))} />
+                        <div className="font-medium">{r.name}</div>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">Candidate ID: {r.userId}{r.email ? ` • ${r.email}` : ""}{r.resumeFile ? ` • ${r.resumeFile}` : ""}</div>
+                      {r.skillsMatched && r.skillsMatched.length > 0 && (
+                        <div className="mt-2 text-xs text-muted-foreground">
+                          <span className="font-medium">Matched skills:</span> {r.skillsMatched.slice(0, 6).join(", ")}
+                        </div>
+                      )}
+                      {(r as any).snippet && (
+                        <div className="mt-2 text-xs text-muted-foreground line-clamp-3">
+                          {(r as any).snippet}
+                        </div>
+                      )}
                     </div>
-                    <div className="text-xs text-muted-foreground">Candidate ID: {r.userId}{r.email ? ` • ${r.email}` : ""}{r.resumeFile ? ` • ${r.resumeFile}` : ""}</div>
-                    {r.skillsMatched && r.skillsMatched.length > 0 && (
-                      <div className="mt-2 text-xs text-muted-foreground">
-                        <span className="font-medium">Matched skills:</span> {r.skillsMatched.slice(0, 6).join(", ")}
-                      </div>
-                    )}
-                    {(r as any).snippet && (
-                      <div className="mt-2 text-xs text-muted-foreground line-clamp-3">
-                        {(r as any).snippet}
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <Badge className={r.aiMatchScore >= 70 ? "bg-green-600" : r.aiMatchScore >= 50 ? "bg-yellow-600" : "bg-gray-600"}>{r.aiMatchScore}%</Badge>
+                      {typeof r.atsScore === "number" && (
+                        <Badge variant="outline">ATS: {r.atsScore}%</Badge>
+                      )}
+                      <Button variant="outline" size="sm" onClick={() => setExpandedRadar(prev => ({ ...prev, [r.userId]: !prev[r.userId] }))}>
+                        <Brain className="h-4 w-4 mr-1" /> Match Analysis
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => window.location.assign(`/dashboard/recruiter/candidates/${r.userId}`)}>
+                        <Eye className="h-4 w-4 mr-1" /> View
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => window.location.assign(`/dashboard/messages?userId=${r.userId}`)}>
+                        <MessageSquare className="h-4 w-4 mr-1" /> Message
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <Badge className={r.aiMatchScore >= 70 ? "bg-green-600" : r.aiMatchScore >= 50 ? "bg-yellow-600" : "bg-gray-600"}>{r.aiMatchScore}%</Badge>
-                    {typeof r.atsScore === "number" && (
-                      <Badge variant="outline">ATS: {r.atsScore}%</Badge>
-                    )}
-                    <Button variant="outline" size="sm" onClick={() => window.location.assign(`/dashboard/recruiter/candidates/${r.userId}`)}>
-                      <Eye className="h-4 w-4 mr-1" /> View
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => window.location.assign(`/dashboard/messages?userId=${r.userId}`)}>
-                      <MessageSquare className="h-4 w-4 mr-1" /> Message
-                    </Button>
-                  </div>
+
+                  {expandedRadar[r.userId] && (
+                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex flex-col md:flex-row gap-6 items-center animate-in slide-in-from-top-2 duration-200">
+                      <div className="flex-1 space-y-4">
+                        <div className="space-y-1">
+                          <h4 className="text-sm font-semibold text-slate-800">Skill Alignment Analysis</h4>
+                          <p className="text-xs text-muted-foreground">
+                            Visual comparison of candidate parsed resume details against the required target profile.
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          <span className="text-xs font-bold text-slate-600">Skills Needed ({parsedSkills.length}):</span>
+                          <div className="flex flex-wrap gap-1">
+                            {parsedSkills.length > 0 ? (
+                              parsedSkills.map((s, idx) => (
+                                <Badge key={idx} variant="secondary" className="text-[10px]">{s}</Badge>
+                              ))
+                            ) : (
+                              <span className="text-xs text-slate-400">None listed. Type comma-separated key skills above.</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <span className="text-xs font-bold text-slate-600">Candidate Matches:</span>
+                          <div className="flex flex-wrap gap-1">
+                            {r.skillsMatched && r.skillsMatched.length > 0 ? (
+                              r.skillsMatched.map((s, idx) => (
+                                <Badge key={idx} variant="default" className="text-[10px] bg-fuchsia-600">{s}</Badge>
+                              ))
+                            ) : (
+                              <span className="text-xs text-slate-400">No overlapping skills matching parsed keywords.</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="shrink-0 bg-white p-2 rounded-lg border shadow-sm">
+                        <RadarChart skillsRequired={parsedSkills.length > 0 ? parsedSkills : ["React", "Node", "TypeScript"]} skillsMatched={r.skillsMatched || []} size={220} />
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
+
           )}
         </CardContent>
       </Card>

@@ -162,13 +162,40 @@ export default function TakeSecureAssessmentPage() {
   const [videoReady, setVideoReady] = useState(false);
   const [testPreviewImage, setTestPreviewImage] = useState<string | null>(null);
 
+  const isFeatureEnabled = useCallback((featureId: string) => {
+    if (bypassSecurity) return false;
+    if (!assessment) return false;
+    if (assessment.requiresProctoring === false) return false;
+    if (!assessment.securityFeatures || assessment.securityFeatures.length === 0) {
+      return true;
+    }
+    const featureKeysMap: { [key: string]: string[] } = {
+      face_recognition: ["face recognition", "face_recognition", "camera", "face"],
+      multi_face_detection: ["multi-face", "multi_face"],
+      audio_monitoring: ["audio", "mic"],
+      screen_recording: ["screen recording", "screen_recording"],
+      tab_detection: ["tab switch", "tab_detection", "tab"],
+      clipboard_block: ["copy/paste", "clipboard", "copy-paste", "block"],
+      keystroke_analysis: ["keystroke"],
+      environment_scan: ["environment scan", "environment_scan"]
+    };
+    const keys = featureKeysMap[featureId] || [featureId];
+    return assessment.securityFeatures.some((f: string) => 
+      keys.some(key => f.toLowerCase().includes(key.toLowerCase()))
+    );
+  }, [assessment, bypassSecurity]);
+
   // Preflight readiness score (0-100) based on environment checks and consents
   const readinessScore = (() => {
+    const needsCamera = isFeatureEnabled("face_recognition") || isFeatureEnabled("multi_face_detection");
+    const needsMic = isFeatureEnabled("audio_monitoring");
+    const needsScreen = isFeatureEnabled("screen_recording");
+
     const checks = [
       fullscreenReady,
-      cameraReady,
-      microphoneReady,
-      screenRecording || screenCaptureAvailable,
+      ...(needsCamera ? [cameraReady] : []),
+      ...(needsMic ? [microphoneReady] : []),
+      ...(needsScreen ? [screenRecording || screenCaptureAvailable] : []),
       agreeToProctoring,
       quietEnvironmentConfirmed,
       readInstructionsConfirmed,
@@ -176,6 +203,7 @@ export default function TakeSecureAssessmentPage() {
     const completed = checks.filter(Boolean).length;
     return Math.round((completed / checks.length) * 100);
   })();
+
 
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -386,11 +414,15 @@ export default function TakeSecureAssessmentPage() {
       await requestFullscreen();
       if (!document.fullscreenElement) return;
     }
-    if (!cameraReady || !microphoneReady) {
+    const needsCamera = isFeatureEnabled("face_recognition") || isFeatureEnabled("multi_face_detection");
+    const needsMic = isFeatureEnabled("audio_monitoring");
+    const needsScreen = isFeatureEnabled("screen_recording");
+
+    if ((needsCamera && !cameraReady) || (needsMic && !microphoneReady)) {
       const granted = await quickPermissionProbe();
       if (!granted) return;
     }
-    if (!screenRecording) {
+    if (needsScreen && !screenRecording) {
       // Ask user to start screen share explicitly
       const ok = await startScreenShare();
       if (!ok) return;
@@ -400,6 +432,7 @@ export default function TakeSecureAssessmentPage() {
     setTestPreviewImage(null);
     await initializeProctoring();
     setSecureReady(true);
+
     setPreflightOpen(false);
     // Mark assessment as started (update Application status to in_progress)
     try {
@@ -453,6 +486,7 @@ export default function TakeSecureAssessmentPage() {
   // Track tab switches and auto-end after 2 occurrences
   useEffect(() => {
     const onVisibility = async () => {
+      if (!isFeatureEnabled("tab_detection")) return;
       if (document.visibilityState === "hidden") {
         setTabSwitchCount((c) => c + 1);
         try {
@@ -473,19 +507,20 @@ export default function TakeSecureAssessmentPage() {
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [assessmentId, toast]);
+  }, [assessmentId, toast, isFeatureEnabled]);
 
   useEffect(() => {
+    if (!isFeatureEnabled("tab_detection")) return;
     if (tabSwitchCount >= 2 && !submitting) {
       // Force end the test with failure
       handleSubmitAssessment(false, true);
     }
-  }, [tabSwitchCount, submitting]);
+  }, [tabSwitchCount, submitting, isFeatureEnabled]);
 
   useEffect(() => {
     if (timeLeft > 0) {
       // Pause countdown when security is not satisfied
-      const canTick = isFullscreen && screenRecording && !blockActions;
+      const canTick = isFullscreen && (!isFeatureEnabled("screen_recording") || screenRecording) && !blockActions;
       const timer = setTimeout(() => {
         if (canTick) setTimeLeft((t) => t - 1);
       }, 1000);
@@ -493,7 +528,8 @@ export default function TakeSecureAssessmentPage() {
     } else if (timeLeft === 0 && assessment) {
       handleSubmitAssessment(true); // Auto-submit when time runs out
     }
-  }, [timeLeft, assessment, isFullscreen, screenRecording, blockActions]);
+  }, [timeLeft, assessment, isFullscreen, screenRecording, blockActions, isFeatureEnabled]);
+
 
   const fetchAssessment = async () => {
     try {
@@ -528,51 +564,62 @@ export default function TakeSecureAssessmentPage() {
       await securityManager.enableSecureMode();
       securityManager.monitorNetworkActivity();
 
-      const videoStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          facingMode: "user",
-        },
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          sampleRate: 44100,
-        },
-      });
+      const needsCamera = isFeatureEnabled("face_recognition") || isFeatureEnabled("multi_face_detection");
+      const needsMic = isFeatureEnabled("audio_monitoring");
+      const needsScreen = isFeatureEnabled("screen_recording");
 
-      setCameraStream(videoStream);
-      setMicrophoneStream(videoStream);
+      if (needsCamera || needsMic) {
+        const videoStream = await navigator.mediaDevices.getUserMedia({
+          video: needsCamera ? {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            facingMode: "user",
+          } : false,
+          audio: needsMic ? {
+            echoCancellation: true,
+            noiseSuppression: true,
+            sampleRate: 44100,
+          } : false,
+        });
 
-      if (videoRef.current) {
-        videoRef.current.srcObject = videoStream;
-        const v = videoRef.current;
-        try { await v.play(); } catch {}
-        const ok = await ensureVideoReady(v);
-        setVideoReady(ok);
+        setCameraStream(videoStream);
+        setMicrophoneStream(videoStream);
+
+        if (needsCamera && videoRef.current) {
+          videoRef.current.srcObject = videoStream;
+          const v = videoRef.current;
+          try { await v.play(); } catch {}
+          const ok = await ensureVideoReady(v);
+          setVideoReady(ok);
+        }
+
+        if (needsMic) {
+          audioContextRef.current = new AudioContext();
+          const source =
+            audioContextRef.current.createMediaStreamSource(videoStream);
+          analyserRef.current = audioContextRef.current.createAnalyser();
+          analyserRef.current.fftSize = 2048;
+          source.connect(analyserRef.current);
+        }
       }
 
-      audioContextRef.current = new AudioContext();
-      const source =
-        audioContextRef.current.createMediaStreamSource(videoStream);
-      analyserRef.current = audioContextRef.current.createAnalyser();
-      analyserRef.current.fftSize = 2048;
-      source.connect(analyserRef.current);
-
-      // Only start screen recording if not already active from preflight
-      if (!screenRecording) {
+      // Only start screen recording if enabled and not already active from preflight
+      if (needsScreen && !screenRecording) {
         await initializeScreenRecording();
       }
 
       setProctoringActive(true);
-      setEnvironmentScanActive(true);
+      if (isFeatureEnabled("environment_scan")) {
+        setEnvironmentScanActive(true);
+      }
       startProctoringMonitoring();
 
+      const count = assessment?.securityFeatures?.length || 0;
       toast({
         title: "AI Proctoring Active",
-        description:
-          "All 8 security features are now monitoring your assessment.",
+        description: `Your assessment is secure. Running ${count} active security feature(s).`,
       });
+
     } catch (error) {
       console.error("Failed to initialize proctoring:", error);
       addAlert(
@@ -696,22 +743,27 @@ export default function TakeSecureAssessmentPage() {
 
   const startProctoringMonitoring = () => {
     proctoringIntervalRef.current = setInterval(() => {
-      detectFace();
-      monitorAudio();
-      detectMultipleFaces();
-      monitorEnvironment();
-      updateKeystrokePattern();
+      if (isFeatureEnabled("face_recognition")) detectFace();
+      if (isFeatureEnabled("audio_monitoring")) monitorAudio();
+      if (isFeatureEnabled("multi_face_detection")) detectMultipleFaces();
+      if (isFeatureEnabled("environment_scan")) monitorEnvironment();
+      if (isFeatureEnabled("keystroke_analysis")) updateKeystrokePattern();
       updateSecurityScore();
       // escalate when face missing continuously
-      setNoFaceSeconds((prev) => (!faceDetected ? Math.min(prev + 1, 30) : 0));
+      if (isFeatureEnabled("face_recognition")) {
+        setNoFaceSeconds((prev) => (!faceDetected ? Math.min(prev + 1, 30) : 0));
+      }
       // rollback: no aggregate accumulation
     }, 1000); // More frequent monitoring
 
-    // Screenshot capture
-    screenshotIntervalRef.current = setInterval(() => {
-      captureScreenshot();
-    }, 15000); // Every 15 seconds for better monitoring
+    // Screenshot capture - only if face proctoring is active
+    if (isFeatureEnabled("face_recognition") || isFeatureEnabled("multi_face_detection")) {
+      screenshotIntervalRef.current = setInterval(() => {
+        captureScreenshot();
+      }, 15000); // Every 15 seconds for better monitoring
+    }
   };
+
 
   // Hoisted addAlert so it can be used by detection helpers defined below
   function addAlert(
@@ -1024,6 +1076,7 @@ export default function TakeSecureAssessmentPage() {
   const setupEventListeners = () => {
     // Tab switch detection
     const handleVisibilityChange = () => {
+      if (!isFeatureEnabled("tab_detection")) return;
       if (document.hidden) {
         setTabSwitchCount((prev) => prev + 1);
         addAlert(
@@ -1056,6 +1109,7 @@ export default function TakeSecureAssessmentPage() {
     };
 
     const handleWindowBlur = () => {
+      if (!isFeatureEnabled("tab_detection")) return;
       addAlert(
         "tab_switch",
         "Window focus lost. Assessment will be submitted.",
@@ -1065,6 +1119,7 @@ export default function TakeSecureAssessmentPage() {
         handleSubmitAssessment(false, true);
       }
     };
+
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     document.addEventListener("fullscreenchange", handleFullscreenChange);
@@ -1112,14 +1167,19 @@ export default function TakeSecureAssessmentPage() {
   // Disable right-click and basic copy shortcuts while secure
   useEffect(() => {
     const preventContext = (e: MouseEvent) => {
-      if (secureReady) e.preventDefault();
+      if (secureReady && isFeatureEnabled("clipboard_block")) {
+        e.preventDefault();
+      }
     };
     const preventKeys = (e: KeyboardEvent) => {
       if (!secureReady) return;
-      if (e.ctrlKey || e.metaKey) {
-        const k = e.key.toLowerCase();
-        if (["c", "v", "x", "a", "s", "p"].includes(k)) {
-          e.preventDefault();
+      if (isFeatureEnabled("clipboard_block")) {
+        if (e.ctrlKey || e.metaKey) {
+          const k = e.key.toLowerCase();
+          if (["c", "v", "x", "a", "s", "p"].includes(k)) {
+            e.preventDefault();
+            addAlert("copy_paste_attempt", "Copy/paste action blocked.", "low");
+          }
         }
       }
       // F11 or Escape exits fullscreen – discourage
@@ -1133,7 +1193,8 @@ export default function TakeSecureAssessmentPage() {
       window.removeEventListener("contextmenu", preventContext);
       window.removeEventListener("keydown", preventKeys);
     };
-  }, [secureReady]);
+  }, [secureReady, isFeatureEnabled]);
+
 
   const handleAnswerChange = (questionId: string, answer: string) => {
     setAnswers((prev) => ({ ...prev, [questionId]: answer }));
@@ -1273,7 +1334,7 @@ export default function TakeSecureAssessmentPage() {
   };
 
   // Derived flag: timer is paused whenever security prerequisites are not met
-  const timerPaused = !isFullscreen || !screenRecording || blockActions;
+  const timerPaused = !isFullscreen || (isFeatureEnabled("screen_recording") && !screenRecording) || blockActions;
 
   // Quick action to resume monitoring prerequisites
   async function resumeSecurity() {
@@ -1281,7 +1342,7 @@ export default function TakeSecureAssessmentPage() {
       if (!document.fullscreenElement) {
         await requestFullscreen();
       }
-      if (!screenRecording) {
+      if (isFeatureEnabled("screen_recording") && !screenRecording) {
         await startScreenShare();
       }
       setBlockActions(false);
@@ -1289,6 +1350,7 @@ export default function TakeSecureAssessmentPage() {
       console.warn("Failed to resume security", e);
     }
   }
+
 
   if (loading) {
     return (
@@ -1459,17 +1521,19 @@ export default function TakeSecureAssessmentPage() {
                 </div>
               )}
 
-              <div className="flex items-center justify-between">
-                <span>Screen Capture Support</span>
-                <div className="flex items-center gap-3">
-                  <Badge variant={screenRecording ? "default" : screenCaptureAvailable ? "default" : "destructive"}>
-                    {screenRecording ? "Recording" : screenCaptureAvailable ? "Available" : "Unavailable"}
-                  </Badge>
-                  <Button onClick={startScreenShare} variant="outline" className="border-gray-600">
-                    {screenRecording ? "Restart Screen Share" : "Start Screen Share"}
-                  </Button>
+              {isFeatureEnabled("screen_recording") && (
+                <div className="flex items-center justify-between">
+                  <span>Screen Capture Support</span>
+                  <div className="flex items-center gap-3">
+                    <Badge variant={screenRecording ? "default" : screenCaptureAvailable ? "default" : "destructive"}>
+                      {screenRecording ? "Recording" : screenCaptureAvailable ? "Available" : "Unavailable"}
+                    </Badge>
+                    <Button onClick={startScreenShare} variant="outline" className="border-gray-600">
+                      {screenRecording ? "Restart Screen Share" : "Start Screen Share"}
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="pt-2 text-sm text-gray-400">
                 By starting, you agree to remain in fullscreen, keep the assessment tab active,
@@ -1482,8 +1546,8 @@ export default function TakeSecureAssessmentPage() {
                 <ul className="list-disc list-inside space-y-1">
                   <li>Ensure you are alone in a quiet, well-lit room.</li>
                   <li>Do not switch tabs, use other devices, or exit fullscreen.</li>
-                  <li>Keep your face clearly visible to the camera at all times.</li>
-                  <li>Allow screen recording for the duration of the test.</li>
+                  { (isFeatureEnabled("face_recognition") || isFeatureEnabled("multi_face_detection")) && <li>Keep your face clearly visible to the camera at all times.</li> }
+                  { isFeatureEnabled("screen_recording") && <li>Allow screen recording for the duration of the test.</li> }
                   <li>Any violations may pause or end your assessment.</li>
                 </ul>
               </div>
@@ -1497,7 +1561,7 @@ export default function TakeSecureAssessmentPage() {
                     checked={agreeToProctoring}
                     onChange={(e) => setAgreeToProctoring(e.target.checked)}
                   />
-                  <span>I consent to AI proctoring features (camera, microphone, screen monitoring) for this assessment.</span>
+                  <span>I consent to AI proctoring features for this assessment.</span>
                 </label>
                 <label className="flex items-start gap-2">
                   <input
@@ -1527,9 +1591,9 @@ export default function TakeSecureAssessmentPage() {
                   onClick={startSecureMode}
                   disabled={!(
                     fullscreenReady &&
-                    cameraReady &&
-                    microphoneReady &&
-                    screenRecording &&
+                    (!(isFeatureEnabled("face_recognition") || isFeatureEnabled("multi_face_detection")) || cameraReady) &&
+                    (!isFeatureEnabled("audio_monitoring") || microphoneReady) &&
+                    (!isFeatureEnabled("screen_recording") || screenRecording) &&
                     agreeToProctoring &&
                     quietEnvironmentConfirmed &&
                     readInstructionsConfirmed &&
@@ -1540,6 +1604,7 @@ export default function TakeSecureAssessmentPage() {
                   Start Secure Test
                 </Button>
               </div>
+
             </CardContent>
           </Card>
         </div>
@@ -1600,99 +1665,112 @@ export default function TakeSecureAssessmentPage() {
       <div className="pt-16 max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Proctoring Panel */}
         <div className="lg:col-span-1 space-y-4">
-          {/* Camera Feed */}
-          <Card className="bg-gray-900 border-gray-700">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Shield className="h-4 w-4 text-green-500" />
-                AI Monitoring (8/8 Active)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="relative">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  muted
-                  className="w-full h-32 bg-gray-800 rounded-lg object-cover"
-                />
-                <canvas ref={canvasRef} className="hidden" />
-                <div className="absolute top-2 right-2">
-                  {faceDetected ? (
-                    <CheckCircle className="h-5 w-5 text-green-500" />
-                  ) : (
-                    <XCircle className="h-5 w-5 text-red-500" />
+          {/* Hidden canvas - always in DOM for screenshot capture */}
+          <canvas ref={canvasRef} className="hidden" />
+
+          {/* Camera Feed - only shown if camera features enabled */}
+          {(isFeatureEnabled("face_recognition") || isFeatureEnabled("multi_face_detection")) && (
+            <Card className="bg-gray-900 border-gray-700">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-green-500" />
+                  AI Monitoring ({assessment?.securityFeatures?.length ?? 0}/{assessment?.securityFeatures?.length ?? 0} Active)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="relative">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    muted
+                    className="w-full h-32 bg-gray-800 rounded-lg object-cover"
+                  />
+                  <div className="absolute top-2 right-2">
+                    {faceDetected ? (
+                      <CheckCircle className="h-5 w-5 text-green-500" />
+                    ) : (
+                      <XCircle className="h-5 w-5 text-red-500" />
+                    )}
+                  </div>
+                  {isFeatureEnabled("screen_recording") && (
+                    <div className="absolute bottom-2 left-2 text-xs bg-black/50 px-2 py-1 rounded">
+                      {screenRecording ? "● Recording" : "○ Not Recording"}
+                    </div>
                   )}
                 </div>
-                <div className="absolute bottom-2 left-2 text-xs bg-black/50 px-2 py-1 rounded">
-                  {screenRecording ? "Recording" : "Not Recording"}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
 
-          {/* Security Status */}
+
+          {/* Security Status - dynamically lists only enabled features */}
           <Card className="bg-gray-900 border-gray-700">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm flex items-center gap-2">
                 Security Status
-                <Badge
-                  className={`ml-2 ${getSecurityScoreColor(securityScore)}`}
-                >
+                <Badge className={`ml-2 ${getSecurityScoreColor(securityScore)}`}>
                   {securityScore}%
                 </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-2 text-xs">
-                <div className="flex justify-between">
-                  <span>1. Face Recognition:</span>
-                  <span
-                    className={faceDetected ? "text-green-400" : "text-red-400"}
-                  >
-                    {faceDetected ? "✓ Active" : "✗ Inactive"}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>2. Multi-Face Detection:</span>
-                  <span className="text-green-400">✓ Active</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>3. Audio Monitor:</span>
-                  <span className="text-green-400">✓ Active</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>4. Screen Recording:</span>
-                  <span
-                    className={
-                      screenRecording ? "text-green-400" : "text-red-400"
-                    }
-                  >
-                    {screenRecording ? "✓ Active" : "✗ Inactive"}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>5. Tab Detection:</span>
-                  <span className="text-green-400">✓ Active</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>6. Copy/Paste Block:</span>
-                  <span className="text-green-400">✓ Active</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>7. Keystroke Analysis:</span>
-                  <span className="text-green-400">✓ Active</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>8. Environment Scan:</span>
-                  <span
-                    className={
-                      (environmentScanActive || roomScanDone) ? "text-green-400" : "text-red-400"
-                    }
-                  >
-                    {(environmentScanActive || roomScanDone) ? "✓ Active" : "✗ Inactive"}
-                  </span>
-                </div>
+                {(() => {
+                  const allFeatures = [
+                    {
+                      id: "face_recognition",
+                      label: "Face Recognition",
+                      active: faceDetected,
+                    },
+                    {
+                      id: "multi_face_detection",
+                      label: "Multi-Face Detection",
+                      active: proctoringActive,
+                    },
+                    {
+                      id: "audio_monitoring",
+                      label: "Audio Monitor",
+                      active: proctoringActive,
+                    },
+                    {
+                      id: "screen_recording",
+                      label: "Screen Recording",
+                      active: screenRecording,
+                    },
+                    {
+                      id: "tab_detection",
+                      label: "Tab Detection",
+                      active: proctoringActive,
+                    },
+                    {
+                      id: "clipboard_block",
+                      label: "Copy/Paste Block",
+                      active: secureReady,
+                    },
+                    {
+                      id: "keystroke_analysis",
+                      label: "Keystroke Analysis",
+                      active: proctoringActive,
+                    },
+                    {
+                      id: "environment_scan",
+                      label: "Environment Scan",
+                      active: environmentScanActive || roomScanDone,
+                    },
+                  ];
+                  const enabledFeatures = allFeatures.filter(f => isFeatureEnabled(f.id));
+                  if (enabledFeatures.length === 0) {
+                    return <div className="text-gray-500">No security features configured.</div>;
+                  }
+                  return enabledFeatures.map((f, i) => (
+                    <div key={f.id} className="flex justify-between">
+                      <span>{i + 1}. {f.label}:</span>
+                      <span className={f.active ? "text-green-400" : "text-yellow-400"}>
+                        {f.active ? "✓ Active" : "○ Ready"}
+                      </span>
+                    </div>
+                  ));
+                })()}
               </div>
             </CardContent>
           </Card>

@@ -28,19 +28,35 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         return NextResponse.json({ message: "Test not assigned to this user" }, { status: 403 })
       }
 
-      const test = await Test.findById(params.id)
+      const test = await Test.findById(params.id).lean() as any
       if (!test) {
         return NextResponse.json({ message: "Test not found" }, { status: 404 })
       }
 
-      return NextResponse.json(test, { status: 200 })
+      // ✅ SECURITY: Strip correctAnswer (and hidden test cases) before sending to candidate
+      const safeTest = {
+        ...test,
+        questions: (test.questions || []).map((q: any) => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { correctAnswer, testCases, ...safeQuestion } = q
+          return {
+            ...safeQuestion,
+            // Only send non-hidden test cases (visible examples only)
+            testCases: (testCases || [])
+              .filter((tc: any) => !tc.hidden)
+              .map(({ input, expectedOutput }: any) => ({ input, expectedOutput })),
+          }
+        }),
+      }
+
+      return NextResponse.json(safeTest, { status: 200 })
     } catch (error) {
       console.error("Error fetching test for job seeker:", error)
       return NextResponse.json({ message: "Internal server error" }, { status: 500 })
     }
   }
 
-  // Recruiter / admin path: continue to proxy to backend tests route
+  // Recruiter / admin path: proxy to backend tests route
   try {
     const { id } = params
     const token = request.cookies.get("auth-token")?.value
@@ -49,24 +65,35 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ message: "No authentication token found" }, { status: 401 })
     }
 
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10_000)
+
     const response = await fetch(`${BACKEND_URL}/api/tests/${id}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      cache: "no-store", // Ensure fresh data
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+      signal: controller.signal,
     })
 
+    clearTimeout(timeoutId)
+
     if (!response.ok) {
-      const errorData = await response.json()
-      return NextResponse.json({ message: errorData.msg || "Failed to fetch test" }, { status: response.status })
+      const errorData = await response.json().catch(() => ({}))
+      return NextResponse.json(
+        { message: (errorData as any).msg || "Failed to fetch test" },
+        { status: response.status }
+      )
     }
 
     const data = await response.json()
     return NextResponse.json(data, { status: 200 })
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching test by ID:", error)
+    if (error.name === "AbortError") {
+      return NextResponse.json({ message: "Backend timeout" }, { status: 504 })
+    }
     return NextResponse.json({ message: "Internal server error" }, { status: 500 })
   }
+
 }
 
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {

@@ -85,6 +85,12 @@ const UserSchema = new mongoose.Schema({
     type: [String],
     default: [],
   },
+  // Password reset token (stored as bcrypt hash, 15-min expiry)
+  passwordReset: {
+    tokenHash: { type: String },
+    expiresAt: { type: Date },
+  },
+
   // Billing fields
   stripeCustomerId: {
     type: String,

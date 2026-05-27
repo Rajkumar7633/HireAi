@@ -233,19 +233,23 @@ export default function RecruiterDashboard() {
   const fetchProfileAndStats = async () => {
     try {
       console.log("[v0] Fetching profile data...");
-      const profileResponse = await fetch("/api/user/profile", { cache: 'no-store' });
+      const [profileResponse, statsResponse] = await Promise.allSettled([
+        fetch("/api/user/profile", { cache: "no-store" }),
+        fetch("/api/analytics/recruiter-dashboard", { cache: "no-store" }),
+      ]);
 
-      if (profileResponse.ok) {
-        const profileData = await profileResponse.json();
+      // --- Profile ---
+      if (profileResponse.status === "fulfilled" && profileResponse.value.ok) {
+        const profileData = await profileResponse.value.json();
         console.log("[v0] Profile data received:", profileData);
         setProfile(profileData.user);
       } else {
-        const errorData = await profileResponse
-          .json()
-          .catch(() => ({ message: "Unknown error" }));
+        const errorData =
+          profileResponse.status === "fulfilled"
+            ? await profileResponse.value.json().catch(() => ({ message: "Unknown error" }))
+            : { message: "Network error" };
         console.error("[v0] Profile fetch failed:", errorData);
         setError(`Failed to load profile: ${errorData.message}`);
-
         setProfile({
           name: session?.name || "Recruiter",
           email: session?.email || "recruiter@example.com",
@@ -253,12 +257,34 @@ export default function RecruiterDashboard() {
         });
       }
 
-      setStats({
-        activeJobs: 12,
-        totalApplications: 156,
-        interviewsScheduled: 8,
-        hiredCandidates: 23,
-      });
+      // --- Stats from real API ---
+      if (statsResponse.status === "fulfilled" && statsResponse.value.ok) {
+        const analyticsData = await statsResponse.value.json();
+        console.log("[v0] Analytics data received:", analyticsData);
+
+        // Map backend analytics fields → dashboard stats
+        const hiringFunnel = analyticsData.applicationsByStatus || [];
+        const interviewCount =
+          hiringFunnel.find((s: any) => s._id === "interview")?.count || 0;
+        const hiredCount =
+          hiringFunnel.find((s: any) => s._id === "hired")?.count || 0;
+
+        setStats({
+          activeJobs: analyticsData.totalJobDescriptions ?? 0,
+          totalApplications: analyticsData.totalApplications ?? 0,
+          interviewsScheduled: interviewCount,
+          hiredCandidates: hiredCount,
+        });
+      } else {
+        console.warn("[v0] Analytics fetch failed, keeping default stats");
+        // Keep zeros — don't show fake numbers
+        setStats({
+          activeJobs: 0,
+          totalApplications: 0,
+          interviewsScheduled: 0,
+          hiredCandidates: 0,
+        });
+      }
     } catch (error) {
       console.error("[v0] Error fetching dashboard data:", error);
       setError("Failed to load dashboard data. Please check your connection.");
@@ -279,6 +305,7 @@ export default function RecruiterDashboard() {
       setLoading(false);
     }
   };
+
 
   if (loading) {
     return (
