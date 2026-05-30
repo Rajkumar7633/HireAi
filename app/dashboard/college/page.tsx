@@ -6,6 +6,7 @@ import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { 
   Users, 
   TrendingUp, 
@@ -14,13 +15,12 @@ import {
   BarChart3, 
   GraduationCap,
   Building2,
-  Settings,
   Bell,
-  Search,
   Plus,
   ArrowRight,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  X
 } from "lucide-react"
 
 export default function CollegeDashboardPage() {
@@ -35,6 +35,9 @@ export default function CollegeDashboardPage() {
     activeRecruiters: 0
   })
   const [recentActivities, setRecentActivities] = useState<any[]>([])
+  const [collegeProfile, setCollegeProfile] = useState<any>(null)
+  const [notifications, setNotifications] = useState<any[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => {
     fetchDashboardData()
@@ -43,32 +46,72 @@ export default function CollegeDashboardPage() {
   const fetchDashboardData = async () => {
     setLoading(true)
     try {
-      // Fetch analytics data
-      const analyticsResponse = await fetch("/api/placement-analytics")
+      // Fetch college analytics data
+      const analyticsResponse = await fetch("/api/college/analytics")
       const analyticsData = await analyticsResponse.json()
       
       if (analyticsData.analytics) {
         setStats({
-          totalStudents: analyticsData.analytics.totalStudents || 0,
-          placedStudents: analyticsData.analytics.placedStudents || 0,
-          placementRate: analyticsData.analytics.placementRate || 0,
-          avgPackage: analyticsData.analytics.avgPackage || 0,
-          upcomingDrives: analyticsData.analytics.upcomingDrives || 0,
-          activeRecruiters: analyticsData.analytics.activeRecruiters || 0
+          totalStudents: analyticsData.analytics.overview.totalStudents || 0,
+          placedStudents: analyticsData.analytics.overview.totalPlaced || 0,
+          placementRate: analyticsData.analytics.overview.placementRate || 0,
+          avgPackage: analyticsData.analytics.overview.averagePackage || 0,
+          upcomingDrives: analyticsData.analytics.overview.totalDrives || 0,
+          activeRecruiters: analyticsData.analytics.overview.activePartnerships || 0
         })
       }
 
-      // Mock recent activities
-      setRecentActivities([
-        { id: 1, type: "placement", message: "Google Drive - 15 students selected", time: "2 hours ago", status: "success" },
-        { id: 2, type: "alert", message: "3 students below 6 CGPA identified", time: "5 hours ago", status: "warning" },
-        { id: 3, type: "upload", message: "50 new students imported via CSV", time: "1 day ago", status: "success" },
-        { id: 4, type: "drive", message: "Microsoft campus drive scheduled for next week", time: "2 days ago", status: "info" }
-      ])
+      // Fetch recent activities from API
+      const activitiesResponse = await fetch("/api/college/activities")
+      const activitiesData = await activitiesResponse.json()
+      setRecentActivities(activitiesData.activities || [])
+
+      // Fetch notifications
+      const notificationsResponse = await fetch("/api/college/notifications")
+      const notificationsData = await notificationsResponse.json()
+      setNotifications(notificationsData.notifications || [])
+      setUnreadCount(notificationsData.unreadCount || 0)
+
+      // Fetch college profile for departments
+      const profileResponse = await fetch("/api/college/profile")
+      const profileData = await profileResponse.json()
+      if (profileData.profile) {
+        setCollegeProfile(profileData.profile)
+      }
     } catch (error) {
       console.error("Failed to fetch dashboard data:", error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const markAsRead = async (notificationId: string) => {
+    try {
+      await fetch(`/api/college/notifications/${notificationId}/read`, { method: "PUT" })
+      setNotifications(notifications.map(n => n._id === notificationId ? { ...n, read: true } : n))
+      setUnreadCount(Math.max(0, unreadCount - 1))
+    } catch (error) {
+      console.error("Failed to mark notification as read:", error)
+    }
+  }
+
+  const markAllAsRead = async () => {
+    try {
+      await fetch("/api/college/notifications/read-all", { method: "PUT" })
+      setNotifications(notifications.map(n => ({ ...n, read: true })))
+      setUnreadCount(0)
+    } catch (error) {
+      console.error("Failed to mark all notifications as read:", error)
+    }
+  }
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case "urgent": return "bg-red-500"
+      case "high": return "bg-orange-500"
+      case "medium": return "bg-yellow-500"
+      case "low": return "bg-blue-500"
+      default: return "bg-gray-500"
     }
   }
 
@@ -81,25 +124,39 @@ export default function CollegeDashboardPage() {
       link: "/dashboard/college/student-tracking"
     },
     {
-      title: "Import Students",
-      description: "Bulk import students from CSV file",
-      icon: Upload,
-      color: "bg-green-500",
-      link: "/dashboard/college/bulk-operations"
-    },
-    {
-      title: "View Analytics",
-      description: "Check placement statistics and trends",
-      icon: BarChart3,
-      color: "bg-purple-500",
-      link: "/dashboard/college/placement-analytics"
-    },
-    {
-      title: "Schedule Drive",
-      description: "Organize a new campus recruitment drive",
+      title: "Manage Campus Drives",
+      description: "Organize and manage campus recruitment drives",
       icon: Building2,
       color: "bg-orange-500",
-      link: "/dashboard/college/drives"
+      link: "/dashboard/college/campus-drives"
+    },
+    {
+      title: "View Placements",
+      description: "Track student placements and offers",
+      icon: CheckCircle2,
+      color: "bg-green-500",
+      link: "/dashboard/college/placements"
+    },
+    {
+      title: "Interview Schedule",
+      description: "Manage interview schedules and results",
+      icon: Bell,
+      color: "bg-purple-500",
+      link: "/dashboard/college/interviews"
+    },
+    {
+      title: "Partnerships",
+      description: "Manage company partnerships",
+      icon: Building2,
+      color: "bg-indigo-500",
+      link: "/dashboard/college/partnerships"
+    },
+    {
+      title: "Analytics Dashboard",
+      description: "Comprehensive placement analytics",
+      icon: BarChart3,
+      color: "bg-pink-500",
+      link: "/dashboard/college/analytics"
     }
   ]
 
@@ -112,38 +169,38 @@ export default function CollegeDashboardPage() {
       status: "active"
     },
     {
-      title: "Placement Analytics",
-      description: "Comprehensive analytics for data-driven decisions",
-      icon: TrendingUp,
-      link: "/dashboard/college/placement-analytics",
+      title: "Campus Drives",
+      description: "Manage campus recruitment drives and schedules",
+      icon: Building2,
+      link: "/dashboard/college/campus-drives",
       status: "active"
     },
     {
-      title: "Bulk Operations",
-      description: "Import, filter, and manage students in bulk",
-      icon: FileText,
-      link: "/dashboard/college/bulk-operations",
+      title: "Student Placements",
+      description: "Track all student placements and offers",
+      icon: CheckCircle2,
+      link: "/dashboard/college/placements",
       status: "active"
     },
     {
-      title: "Referral Program",
-      description: "Manage employee referrals and bonuses",
-      icon: Users,
-      link: "/dashboard/referrals",
-      status: "active"
-    },
-    {
-      title: "Calendar Integration",
-      description: "Sync drives and interviews with your calendar",
+      title: "Interview Management",
+      description: "Schedule and manage interviews",
       icon: Bell,
-      link: "/dashboard/calendar",
+      link: "/dashboard/college/interviews",
       status: "active"
     },
     {
-      title: "Export Reports",
-      description: "Export data in CSV or PDF format",
-      icon: FileText,
-      link: "/dashboard/export",
+      title: "Company Partnerships",
+      description: "Manage recruiter partnerships",
+      icon: Users,
+      link: "/dashboard/college/partnerships",
+      status: "active"
+    },
+    {
+      title: "Analytics Dashboard",
+      description: "Comprehensive placement analytics and reporting",
+      icon: BarChart3,
+      link: "/dashboard/college/analytics",
       status: "active"
     }
   ]
@@ -172,12 +229,53 @@ export default function CollegeDashboardPage() {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon">
-                <Bell className="h-5 w-5" />
-              </Button>
-              <Button variant="ghost" size="icon">
-                <Settings className="h-5 w-5" />
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="relative">
+                    <Bell className="h-5 w-5" />
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-1 -right-1 h-5 w-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+                        {unreadCount}
+                      </span>
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-80">
+                  <div className="flex items-center justify-between p-2 border-b">
+                    <span className="font-medium">Notifications</span>
+                    {unreadCount > 0 && (
+                      <Button variant="ghost" size="sm" onClick={markAllAsRead} className="text-xs">
+                        Mark all read
+                      </Button>
+                    )}
+                  </div>
+                  <div className="max-h-80 overflow-y-auto">
+                    {notifications.length === 0 ? (
+                      <div className="p-4 text-center text-gray-500">No notifications</div>
+                    ) : (
+                      notifications.slice(0, 5).map((notification) => (
+                        <DropdownMenuItem
+                          key={notification._id}
+                          className="p-3 cursor-pointer"
+                          onClick={() => !notification.read && markAsRead(notification._id)}
+                        >
+                          <div className="flex items-start gap-3 w-full">
+                            <div className={`h-2 w-2 rounded-full mt-2 ${getPriorityColor(notification.priority)}`} />
+                            <div className="flex-1">
+                              <div className="font-medium text-sm">{notification.title}</div>
+                              <div className="text-xs text-gray-600 mt-1">{notification.message}</div>
+                              <div className="text-xs text-gray-400 mt-1">{new Date(notification.createdAt).toLocaleString()}</div>
+                            </div>
+                            {!notification.read && (
+                              <div className="h-2 w-2 bg-blue-500 rounded-full" />
+                            )}
+                          </div>
+                        </DropdownMenuItem>
+                      ))
+                    )}
+                  </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-semibold">
                 C
               </div>
@@ -256,10 +354,34 @@ export default function CollegeDashboardPage() {
           </Card>
         </div>
 
+        {/* Departments Overview */}
+        {collegeProfile && collegeProfile.departments && collegeProfile.departments.length > 0 && (
+          <div className="mb-8">
+            <h3 className="text-xl font-bold text-gray-900 mb-4">Departments Overview</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {collegeProfile.departments.map((dept: any, index: number) => (
+                <Card key={index} className="border-2 hover:border-blue-300 transition-colors">
+                  <CardHeader>
+                    <CardTitle className="text-lg">{dept.name}</CardTitle>
+                    <CardDescription>{dept.branches.length} branches</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex flex-wrap gap-2">
+                      {dept.branches.map((branch: string, bIndex: number) => (
+                        <Badge key={bIndex} variant="secondary">{branch}</Badge>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Quick Actions */}
         <div className="mb-8">
           <h3 className="text-xl font-bold text-gray-900 mb-4">Quick Actions</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {quickActions.map((action, index) => (
               <Link key={index} href={action.link}>
                 <Card className="hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-blue-300">

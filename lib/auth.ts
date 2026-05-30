@@ -22,7 +22,7 @@ export interface Session {
   userId: string
   email: string
   name: string
-  role: "job_seeker" | "recruiter" | "admin"
+  role: "job_seeker" | "recruiter" | "admin" | "college"
 }
 
 export async function hashPassword(password: string): Promise<string> {

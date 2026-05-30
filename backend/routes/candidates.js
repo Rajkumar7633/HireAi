@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const auth = require("../middleware/auth");
+const { cacheMiddleware, invalidateCache } = require("../middleware/cache");
 const User = require("../models/User");
 const Resume = require("../models/Resume");
 const StructuredResume = require("../models/StructuredResume");
@@ -9,7 +10,7 @@ const JobApplication = require("../models/JobApplication");
 // @route   GET /api/candidates/talent-pool
 // @desc    Get all candidates for talent pool (recruiters only)
 // @access  Private (Recruiter)
-router.get("/talent-pool", auth, async (req, res) => {
+router.get("/talent-pool", auth, cacheMiddleware('candidates:talent-pool', 120), async (req, res) => {
   if (req.user.role !== "recruiter") {
     return res
       .status(403)

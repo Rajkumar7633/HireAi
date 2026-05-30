@@ -271,13 +271,36 @@ export default function JobSeekerProfilePage() {
       setUploadedResumeName(j?.resume?.originalName || file.name);
       const analysis = j?.resume?.analysis || j?.analysis;
       if (analysis) setAts(analysis);
-      // Stash extracted skills for confirmation instead of auto-merging
+      
+      // Auto-fill profile with extracted data
       const extracted = j?.resume?.extractedData;
-      if (extracted && Array.isArray(extracted.skills) && extracted.skills.length) {
-        setPendingExtractedSkills(Array.from(new Set(extracted.skills.map((s: any) => String(s)))));
-      } else {
-        setPendingExtractedSkills([]);
+      if (extracted) {
+        setProfile((prev) => ({
+          ...prev,
+          firstName: extracted.firstName || prev.firstName,
+          lastName: extracted.lastName || prev.lastName,
+          email: extracted.email || prev.email,
+          phone: extracted.phone || prev.phone,
+          location: extracted.location || prev.location,
+          currentTitle: extracted.currentTitle || prev.currentTitle,
+          skills: extracted.skills ? [...new Set([...prev.skills, ...extracted.skills])] : prev.skills,
+          summary: extracted.summary || prev.summary,
+          experiences: extracted.experiences ? [...prev.experiences, ...extracted.experiences] : prev.experiences,
+          education: typeof extracted.education === 'object' ? extracted.education?.degree || extracted.education?.education || prev.education : extracted.education || prev.education,
+          university: extracted.university || prev.university,
+          graduationYear: extracted.graduationYear || prev.graduationYear,
+        }));
+        
+        // Auto-merge extracted skills
+        if (Array.isArray(extracted.skills) && extracted.skills.length) {
+          setPendingExtractedSkills(Array.from(new Set(extracted.skills.map((s: any) => String(s)))));
+        } else {
+          setPendingExtractedSkills([]);
+        }
+        
+        toast({ title: "Resume parsed successfully!", description: "Your profile has been auto-filled with resume data." });
       }
+      
       if (typeof j?.resume?.atsScore === 'number') {
         setProfile((p) => ({ ...p, atsScore: j.resume.atsScore, lastResumeFileName: j?.resume?.originalName || file.name, lastAtsAnalysis: analysis } as any));
         try {
@@ -896,50 +919,50 @@ export default function JobSeekerProfilePage() {
     <div className="min-h-screen bg-slate-50 p-6">
       <div className="max-w-6xl mx-auto space-y-8">
         {/* Header Section */}
-        <Card className="border border-teal-100 shadow-sm bg-gradient-to-r from-teal-50/80 via-sky-50/80 to-white">
-          <CardContent className="p-6">
-            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
-              <div className="flex items-center gap-5">
-                <div className="w-20 h-20 rounded-full bg-teal-600 flex items-center justify-center text-white text-2xl font-bold shadow-sm">
+        <Card className="border-2 border-teal-200 shadow-xl bg-gradient-to-br from-white via-teal-50/30 to-sky-50/30 backdrop-blur">
+          <CardContent className="p-8">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-8">
+              <div className="flex items-center gap-6">
+                <div className="w-28 h-28 rounded-2xl bg-gradient-to-br from-teal-500 via-teal-600 to-sky-600 flex items-center justify-center text-white text-4xl font-bold shadow-2xl ring-4 ring-white/50">
                   {headerInitials}
                 </div>
-                <div className="min-w-0">
-                  <h1 className="text-2xl md:text-3xl font-semibold text-slate-900">
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
                     {profile.firstName} {profile.lastName}
                   </h1>
-                  <p className="text-sm md:text-base text-teal-700 font-medium mt-1">
+                  <p className="text-xl text-teal-700 font-bold mt-2 tracking-wide">
                     {profile.currentTitle}
                   </p>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-sm text-slate-600">
-                    <div className="flex items-center gap-1 min-w-0">
-                      <MapPin className="h-4 w-4" />
-                      <span className="break-words">{profile.location}</span>
+                  <div className="flex flex-wrap items-center gap-3 mt-4">
+                    <div className="flex items-center gap-2 bg-white/80 backdrop-blur px-4 py-2 rounded-xl shadow-sm border border-teal-100">
+                      <MapPin className="h-4 w-4 text-teal-600" />
+                      <span className="text-sm font-semibold text-slate-700 truncate max-w-[200px]">{profile.location}</span>
                     </div>
-                    <div className="flex items-center gap-1 min-w-0">
-                      <Mail className="h-4 w-4" />
-                      <span className="break-words">{profile.email}</span>
+                    <div className="flex items-center gap-2 bg-white/80 backdrop-blur px-4 py-2 rounded-xl shadow-sm border border-teal-100">
+                      <Mail className="h-4 w-4 text-teal-600" />
+                      <span className="text-sm font-semibold text-slate-700 truncate max-w-[200px]">{profile.email}</span>
                     </div>
-                    <div className="flex items-center gap-1 min-w-0">
-                      <Phone className="h-4 w-4" />
-                      <span className="break-words">{profile.phone}</span>
+                    <div className="flex items-center gap-2 bg-white/80 backdrop-blur px-4 py-2 rounded-xl shadow-sm border border-teal-100">
+                      <Phone className="h-4 w-4 text-teal-600" />
+                      <span className="text-sm font-semibold text-slate-700 truncate max-w-[150px]">{profile.phone}</span>
                     </div>
                   </div>
                 </div>
               </div>
-              <div className="text-right space-y-2">
-                <div className="inline-flex items-center gap-2 px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium">
-                  <TrendingUp className="h-5 w-5 text-green-600" />
-                  <span>Profile strength</span>
+              <div className="lg:text-right space-y-4">
+                <div className="inline-flex items-center gap-3 px-5 py-3 rounded-2xl bg-gradient-to-r from-emerald-100 to-teal-100 text-emerald-900 text-sm font-bold shadow-md border border-emerald-200">
+                  <TrendingUp className="h-6 w-6 text-emerald-600" />
+                  <span>Profile Strength</span>
                 </div>
-                <div className="w-40 ml-auto">
+                <div className="w-56 ml-auto bg-white/50 backdrop-blur rounded-2xl p-4 shadow-sm border border-teal-100">
                   <Progress
                     value={profile.profileCompleteness}
-                    className="h-2 rounded-full"
+                    className="h-4 rounded-full"
                   />
-                  <p className="text-xs text-slate-600 mt-1">
+                  <p className="text-base font-bold text-slate-800 mt-3">
                     {profile.profileCompleteness}% Complete
                   </p>
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-xs text-slate-500 mt-1">
                     Last updated: {lastSavedLabel}
                   </p>
                 </div>
@@ -949,19 +972,21 @@ export default function JobSeekerProfilePage() {
         </Card>
 
         {/* Profile banner */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle>Profile banner</CardTitle>
+        <Card className="border-2 border-slate-200 shadow-lg">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg font-bold text-slate-900">Profile Banner</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="rounded border overflow-hidden">
+          <CardContent className="space-y-4">
+            <div className="rounded-2xl border-2 border-slate-200 overflow-hidden shadow-inner">
               {(profile as any)?.bannerImage ? (
-                <img src={(profile as any).bannerImage} className="w-full h-40 object-cover" />
+                <img src={(profile as any).bannerImage} className="w-full h-48 object-cover" />
               ) : (
-                <div className="w-full h-40 bg-gradient-to-r from-slate-100 to-slate-200" />
+                <div className="w-full h-48 bg-gradient-to-r from-slate-100 via-slate-200 to-slate-100 flex items-center justify-center">
+                  <span className="text-slate-400 text-sm font-medium">No banner image</span>
+                </div>
               )}
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4">
               <Input
                 type="file"
                 accept="image/*"
@@ -980,32 +1005,32 @@ export default function JobSeekerProfilePage() {
                 }}
                 className="max-w-sm"
               />
-              <div className="text-xs text-muted-foreground">Recommended 1600×400</div>
+              <div className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full">Recommended 1600×400</div>
             </div>
           </CardContent>
         </Card>
 
         {/* Social overview */}
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle>Social overview</CardTitle>
+        <Card className="border-2 border-slate-200 shadow-lg">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg font-bold text-slate-900">Social Overview</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-5">
             {/* Quick post */}
-            <div className="rounded-md border border-slate-200 p-3 bg-white">
-              <div className="text-sm mb-2">Share something</div>
-              <Textarea rows={3} placeholder="I just shipped a new feature..." value={composer.text} onChange={(e) => setComposer((c) => ({ ...c, text: e.target.value }))} />
-              <div className="flex items-center gap-3 mt-2">
+            <div className="rounded-2xl border-2 border-slate-200 p-4 bg-white shadow-sm">
+              <div className="text-sm font-semibold text-slate-700 mb-3">Share something</div>
+              <Textarea rows={3} placeholder="I just shipped a new feature..." value={composer.text} onChange={(e) => setComposer((c) => ({ ...c, text: e.target.value }))} className="resize-none" />
+              <div className="flex items-center gap-4 mt-3">
                 <Input type="file" accept="image/*" multiple onChange={(e) => handleComposerFiles(e.target.files)} className="max-w-xs" />
-                <span className="text-xs text-muted-foreground">Up to 4 images</span>
-                <Button onClick={submitComposer} disabled={composer.busy || (!composer.text.trim() && composer.images.length === 0)} className="ml-auto">Post</Button>
+                <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full">Up to 4 images</span>
+                <Button onClick={submitComposer} disabled={composer.busy || (!composer.text.trim() && composer.images.length === 0)} className="ml-auto font-semibold">Post</Button>
               </div>
-              {composer.err && <div className="text-xs text-red-600 mt-1">{composer.err}</div>}
+              {composer.err && <div className="text-xs text-red-600 mt-2 font-semibold">{composer.err}</div>}
               {composer.images.length > 0 && (
-                <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-2">
+                <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3">
                   {composer.images.map((src, i) => (
-                    <div key={i} className="w-full rounded border bg-slate-50 flex items-center justify-center">
-                      <img src={src} className="w-full max-h-40 object-contain rounded" />
+                    <div key={i} className="w-full rounded-xl border-2 border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden">
+                      <img src={src} className="w-full max-h-40 object-contain rounded-lg" />
                     </div>
                   ))}
                 </div>
@@ -1013,39 +1038,39 @@ export default function JobSeekerProfilePage() {
             </div>
 
       {/* ATS Resume Score */}
-      <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-6 mt-6">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-md p-6 mt-6">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="font-semibold text-slate-900">ATS Resume Score</div>
+            <div className="text-lg font-bold text-slate-900">ATS Resume Score</div>
             <div className="text-sm text-muted-foreground max-w-xl">
               Analyze your resume against best practices and an optional job description. Higher scores indicate stronger alignment.
             </div>
           </div>
           <button
-            className="px-3 py-1.5 border rounded-md text-sm bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-60"
+            className="px-4 py-2 border rounded-lg text-sm bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-60 font-semibold shadow-sm"
             onClick={scoreResume}
             disabled={scoring}
           >
             {scoring ? 'Scoring…' : 'Re-score'}
           </button>
         </div>
-        <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="md:col-span-2 space-y-3">
             <div>
-              <label className="text-xs text-muted-foreground">Upload Resume (PDF/DOC)</label>
+              <label className="text-xs font-semibold text-muted-foreground">Upload Resume (PDF/DOC)</label>
               <div className="mt-1 flex items-center gap-2">
-                <input type="file" accept=".pdf,.doc,.docx,image/pdf,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e) => handleResumeUpload(e.target.files?.[0] || null)} />
-                {resumeUploading && <span className="text-xs text-muted-foreground animate-pulse">Uploading…</span>}
-                {uploadedResumeName && !resumeUploading && <span className="text-xs text-muted-foreground truncate">{uploadedResumeName}</span>}
+                <input type="file" accept=".pdf,.doc,.docx,image/pdf,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e) => handleResumeUpload(e.target.files?.[0] || null)} className="text-sm" />
+                {resumeUploading && <span className="text-xs text-muted-foreground animate-pulse font-medium">Uploading…</span>}
+                {uploadedResumeName && !resumeUploading && <span className="text-xs text-muted-foreground truncate font-medium">{uploadedResumeName}</span>}
               </div>
             </div>
             {pendingExtractedSkills.length > 0 && (
-              <div className="border rounded p-2 bg-amber-50 text-amber-800 text-xs flex items-center justify-between">
-                <div>
+              <div className="border rounded-lg p-3 bg-amber-50 text-amber-800 text-sm flex items-center justify-between">
+                <div className="font-medium">
                   Extracted skills detected: {pendingExtractedSkills.slice(0,8).join(', ')}{pendingExtractedSkills.length>8?'…':''}
                 </div>
                 <button
-                  className="ml-2 px-2 py-1 border rounded bg-white"
+                  className="ml-2 px-3 py-1.5 border rounded-lg bg-white font-semibold hover:bg-amber-100 transition-colors"
                   onClick={async () => {
                     const merged = Array.from(new Set([...(profile.skills||[]), ...pendingExtractedSkills]));
                     setProfile((p) => ({ ...p, skills: merged }));
@@ -1055,32 +1080,32 @@ export default function JobSeekerProfilePage() {
                 >Insert to profile</button>
               </div>
             )}
-            <label className="text-xs text-muted-foreground">Paste Job Description (optional)</label>
+            <label className="text-xs font-semibold text-muted-foreground">Paste Job Description (optional)</label>
             <textarea
-              className="w-full mt-1 border rounded p-2 text-sm min-h-[90px]"
+              className="w-full mt-1 border rounded-lg p-3 text-sm min-h-[90px] focus:ring-2 focus:ring-teal-500 focus:border-transparent"
               placeholder="Paste JD to get a match score and keyword gaps"
               value={jdText}
               onChange={(e) => setJdText(e.target.value)}
             />
           </div>
-          <div className="border rounded p-3 bg-white">
+          <div className="border rounded-lg p-4 bg-gradient-to-br from-slate-50 to-white">
             <div className="flex items-center gap-4">
-              <div className="relative w-24 h-24 rounded-full grid place-items-center"
+              <div className="relative w-28 h-28 rounded-full grid place-items-center"
                    style={{ background: `conic-gradient(${getBandColor(Number(ats?.atsScore||0))} ${(Number(ats?.atsScore||0)*3.6)}deg, #e5e7eb 0deg)` }}>
-                <div className="w-18 h-18 bg-white rounded-full grid place-items-center">
-                  <div className="text-2xl font-semibold">{ats?.atsScore ?? '--'}</div>
+                <div className="w-20 h-20 bg-white rounded-full grid place-items-center shadow-inner">
+                  <div className="text-3xl font-bold">{ats?.atsScore ?? '--'}</div>
                 </div>
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-xs text-muted-foreground">ATS Score</div>
-                <div className="text-sm font-medium">{typeof ats?.atsScore === 'number' ? bandLabel(Number(ats.atsScore)) : '—'}</div>
+                <div className="text-xs font-semibold text-muted-foreground">ATS Score</div>
+                <div className="text-base font-bold">{typeof ats?.atsScore === 'number' ? bandLabel(Number(ats.atsScore)) : '—'}</div>
                 {typeof ats?.matchScore === 'number' && (
-                  <div className="mt-1 text-xs">Match score: <span className="font-medium">{ats.matchScore}%</span></div>
+                  <div className="mt-1 text-sm">Match score: <span className="font-bold">{ats.matchScore}%</span></div>
                 )}
               </div>
             </div>
             {ats?.sections && (
-              <div className="mt-3 space-y-2">
+              <div className="mt-4 space-y-2">
                 {[
                   { k: 'Contact', v: ats.sections.contact?.score },
                   { k: 'Skills', v: ats.sections.skills?.score },
@@ -1088,10 +1113,10 @@ export default function JobSeekerProfilePage() {
                   { k: 'Education', v: ats.sections.education?.score },
                   { k: 'Format', v: ats.formatting?.score },
                 ].map((row, i) => (
-                  <div key={i} className="text-xs">
-                    <div className="flex justify-between"><span>{row.k}</span><span>{row.v ?? '--'}</span></div>
-                    <div className="h-2 rounded bg-slate-100 overflow-hidden">
-                      <div className="h-full" style={{ width: `${Math.min(100, Number(row.v||0))}%`, background: getBandColor(Number(row.v||0)) }} />
+                  <div key={i} className="text-sm">
+                    <div className="flex justify-between font-medium"><span>{row.k}</span><span>{row.v ?? '--'}</span></div>
+                    <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden mt-1">
+                      <div className="h-full rounded-full" style={{ width: `${Math.min(100, Number(row.v||0))}%`, background: getBandColor(Number(row.v||0)) }} />
                     </div>
                   </div>
                 ))}
@@ -1101,12 +1126,12 @@ export default function JobSeekerProfilePage() {
         </div>
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
           {Array.isArray(ats?.strengths) && ats.strengths.length > 0 && (
-            <div className="border rounded p-3 bg-white">
+            <div className="border rounded-lg p-4 bg-gradient-to-br from-green-50 to-white">
               <div className="flex items-center justify-between">
-                <div className="text-sm font-medium">Strengths</div>
-                <button className="text-xs text-teal-700" onClick={() => setShowStrengths((s) => !s)}>{showStrengths ? 'Show less' : 'Show more'}</button>
+                <div className="text-sm font-bold">Strengths</div>
+                <button className="text-xs font-semibold text-teal-700 hover:text-teal-800" onClick={() => setShowStrengths((s) => !s)}>{showStrengths ? 'Show less' : 'Show more'}</button>
               </div>
-              <ul className="mt-2 list-disc pl-5 text-sm space-y-1">
+              <ul className="mt-2 list-disc pl-5 text-sm space-y-1.5">
                 {(showStrengths ? ats.strengths : ats.strengths.slice(0,4)).map((s: string, i: number) => (
                   <li key={`st-${i}`}>{s}</li>
                 ))}
@@ -1114,12 +1139,12 @@ export default function JobSeekerProfilePage() {
             </div>
           )}
           {Array.isArray(ats?.improvements) && ats.improvements.length > 0 && (
-            <div className="border rounded p-3 bg-white">
+            <div className="border rounded-lg p-4 bg-gradient-to-br from-amber-50 to-white">
               <div className="flex items-center justify-between">
-                <div className="text-sm font-medium">Improvements</div>
-                <button className="text-xs text-teal-700" onClick={() => setShowImprovements((s) => !s)}>{showImprovements ? 'Show less' : 'Show more'}</button>
+                <div className="text-sm font-bold">Improvements</div>
+                <button className="text-xs font-semibold text-teal-700 hover:text-teal-800" onClick={() => setShowImprovements((s) => !s)}>{showImprovements ? 'Show less' : 'Show more'}</button>
               </div>
-              <ul className="mt-2 list-disc pl-5 text-sm space-y-1">
+              <ul className="mt-2 list-disc pl-5 text-sm space-y-1.5">
                 {(showImprovements ? ats.improvements : ats.improvements.slice(0,6)).map((s: string, i: number) => (
                   <li key={`imp-${i}`}>{s}</li>
                 ))}
@@ -1130,21 +1155,21 @@ export default function JobSeekerProfilePage() {
         {Array.isArray(ats?.keywordMatches) && ats.keywordMatches.length > 0 && (
           <div className="mt-4">
             <div className="flex items-center justify-between">
-              <div className="text-sm font-medium">Keywords</div>
-              <button onClick={copyKeywords} className="text-xs text-teal-700">{copying ? 'Copied' : 'Copy'}</button>
+              <div className="text-sm font-bold">Keywords</div>
+              <button onClick={copyKeywords} className="text-xs font-semibold text-teal-700 hover:text-teal-800">{copying ? 'Copied' : 'Copy'}</button>
             </div>
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap gap-1.5 mt-2">
               {ats.keywordMatches.slice(0,24).map((k: any, i: number) => (
-                <span key={i} className={`text-xs px-2 py-0.5 border rounded ${k.found ? 'bg-emerald-50 border-emerald-300' : 'bg-slate-50'}`}>{k.keyword}{k.frequency ? ` (${k.frequency})` : ''}</span>
+                <span key={i} className={`text-xs px-2.5 py-1 border rounded-lg font-medium ${k.found ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>{k.keyword}{k.frequency ? ` (${k.frequency})` : ''}</span>
               ))}
             </div>
             {/* Missing keywords */}
             {ats.keywordMatches.filter((k: any) => !k.found).length > 0 && (
               <div className="mt-3">
-                <div className="text-xs text-muted-foreground mb-1">Missing keywords</div>
-                <div className="flex flex-wrap gap-1">
+                <div className="text-xs font-semibold text-muted-foreground mb-2">Missing keywords</div>
+                <div className="flex flex-wrap gap-1.5">
                   {ats.keywordMatches.filter((k: any) => !k.found).slice(0,24).map((k: any, i: number) => (
-                    <span key={`miss-${i}`} className="text-xs px-2 py-0.5 border rounded bg-rose-50 border-rose-300">{k.keyword}</span>
+                    <span key={`miss-${i}`} className="text-xs px-2.5 py-1 border rounded-lg bg-rose-50 border-rose-300 text-rose-800 font-medium">{k.keyword}</span>
                   ))}
                 </div>
               </div>
@@ -1153,15 +1178,15 @@ export default function JobSeekerProfilePage() {
         )}
         {(scoring || resumeUploading) && (
           <div className="mt-4 grid grid-cols-3 gap-2">
-            <div className="h-3 rounded bg-slate-200 animate-pulse" />
-            <div className="h-3 rounded bg-slate-200 animate-pulse" />
-            <div className="h-3 rounded bg-slate-200 animate-pulse" />
+            <div className="h-3 rounded-full bg-slate-200 animate-pulse" />
+            <div className="h-3 rounded-full bg-slate-200 animate-pulse" />
+            <div className="h-3 rounded-full bg-slate-200 animate-pulse" />
           </div>
         )}
         <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
-          <a href="/dashboard/job-seeker/resume-builder" className="text-sm px-3 py-2 border rounded bg-white hover:bg-slate-50 text-center">Build Resume</a>
-          <a href="/dashboard/jobs" className="text-sm px-3 py-2 border rounded bg-white hover:bg-slate-50 text-center">Browse Jobs</a>
-          <a href="/dashboard/ai-assistant" className="text-sm px-3 py-2 border rounded bg-white hover:bg-slate-50 text-center">Start AI Chat</a>
+          <a href="/dashboard/job-seeker/resume-builder" className="text-sm px-4 py-2.5 border rounded-lg bg-white hover:bg-slate-50 text-center font-semibold shadow-sm">Build Resume</a>
+          <a href="/dashboard/jobs" className="text-sm px-4 py-2.5 border rounded-lg bg-white hover:bg-slate-50 text-center font-semibold shadow-sm">Browse Jobs</a>
+          <a href="/dashboard/ai-assistant" className="text-sm px-4 py-2.5 border rounded-lg bg-white hover:bg-slate-50 text-center font-semibold shadow-sm">Start AI Chat</a>
         </div>
       </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1239,43 +1264,43 @@ export default function JobSeekerProfilePage() {
         </Card>
 
         {/* Profile Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="h-full flex flex-col overflow-visible border-green-200 bg-gradient-to-br from-green-50 to-emerald-50">
-            <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+          <Card className="h-full flex flex-col overflow-visible border-2 border-green-300 bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 shadow-lg hover:shadow-xl transition-all duration-300">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-green-600" />
-                <CardTitle className="text-sm">ATS Score</CardTitle>
+                <CheckCircle className="h-6 w-6 text-green-600" />
+                <CardTitle className="text-base font-bold text-green-900">ATS Score</CardTitle>
               </div>
             </CardHeader>
-            <CardContent className="pt-0 pb-4 flex flex-col items-center justify-start gap-1">
-              <p className="mt-4 text-3xl font-bold text-green-700">
+            <CardContent className="pt-0 pb-5 flex flex-col items-center justify-start gap-2">
+              <p className="mt-4 text-5xl font-black text-green-700">
                 {profile.atsScore || 0}%
               </p>
-              <p className="text-[11px] font-medium text-green-800">
+              <p className="text-sm font-bold text-green-800">
                 {typeof profile.atsScore === "number" && !Number.isNaN(profile.atsScore)
                   ? bandLabel(Number(profile.atsScore))
                   : "Not scored yet"}
               </p>
-              <p className="text-[11px] text-green-700/80">Resume match quality</p>
+              <p className="text-xs font-semibold text-green-700/90">Resume match quality</p>
 
               {verifiedSkillCount > 0 && (
-                <div className="mt-4 w-full px-1">
-                  <div className="text-[11px] font-medium text-green-900/80 mb-1">
+                <div className="mt-5 w-full px-2">
+                  <div className="text-xs font-bold text-green-900/90 mb-2">
                     Verified skills
                   </div>
-                  <div className="flex flex-wrap gap-1">
+                  <div className="flex flex-wrap gap-1.5">
                     {Array.from(verifiedSkillNames)
                       .slice(0, 4)
                       .map((name) => (
                         <span
                           key={name}
-                          className="text-[11px] rounded-full bg-white/80 border border-green-200 px-2 py-0.5 text-green-800"
+                          className="text-xs rounded-full bg-white/90 border-2 border-green-300 px-2.5 py-1 text-green-800 font-bold shadow-sm"
                         >
                           {name}
                         </span>
                       ))}
                     {verifiedSkillCount > 4 && (
-                      <span className="text-[11px] rounded-full bg-green-100/80 px-2 py-0.5 text-green-800">
+                      <span className="text-xs rounded-full bg-green-100/90 border-2 border-green-300 px-2.5 py-1 text-green-800 font-bold shadow-sm">
                         +{verifiedSkillCount - 4} more
                       </span>
                     )}
@@ -1347,11 +1372,11 @@ export default function JobSeekerProfilePage() {
               ) : (
                 <div className="rounded-xl border border-teal-200 bg-white p-4 h-full">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div><span className="text-muted-foreground">Name:</span> <span className="font-medium text-teal-900">{profile.firstName} {profile.lastName}</span></div>
-                    <div><span className="text-muted-foreground">Email:</span> <span className="font-medium text-teal-900">{profile.email}</span></div>
-                    <div><span className="text-muted-foreground">Phone:</span> <span className="font-medium text-teal-900">{profile.phone || "—"}</span></div>
-                    <div><span className="text-muted-foreground">Location:</span> <span className="font-medium text-teal-900">{profile.location || "—"}</span></div>
-                    <div className="md:col-span-2"><span className="text-muted-foreground">Current Title:</span> <span className="font-medium text-teal-900">{profile.currentTitle || "—"}</span></div>
+                    <div className="flex flex-col gap-1"><span className="text-muted-foreground text-xs">Name:</span> <span className="font-medium text-teal-900 truncate">{profile.firstName} {profile.lastName}</span></div>
+                    <div className="flex flex-col gap-1"><span className="text-muted-foreground text-xs">Email:</span> <span className="font-medium text-teal-900 truncate">{profile.email}</span></div>
+                    <div className="flex flex-col gap-1"><span className="text-muted-foreground text-xs">Phone:</span> <span className="font-medium text-teal-900 truncate">{profile.phone || "—"}</span></div>
+                    <div className="flex flex-col gap-1"><span className="text-muted-foreground text-xs">Location:</span> <span className="font-medium text-teal-900 truncate">{profile.location || "—"}</span></div>
+                    <div className="md:col-span-2 flex flex-col gap-1"><span className="text-muted-foreground text-xs">Current Title:</span> <span className="font-medium text-teal-900 truncate">{profile.currentTitle || "—"}</span></div>
                   </div>
                   {profile.summary ? (
                     <p className="mt-3 text-[15px] text-gray-800 leading-7 whitespace-pre-wrap break-words line-clamp-[10]">{profile.summary}</p>
@@ -1395,7 +1420,7 @@ export default function JobSeekerProfilePage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Education Level</Label>
-                      <Input value={profile.education} onChange={(e) => setProfile((p) => ({ ...p, education: e.target.value }))} />
+                      <Input value={typeof profile.education === 'object' ? profile.education?.degree || profile.education?.education || '' : profile.education || ''} onChange={(e) => setProfile((p) => ({ ...p, education: e.target.value }))} />
                     </div>
                     <div className="space-y-2">
                       <Label>University / School</Label>
@@ -1420,10 +1445,10 @@ export default function JobSeekerProfilePage() {
               ) : (
                 <div className="rounded-xl border border-teal-200 bg-white p-4 text-sm h-full">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div><span className="text-muted-foreground">Education:</span> <span className="font-medium text-teal-900">{profile.education || "—"}</span></div>
-                    <div><span className="text-muted-foreground">University:</span> <span className="font-medium text-teal-900">{profile.university || "—"}</span></div>
-                    <div><span className="text-muted-foreground">Grad Year:</span> <span className="font-medium text-teal-900">{profile.graduationYear || "—"}</span></div>
-                    <div><span className="text-muted-foreground">GPA:</span> <span className="font-medium text-teal-900">{profile.gpa || "—"}</span></div>
+                    <div className="flex flex-col gap-1"><span className="text-muted-foreground text-xs">Education:</span> <span className="font-medium text-teal-900 truncate">{typeof profile.education === 'object' ? profile.education?.degree || profile.education?.education || "—" : profile.education || "—"}</span></div>
+                    <div className="flex flex-col gap-1"><span className="text-muted-foreground text-xs">University:</span> <span className="font-medium text-teal-900 truncate">{profile.university || "—"}</span></div>
+                    <div className="flex flex-col gap-1"><span className="text-muted-foreground text-xs">Grad Year:</span> <span className="font-medium text-teal-900 truncate">{profile.graduationYear || "—"}</span></div>
+                    <div className="flex flex-col gap-1"><span className="text-muted-foreground text-xs">GPA:</span> <span className="font-medium text-teal-900 truncate">{profile.gpa || "—"}</span></div>
                   </div>
                 </div>
               )}
@@ -1796,37 +1821,37 @@ export default function JobSeekerProfilePage() {
             </CardContent>
           </Card>
 
-          <Card className="border-blue-200 bg-gradient-to-br from-blue-50 to-cyan-50">
-            <CardContent className="p-4 text-center">
-              <div className="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mx-auto mb-2">
-                <Award className="h-6 w-6 text-blue-600" />
+          <Card className="border-2 border-blue-300 bg-gradient-to-br from-blue-50 via-cyan-50 to-sky-50 shadow-lg hover:shadow-xl transition-all duration-300">
+            <CardContent className="p-5 text-center">
+              <div className="flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-100 to-cyan-100 rounded-2xl mx-auto mb-4 ring-4 ring-white/50 shadow-md">
+                <Award className="h-8 w-8 text-blue-600" />
               </div>
-              <p className="text-2xl font-bold text-blue-700">
+              <p className="text-4xl font-black text-blue-700">
                 {verifiedSkillCount}
               </p>
-              <p className="text-sm text-blue-600">Skills Verified</p>
+              <p className="text-base font-bold text-blue-600">Skills Verified</p>
             </CardContent>
           </Card>
 
-          <Card className="border-purple-200 bg-gradient-to-br from-purple-50 to-pink-50">
-            <CardContent className="p-4 text-center">
-              <div className="flex items-center justify-center w-12 h-12 bg-purple-100 rounded-full mx-auto mb-2">
-                <Calendar className="h-6 w-6 text-purple-600" />
+          <Card className="border-2 border-purple-300 bg-gradient-to-br from-purple-50 via-pink-50 to-rose-50 shadow-lg hover:shadow-xl transition-all duration-300">
+            <CardContent className="p-5 text-center">
+              <div className="flex items-center justify-center w-16 h-16 bg-gradient-to-br from-purple-100 to-pink-100 rounded-2xl mx-auto mb-4 ring-4 ring-white/50 shadow-md">
+                <Calendar className="h-8 w-8 text-purple-600" />
               </div>
-              <p className="text-2xl font-bold text-purple-700">
+              <p className="text-4xl font-black text-purple-700">
                 {profile.yearsOfExperience}
               </p>
-              <p className="text-sm text-purple-600">Years Experience</p>
+              <p className="text-base font-bold text-purple-600">Years Experience</p>
             </CardContent>
           </Card>
 
-          <Card className="border-orange-200 bg-gradient-to-br from-orange-50 to-yellow-50">
-            <CardContent className="p-4 text-center">
-              <div className="flex items-center justify-center w-12 h-12 bg-orange-100 rounded-full mx-auto mb-2">
-                <Star className="h-6 w-6 text-orange-600" />
+          <Card className="border-2 border-orange-300 bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 shadow-lg hover:shadow-xl transition-all duration-300">
+            <CardContent className="p-5 text-center">
+              <div className="flex items-center justify-center w-16 h-16 bg-gradient-to-br from-orange-100 to-amber-100 rounded-2xl mx-auto mb-4 ring-4 ring-white/50 shadow-md">
+                <Star className="h-8 w-8 text-orange-600" />
               </div>
-              <p className="text-2xl font-bold text-orange-700">{profileRating.toFixed(1)}</p>
-              <p className="text-sm text-orange-600">Profile Rating</p>
+              <p className="text-4xl font-black text-orange-700">{profileRating.toFixed(1)}</p>
+              <p className="text-base font-bold text-orange-600">Profile Rating</p>
             </CardContent>
           </Card>
         </div>
@@ -1834,144 +1859,6 @@ export default function JobSeekerProfilePage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Personal Information */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <User className="h-5 w-5 text-blue-600" />
-                  <CardTitle>Personal Information</CardTitle>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setEditingSection(
-                      editingSection === "personal" ? null : "personal"
-                    )
-                  }
-                >
-                  {editingSection === "personal" ? (
-                    <X className="h-4 w-4" />
-                  ) : (
-                    <Edit3 className="h-4 w-4" />
-                  )}
-                </Button>
-              </CardHeader>
-              <CardContent>
-                {editingSection === "personal" ? (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="firstName">First Name *</Label>
-                        <Input
-                          id="firstName"
-                          value={profile.firstName}
-                          onChange={(e) =>
-                            setProfile((prev) => ({
-                              ...prev,
-                              firstName: e.target.value,
-                            }))
-                          }
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="lastName">Last Name *</Label>
-                        <Input
-                          id="lastName"
-                          value={profile.lastName}
-                          onChange={(e) =>
-                            setProfile((prev) => ({
-                              ...prev,
-                              lastName: e.target.value,
-                            }))
-                          }
-                          required
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="email">Email *</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={profile.email}
-                        onChange={(e) =>
-                          setProfile((prev) => ({
-                            ...prev,
-                            email: e.target.value,
-                          }))
-                        }
-                        required
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="phone">Phone</Label>
-                        <Input
-                          id="phone"
-                          value={profile.phone}
-                          onChange={(e) =>
-                            setProfile((prev) => ({
-                              ...prev,
-                              phone: e.target.value,
-                            }))
-                          }
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="location">Location *</Label>
-                        <Input
-                          id="location"
-                          value={profile.location}
-                          onChange={(e) =>
-                            setProfile((prev) => ({
-                              ...prev,
-                              location: e.target.value,
-                            }))
-                          }
-                          required
-                        />
-                      </div>
-                    </div>
-                    <Button
-                      onClick={() => handleSaveSection("personal")}
-                      disabled={loading}
-                    >
-                      {loading && (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      )}
-                      <Save className="mr-2 h-4 w-4" />
-                      Save Changes
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-600">Full Name</p>
-                      <p className="font-medium">
-                        {profile.firstName} {profile.lastName}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Email</p>
-                      <p className="font-medium">{profile.email}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Phone</p>
-                      <p className="font-medium">
-                        {profile.phone || "Not provided"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Location</p>
-                      <p className="font-medium">{profile.location}</p>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
             {/* Professional Summary */}
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
@@ -2307,143 +2194,6 @@ export default function JobSeekerProfilePage() {
 
           {/* Right Column */}
           <div className="space-y-6">
-            {/* Education */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <GraduationCap className="h-5 w-5 text-green-600" />
-                  <CardTitle>Education</CardTitle>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setEditingSection(
-                      editingSection === "education" ? null : "education"
-                    )
-                  }
-                >
-                  {editingSection === "education" ? (
-                    <X className="h-4 w-4" />
-                  ) : (
-                    <Edit3 className="h-4 w-4" />
-                  )}
-                </Button>
-              </CardHeader>
-              <CardContent>
-                {editingSection === "education" ? (
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="education">Education Level *</Label>
-                      <Select
-                        value={profile.education}
-                        onValueChange={(value) =>
-                          setProfile((prev) => ({ ...prev, education: value }))
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select education level" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="high-school">
-                            High School
-                          </SelectItem>
-                          <SelectItem value="associate">
-                            Associate Degree
-                          </SelectItem>
-                          <SelectItem value="bachelor">
-                            Bachelor's Degree
-                          </SelectItem>
-                          <SelectItem value="master">
-                            Master's Degree
-                          </SelectItem>
-                          <SelectItem value="phd">PhD</SelectItem>
-                          <SelectItem value="other">Other</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="university">University/Institution</Label>
-                      <Input
-                        id="university"
-                        value={profile.university}
-                        onChange={(e) =>
-                          setProfile((prev) => ({
-                            ...prev,
-                            university: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="graduationYear">Graduation Year</Label>
-                      <Input
-                        id="graduationYear"
-                        value={profile.graduationYear}
-                        onChange={(e) =>
-                          setProfile((prev) => ({
-                            ...prev,
-                            graduationYear: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="gpa">GPA (Optional)</Label>
-                      <Input
-                        id="gpa"
-                        value={profile.gpa}
-                        onChange={(e) =>
-                          setProfile((prev) => ({
-                            ...prev,
-                            gpa: e.target.value,
-                          }))
-                        }
-                        placeholder="3.8"
-                      />
-                    </div>
-                    <Button
-                      onClick={() => handleSaveSection("education")}
-                      disabled={loading}
-                    >
-                      {loading && (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      )}
-                      <Save className="mr-2 h-4 w-4" />
-                      Save Changes
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div>
-                      <p className="text-sm text-gray-600">Degree</p>
-                      <p className="font-medium">
-                        {getEducationLabel(profile.education)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">University</p>
-                      <p className="font-medium">
-                        {profile.university || "Not specified"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Graduation Year</p>
-                      <p className="font-medium">
-                        {profile.graduationYear || "Not specified"}
-                      </p>
-                    </div>
-                    {profile.gpa && (
-                      <div>
-                        <p className="text-sm text-gray-600">GPA</p>
-                        <p className="font-medium">{profile.gpa}/4.0</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
             {/* Online Presence */}
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">

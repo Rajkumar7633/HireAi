@@ -2,9 +2,10 @@ const express = require("express");
 const router = express.Router();
 const UserProfile = require("../models/UserProfile");
 const auth = require("../middleware/auth");
+const { cacheMiddleware, invalidateCache } = require("../middleware/cache");
 
 // Get user profile
-router.get("/:userId", auth, async (req, res) => {
+router.get("/:userId", auth, cacheMiddleware('profile:detail', 300), async (req, res) => {
   try {
     const profile = await UserProfile.findOne({ userId: req.params.userId });
     if (!profile) {
@@ -34,6 +35,8 @@ router.post("/setup", auth, async (req, res) => {
       }
     );
 
+    await invalidateCache('profile:*');
+
     res.json({
       message: "Profile created successfully",
       profile,
@@ -57,6 +60,8 @@ router.put("/:userId", auth, async (req, res) => {
     if (!profile) {
       return res.status(404).json({ message: "Profile not found" });
     }
+
+    await invalidateCache('profile:*');
 
     res.json({
       message: "Profile updated successfully",

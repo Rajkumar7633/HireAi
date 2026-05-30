@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2, Building2, MapPin, Phone, Mail, Globe, Save, CheckCircle } from "lucide-react"
+import { Loader2, Building2, MapPin, Phone, Mail, Globe, Save, CheckCircle, Plus, X, GraduationCap } from "lucide-react"
 
 export default function CollegeProfilePage() {
   const [loading, setLoading] = useState(false)
@@ -32,8 +32,41 @@ export default function CollegeProfilePage() {
     studentCapacity: "",
     placementCellHead: "",
     placementCellEmail: "",
-    placementCellPhone: ""
+    placementCellPhone: "",
+    departments: [] as Array<{name: string, branches: string[]}>
   })
+
+  const [newDepartment, setNewDepartment] = useState({ name: "", branch: "" })
+
+  const addDepartment = () => {
+    if (newDepartment.name.trim()) {
+      setProfile({
+        ...profile,
+        departments: [...profile.departments, { name: newDepartment.name.trim(), branches: [] }]
+      })
+      setNewDepartment({ name: "", branch: "" })
+    }
+  }
+
+  const addBranch = (deptIndex: number) => {
+    if (newDepartment.branch.trim()) {
+      const updatedDepartments = [...profile.departments]
+      updatedDepartments[deptIndex].branches.push(newDepartment.branch.trim())
+      setProfile({ ...profile, departments: updatedDepartments })
+      setNewDepartment({ ...newDepartment, branch: "" })
+    }
+  }
+
+  const removeDepartment = (index: number) => {
+    const updatedDepartments = profile.departments.filter((_, i) => i !== index)
+    setProfile({ ...profile, departments: updatedDepartments })
+  }
+
+  const removeBranch = (deptIndex: number, branchIndex: number) => {
+    const updatedDepartments = [...profile.departments]
+    updatedDepartments[deptIndex].branches = updatedDepartments[deptIndex].branches.filter((_, i) => i !== branchIndex)
+    setProfile({ ...profile, departments: updatedDepartments })
+  }
 
   useEffect(() => {
     fetchProfile()
@@ -42,27 +75,11 @@ export default function CollegeProfilePage() {
   const fetchProfile = async () => {
     setLoading(true)
     try {
-      // Mock data - in production, fetch from API
-      setProfile({
-        name: "Demo Engineering College",
-        code: "DEC001",
-        address: "123 Education Lane",
-        city: "Bangalore",
-        state: "Karnataka",
-        country: "India",
-        zipCode: "560001",
-        phone: "+91 9876543210",
-        email: "info@democollege.edu",
-        website: "https://www.democollege.edu",
-        description: "A premier engineering college focused on excellence in education and placement.",
-        establishedYear: "1995",
-        accreditation: "AICTE, NBA",
-        type: "Engineering",
-        studentCapacity: "5000",
-        placementCellHead: "Dr. John Doe",
-        placementCellEmail: "placement@democollege.edu",
-        placementCellPhone: "+91 9876543211"
-      })
+      const response = await fetch("/api/college/profile")
+      const data = await response.json()
+      if (data.profile) {
+        setProfile(data.profile)
+      }
     } catch (error) {
       console.error("Failed to fetch profile:", error)
     } finally {
@@ -74,10 +91,15 @@ export default function CollegeProfilePage() {
     setSaving(true)
     setSuccess(false)
     try {
-      // Mock save - in production, call API
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      setSuccess(true)
-      setTimeout(() => setSuccess(false), 3000)
+      const response = await fetch("/api/college/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(profile)
+      })
+      if (response.ok) {
+        setSuccess(true)
+        setTimeout(() => setSuccess(false), 3000)
+      }
     } catch (error) {
       console.error("Failed to save profile:", error)
     } finally {
@@ -338,6 +360,73 @@ export default function CollegeProfilePage() {
                   placeholder="+91 XXXXXXXXXX"
                 />
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <GraduationCap className="h-5 w-5" />
+              Departments & Branches
+            </CardTitle>
+            <CardDescription>Manage your college's departments and branches</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Add Department */}
+            <div className="flex gap-2">
+              <Input
+                placeholder="Department name (e.g., Computer Science)"
+                value={newDepartment.name}
+                onChange={(e) => setNewDepartment({ ...newDepartment, name: e.target.value })}
+                onKeyPress={(e) => e.key === 'Enter' && addDepartment()}
+              />
+              <Button onClick={addDepartment}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Department
+              </Button>
+            </div>
+
+            {/* Departments List */}
+            <div className="space-y-4">
+              {profile.departments.map((dept, deptIndex) => (
+                <Card key={deptIndex} className="border-2">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg">{dept.name}</CardTitle>
+                      <Button variant="ghost" size="icon" onClick={() => removeDepartment(deptIndex)}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap gap-2">
+                        {dept.branches.map((branch, branchIndex) => (
+                          <div key={branchIndex} className="flex items-center gap-1 bg-blue-50 border border-blue-200 rounded-full px-3 py-1">
+                            <span className="text-sm">{branch}</span>
+                            <Button variant="ghost" size="icon" className="h-4 w-4 p-0" onClick={() => removeBranch(deptIndex, branchIndex)}>
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Add branch (e.g., CSE, IT)"
+                          value={newDepartment.branch}
+                          onChange={(e) => setNewDepartment({ ...newDepartment, branch: e.target.value })}
+                          onKeyPress={(e) => e.key === 'Enter' && addBranch(deptIndex)}
+                        />
+                        <Button onClick={() => addBranch(deptIndex)} variant="outline" size="sm">
+                          <Plus className="h-4 w-4 mr-1" />
+                          Add Branch
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           </CardContent>
         </Card>

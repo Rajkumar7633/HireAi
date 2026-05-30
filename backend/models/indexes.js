@@ -42,6 +42,7 @@ async function ensureIndexes() {
     users.createIndex({ email: 1 }, { unique: true, sparse: true }),
     users.createIndex({ role: 1 }),
     users.createIndex({ createdAt: -1 }),
+    users.createIndex({ firstName: 1, lastName: 1 }), // for search
   ]);
 
   // ─── Resume ──────────────────────────────────────────────────────────────

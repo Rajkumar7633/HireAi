@@ -24,6 +24,9 @@ if (missing.length) {
 const connectDB = require("./config/db");
 connectDB();
 
+// Initialize Redis client
+const redisClient = require("./config/redis");
+
 // Load DB indexes in background (non-blocking)
 require("./models/indexes").ensureIndexes().catch((e) =>
   console.warn("⚠️  Index creation failed (non-fatal):", e.message)
@@ -203,6 +206,14 @@ app.use("/api/email-templates",  require("./routes/emailTemplates"));
 app.use("/api/export-reports",   require("./routes/exportReports"));
 app.use("/api/interview-scorecards", require("./routes/interviewScorecards"));
 app.use("/api/realtime-notifications", require("./routes/realtimeNotifications"));
+app.use("/api/college",          require("./routes/college"));
+app.use("/api/college",          require("./routes/collegeStudents"));
+app.use("/api/college",          require("./routes/campusDrives"));
+app.use("/api/college",          require("./routes/collegePartnerships"));
+app.use("/api/college",          require("./routes/collegeAnalytics"));
+app.use("/api/college",          require("./routes/collegeNotifications"));
+app.use("/api/college",          require("./routes/studentPlacements"));
+app.use("/api/college",          require("./routes/collegeInterviews"));
 
 
 // ─── 404 catch-all ─────────────────────────────────────────────────────────

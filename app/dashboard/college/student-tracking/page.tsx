@@ -49,10 +49,25 @@ export default function StudentTrackingPage() {
   const [analytics, setAnalytics] = useState<Analytics | null>(null)
   const [selectedYear, setSelectedYear] = useState<string>("all")
   const [selectedBranch, setSelectedBranch] = useState<string>("all")
+  const [selectedDepartment, setSelectedDepartment] = useState<string>("all")
+  const [collegeProfile, setCollegeProfile] = useState<any>(null)
 
   useEffect(() => {
+    fetchCollegeProfile()
     fetchData()
-  }, [selectedYear, selectedBranch])
+  }, [selectedYear, selectedBranch, selectedDepartment])
+
+  const fetchCollegeProfile = async () => {
+    try {
+      const response = await fetch("/api/college/profile")
+      const data = await response.json()
+      if (data.profile) {
+        setCollegeProfile(data.profile)
+      }
+    } catch (error) {
+      console.error("Failed to fetch college profile:", error)
+    }
+  }
 
   const fetchData = async () => {
     setLoading(true)
@@ -61,6 +76,7 @@ export default function StudentTrackingPage() {
       const params = new URLSearchParams()
       if (selectedYear !== "all") params.append("year", selectedYear)
       if (selectedBranch !== "all") params.append("branch", selectedBranch)
+      if (selectedDepartment !== "all") params.append("department", selectedDepartment)
 
       const [studentsRes, analyticsRes] = await Promise.all([
         fetch(`/api/student-tracking?collegeId=${collegeId}&${params}`),
@@ -120,7 +136,38 @@ export default function StudentTrackingPage() {
       {/* Filters */}
       <Card className="mb-6">
         <CardContent className="pt-6">
-          <div className="grid md:grid-cols-2 gap-4">
+          <div className="grid md:grid-cols-3 gap-4">
+            <div>
+              <Label htmlFor="department">Department</Label>
+              <Select value={selectedDepartment} onValueChange={(value) => {
+                setSelectedDepartment(value)
+                setSelectedBranch("all")
+              }}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Departments</SelectItem>
+                  {collegeProfile?.departments?.map((dept: any) => (
+                    <SelectItem key={dept.name} value={dept.name}>{dept.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="branch">Branch</Label>
+              <Select value={selectedBranch} onValueChange={setSelectedBranch} disabled={selectedDepartment === "all"}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Branches</SelectItem>
+                  {selectedDepartment !== "all" && collegeProfile?.departments?.find((d: any) => d.name === selectedDepartment)?.branches?.map((branch: string) => (
+                    <SelectItem key={branch} value={branch}>{branch}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div>
               <Label htmlFor="year">Academic Year</Label>
               <Select value={selectedYear} onValueChange={setSelectedYear}>
@@ -137,34 +184,20 @@ export default function StudentTrackingPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <Label htmlFor="branch">Branch</Label>
-              <Select value={selectedBranch} onValueChange={setSelectedBranch}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Branches</SelectItem>
-                  <SelectItem value="CSE">Computer Science</SelectItem>
-                  <SelectItem value="ECE">Electronics</SelectItem>
-                  <SelectItem value="EEE">Electrical</SelectItem>
-                  <SelectItem value="MECH">Mechanical</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
           </div>
         </CardContent>
       </Card>
 
       {/* Analytics Overview */}
       {analytics && (
-        <div className="grid md:grid-cols-4 gap-4 mb-6">
+        <div className="grid md:grid-cols-5 gap-4 mb-6">
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium">Total Students</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">{analytics.totalStudents}</div>
+              <p className="text-xs text-gray-600 mt-1">Registered students</p>
             </CardContent>
           </Card>
           <Card>
@@ -173,6 +206,7 @@ export default function StudentTrackingPage() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">{analytics.averageCGPA}</div>
+              <p className="text-xs text-gray-600 mt-1">Overall average</p>
             </CardContent>
           </Card>
           <Card>
@@ -181,17 +215,54 @@ export default function StudentTrackingPage() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-green-600">{analytics.placementRate}%</div>
+              <p className="text-xs text-gray-600 mt-1">Success rate</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">At-Risk Students</CardTitle>
+              <CardTitle className="text-sm font-medium">High Readiness</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-green-600">{analytics.readinessDistribution.high}</div>
+              <p className="text-xs text-gray-600 mt-1">Ready for placement</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium">At Risk</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-red-600">{analytics.atRiskStudents.length}</div>
+              <p className="text-xs text-gray-600 mt-1">Need attention</p>
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* Year-by-Year Progress */}
+      {analytics && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              Year-by-Year Progress
+            </CardTitle>
+            <CardDescription>Student distribution and performance by academic year</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {Object.entries(analytics.byYear).map(([year, count]) => (
+                <div key={year} className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="font-medium">{year === "1" ? "1st Year" : year === "2" ? "2nd Year" : year === "3" ? "3rd Year" : `${year}th Year`}</span>
+                    <span className="text-gray-600">{count} students</span>
+                  </div>
+                  <Progress value={(count / analytics.totalStudents) * 100} className="h-2" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       <Tabs defaultValue="students" className="w-full">

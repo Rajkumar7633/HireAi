@@ -4,6 +4,7 @@ const auth = require("../middleware/auth");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
+const { optimizeImage } = require("../middleware/imageOptimization");
 
 // Setup multer for general file uploads (e.g., profile pictures, other documents)
 const storage = multer.diskStorage({
@@ -16,6 +17,9 @@ const storage = multer.diskStorage({
     cb(null, `${req.user.id}-${Date.now()}${path.extname(file.originalname)}`);
   },
 });
+
+// Image upload storage
+const imageStorage = multer.memoryStorage();
 
 const upload = multer({
   storage: storage,
@@ -36,6 +40,33 @@ const upload = multer({
       cb(
         new Error(
           "Invalid file type. Please upload PDF, DOC, or DOCX files only."
+        ),
+        false
+      );
+    }
+  },
+});
+
+const imageUpload = multer({
+  storage: imageStorage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit for images
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/webp",
+      "image/gif",
+    ];
+
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(
+        new Error(
+          "Invalid file type. Please upload JPEG, PNG, WebP, or GIF files only."
         ),
         false
       );
@@ -124,6 +155,67 @@ router.get("/my-files", auth, async (req, res) => {
     console.error("Error fetching files:", err.message);
     res.status(500).json({ msg: "Server Error" });
   }
+});
+
+// @route   POST /api/upload/image
+// @desc    Upload and optimize an image
+// @access  Private
+router.post("/image", auth, async (req, res) => {
+  imageUpload.single("image")(req, res, async (err) => {
+    try {
+      if (err) {
+        console.error("Multer error:", err.message);
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res
+            .status(400)
+            .json({
+              msg: "File too large. Please upload an image smaller than 10MB.",
+            });
+        }
+        return res.status(400).json({ msg: err.message });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ msg: "No image uploaded" });
+      }
+
+      // Optimize the image
+      const optimizedBuffer = await optimizeImage(req.file.buffer, {
+        width: 1200,
+        quality: 85,
+        format: 'webp'
+      });
+
+      // Save optimized image
+      const uploadPath = path.join(__dirname, "../../uploads/images");
+      fs.mkdirSync(uploadPath, { recursive: true });
+      
+      const filename = `${req.user.id}-${Date.now()}.webp`;
+      const filepath = path.join(uploadPath, filename);
+      
+      fs.writeFileSync(filepath, optimizedBuffer);
+
+      console.log(`Optimized image uploaded successfully for user ${req.user.id}:`, {
+        filename,
+        originalSize: req.file.size,
+        optimizedSize: optimizedBuffer.length,
+      });
+
+      res.json({
+        msg: "Image uploaded and optimized successfully",
+        filename,
+        filepath: `/uploads/images/${filename}`,
+        originalSize: req.file.size,
+        optimizedSize: optimizedBuffer.length,
+        mimetype: "image/webp",
+        uploadedBy: req.user.id,
+        uploadedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error("Image upload error:", err.message);
+      res.status(500).json({ msg: "Server Error during image upload" });
+    }
+  });
 });
 
 module.exports = router;

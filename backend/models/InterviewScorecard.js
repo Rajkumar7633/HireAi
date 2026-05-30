@@ -107,7 +107,7 @@ interviewScorecardSchema.pre("save", function (next) {
 })
 
 // Calculate overall score before saving
-interviewScorecard.pre("save", function () {
+interviewScorecardSchema.pre("save", function () {
   const scores = Object.values(this.scores).filter(s => s.score !== undefined)
   if (scores.length > 0) {
     const total = scores.reduce((sum, s) => sum + s.score, 0)

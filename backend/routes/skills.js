@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const auth = require("../middleware/auth");
+const { cacheMiddleware, invalidateCache } = require("../middleware/cache");
 const SkillAssessment = require("../models/SkillAssessment");
 const User = require("../models/User");
 
@@ -184,7 +185,7 @@ router.post("/start-assessment", auth, async (req, res) => {
 });
 
 // Get assessment history for the current student
-router.get("/history", auth, async (req, res) => {
+router.get("/history", auth, cacheMiddleware('skills:history', 180), async (req, res) => {
   try {
     const userId = req.user.id || req.user.userId || req.user._id;
     const query = { userId };
@@ -289,6 +290,9 @@ router.post("/submit-assessment/:id", auth, async (req, res) => {
         await user.save();
       }
     }
+
+    // Invalidate cache for skills history
+    await invalidateCache('skills:*');
 
     return res.json({
       skillName: assessment.skillName,
