@@ -71,6 +71,12 @@ export default function SignupPage() {
       return
     }
 
+    if (role === "college_admin" && !email.toLowerCase().endsWith("@mmumullana.org")) {
+      setError("College admin must use @mmumullana.org email address")
+      setLoading(false)
+      return
+    }
+
     if (password !== confirmPassword) {
       setError("Passwords do not match")
       setLoading(false)
@@ -101,6 +107,8 @@ export default function SignupPage() {
         // Redirect based on role
         if (data.user.role === "recruiter") {
           router.push("/dashboard/recruiter")
+        } else if (data.user.role === "college_admin") {
+          router.push("/dashboard/college")
         } else if (data.user.role === "job_seeker") {
           router.push("/dashboard/job-seeker")
         } else {
@@ -251,8 +259,15 @@ export default function SignupPage() {
                 <SelectContent>
                   <SelectItem value="job_seeker">Job Seeker</SelectItem>
                   <SelectItem value="recruiter">Recruiter</SelectItem>
+                  <SelectItem value="college_admin">College Admin</SelectItem>
                 </SelectContent>
               </Select>
+              {role === "college_admin" && !email.toLowerCase().endsWith("@mmumullana.org") && (
+                <p className="text-xs text-red-600">College admin must use @mmumullana.org email address</p>
+              )}
+              {role === "college_admin" && email.toLowerCase().endsWith("@mmumullana.org") && (
+                <p className="text-xs text-green-600">Valid college email address</p>
+              )}
             </div>
 
             {/* Accept terms */}

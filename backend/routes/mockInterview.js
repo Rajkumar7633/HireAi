@@ -22,7 +22,7 @@ async function callGroqAI(prompt, responseJson = true) {
   }
   try {
     const payload = {
-      model: process.env.GROQ_MODEL || "llama-3.2-90b-text-preview",
+      model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.3,
       max_tokens: 1000,

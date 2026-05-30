@@ -7,7 +7,7 @@ export type NavItem = {
   items?: Array<{ title: string; url: string }>;
 };
 
-export type Role = "job_seeker" | "recruiter" | "admin";
+export type Role = "job_seeker" | "recruiter" | "admin" | "college_admin";
 
 export const navigationByRole: Record<Role, NavItem[]> = {
   job_seeker: [
@@ -105,6 +105,31 @@ export const navigationByRole: Record<Role, NavItem[]> = {
     { title: "Platform Stats", url: "/dashboard/admin/stats", icon: BarChart3 },
     { title: "Job Oversight", url: "/dashboard/admin/jobs", icon: Briefcase },
     { title: "Security", url: "/dashboard/admin/security", icon: Settings },
+    { title: "Settings", url: "/dashboard/settings", icon: Settings },
+  ],
+  college_admin: [
+    { title: "Dashboard", url: "/dashboard/college", icon: BarChart3 },
+    { title: "Profile", url: "/dashboard/college/profile", icon: User },
+    {
+      title: "Student Management",
+      url: "#",
+      icon: Users,
+      items: [
+        { title: "Student Tracking", url: "/dashboard/college/student-tracking" },
+        { title: "Bulk Operations", url: "/dashboard/college/bulk-operations" },
+      ],
+    },
+    {
+      title: "Analytics",
+      url: "#",
+      icon: BarChart3,
+      items: [
+        { title: "Placement Analytics", url: "/dashboard/college/placement-analytics" },
+        { title: "Reports", url: "/dashboard/export" },
+      ],
+    },
+    { title: "Calendar", url: "/dashboard/calendar", icon: Bell },
+    { title: "Referrals", url: "/dashboard/referrals", icon: Users },
     { title: "Settings", url: "/dashboard/settings", icon: Settings },
   ],
 };

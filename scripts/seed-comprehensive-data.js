@@ -1,6 +1,7 @@
 "use client";
 
 const mongoose = require("mongoose");
+const bcrypt = require("bcryptjs");
 
 // Connect to MongoDB
 async function connectDB() {
@@ -39,6 +40,7 @@ const UserSchema = new mongoose.Schema(
     },
     name: { type: String, required: true },
     password: String,
+    passwordHash: String,
     profile: {
       skills: [String],
       experience: String,
@@ -156,8 +158,8 @@ const NotificationSchema = new mongoose.Schema(
     },
     message: { type: String, required: true },
     relatedEntity: {
-      id: mongoose.Schema.Types.ObjectId,
-      type: String,
+      id: { type: mongoose.Schema.Types.ObjectId },
+      type: { type: String },
     },
     read: { type: Boolean, default: false },
   },
@@ -186,12 +188,16 @@ async function createComprehensiveTestData() {
     await Notification.deleteMany({});
     console.log("🧹 Cleared existing data");
 
-    // Create test users
+    // Create test users with properly hashed passwords
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash("password123", salt);
+
     const recruiter = await User.create({
       email: "server@gmail.com",
       role: "recruiter",
       name: "Sarah Johnson",
-      password: "hashedpassword",
+      password: hashedPassword,
+      passwordHash: hashedPassword,
       profile: {
         experience: "Senior Technical Recruiter",
         location: "San Francisco, CA",
@@ -204,7 +210,8 @@ async function createComprehensiveTestData() {
         email: "raj@gmail.com",
         role: "job_seeker",
         name: "Raj Kumar",
-        password: "hashedpassword",
+        password: hashedPassword,
+        passwordHash: hashedPassword,
         profile: {
           skills: ["JavaScript", "React", "Node.js", "MongoDB"],
           experience: "3 years",
@@ -216,7 +223,8 @@ async function createComprehensiveTestData() {
         email: "alice@gmail.com",
         role: "job_seeker",
         name: "Alice Chen",
-        password: "hashedpassword",
+        password: hashedPassword,
+        passwordHash: hashedPassword,
         profile: {
           skills: ["Python", "Django", "PostgreSQL", "AWS"],
           experience: "5 years",
@@ -228,7 +236,8 @@ async function createComprehensiveTestData() {
         email: "mike@gmail.com",
         role: "job_seeker",
         name: "Mike Rodriguez",
-        password: "hashedpassword",
+        password: hashedPassword,
+        passwordHash: hashedPassword,
         profile: {
           skills: ["Java", "Spring Boot", "MySQL", "Docker"],
           experience: "4 years",
@@ -240,7 +249,8 @@ async function createComprehensiveTestData() {
         email: "emma@gmail.com",
         role: "job_seeker",
         name: "Emma Wilson",
-        password: "hashedpassword",
+        password: hashedPassword,
+        passwordHash: hashedPassword,
         profile: {
           skills: ["React", "TypeScript", "GraphQL", "Next.js"],
           experience: "2 years",
@@ -555,7 +565,7 @@ async function createComprehensiveTestData() {
     console.log("   ✓ Statistics and analytics data for dashboard");
     console.log("   ✓ Multiple assessment types (JavaScript, Python, React)");
 
-    console.log("\n🔑 Test Login Credentials:");
+    console.log("\n🔑 Test Login Credentials (Password is 'password123'):");
     console.log("   Recruiter: server@gmail.com");
     console.log("   Job Seeker: raj@gmail.com (main test user)");
     console.log("   Job Seeker: alice@gmail.com");

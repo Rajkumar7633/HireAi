@@ -1,7 +1,4 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { connectDB } from "@/lib/mongodb"
-import User from "@/models/User"
-import { hashPassword, generateToken } from "@/lib/auth"
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,50 +12,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "All fields are required" }, { status: 400 })
     }
 
-    if (!["job_seeker", "recruiter", "admin"].includes(role)) {
+    if (!["job_seeker", "recruiter", "admin", "college_admin"].includes(role)) {
       return NextResponse.json({ message: "Invalid role" }, { status: 400 })
     }
 
-    await connectDB()
-    console.log("Database connected for signup")
+    // Call backend API
+    const backendUrl = process.env.BACKEND_URL || "http://localhost:5001"
+    const response = await fetch(`${backendUrl}/api/auth/register`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name, email, password, role }),
+    })
 
-    const existingUser = await User.findOne({ email: email.toLowerCase() })
-    if (existingUser) {
-      return NextResponse.json({ message: "Email already in use" }, { status: 409 })
+    const data = await response.json()
+
+    if (!response.ok) {
+      console.error("Backend signup error:", data)
+      return NextResponse.json({ message: data.message || "Signup failed" }, { status: response.status })
     }
 
-    const passwordHash = await hashPassword(password)
-    console.log("Generated passwordHash:", passwordHash)
+    console.log("User created successfully:", data)
 
-    const user = new User({
-      name,
-      email: email.toLowerCase(),
-      passwordHash,
-      role,
-    })
-
-    await user.save()
-    console.log("User saved:", user)
-
-    const token = generateToken({
-      userId: user._id.toString(),
-      email: user.email,
-      name: user.name,
-      role: user.role,
-    })
-
-    const response = NextResponse.json({
+    const apiResponse = NextResponse.json({
       message: "User created successfully",
-      token,
-      user: {
-        id: user._id.toString(),
-        email: user.email,
-        name: user.name,
-        role: user.role,
-      },
+      token: data.token,
+      user: data.user,
     })
 
-    response.cookies.set("auth-token", token, {
+    apiResponse.cookies.set("auth-token", data.token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
@@ -66,7 +49,7 @@ export async function POST(request: NextRequest) {
       path: "/",
     })
 
-    return response
+    return apiResponse
   } catch (error) {
     console.error("Signup error:", error)
     return NextResponse.json({ message: "Internal server error" }, { status: 500 })

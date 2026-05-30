@@ -33,6 +33,23 @@ export interface InterviewQuestion {
   tags: string[]
 }
 
+function safeParseJSON(text: string): any {
+  try {
+    return JSON.parse(text)
+  } catch (e) {
+    const cleaned = text.replace(/```json\n?|\n?```/g, "").trim()
+    try {
+      return JSON.parse(cleaned)
+    } catch (e2) {
+      const match = cleaned.match(/(\{[\s\S]*\}|\[[\s\S]*\])/)
+      if (match) {
+        return JSON.parse(match[0])
+      }
+      throw e2
+    }
+  }
+}
+
 export class AIService {
   private static instance: AIService
   private groqModel: any = null
@@ -51,7 +68,7 @@ export class AIService {
       const importDyn = new Function("m", "return import(m)") as (m: string) => Promise<any>
       const ai = await importDyn("ai")
       const groqPkg = await importDyn("@ai-sdk/groq")
-      const modelId = process.env.GROQ_MODEL || "llama-3.2-90b-text-preview"
+      const modelId = process.env.GROQ_MODEL || "llama-3.3-70b-versatile"
       this.groqModel = groqPkg.groq(modelId)
       this.textGen = ai.generateText
       return { generateText: this.textGen, model: this.groqModel }
@@ -115,8 +132,7 @@ export class AIService {
       })
 
       // Parse the AI response
-      const cleanedText = text.replace(/```json\n?|\n?```/g, "").trim()
-      const result = JSON.parse(cleanedText)
+      const result = safeParseJSON(text)
 
       return {
         score: Math.min(100, Math.max(0, result.score || 0)),
@@ -172,8 +188,7 @@ export class AIService {
         temperature: 0.3,
       })
 
-      const cleanedText = text.replace(/```json\n?|\n?```/g, "").trim()
-      const result = JSON.parse(cleanedText)
+      const result = safeParseJSON(text)
 
       return {
         matchScore: Math.min(100, Math.max(0, result.matchScore || 0)),
@@ -232,8 +247,7 @@ export class AIService {
         temperature: 0.7,
       })
 
-      const cleanedText = text.replace(/```json\n?|\n?```/g, "").trim()
-      const questions = JSON.parse(cleanedText)
+      const questions = safeParseJSON(text)
 
       return questions.map((q: any, index: number) => ({
         id: q.id || `q_${Date.now()}_${index}`,
@@ -284,8 +298,7 @@ export class AIService {
         temperature: 0.3,
       })
 
-      const cleanedText = text.replace(/```json\n?|\n?```/g, "").trim()
-      return JSON.parse(cleanedText)
+      return safeParseJSON(text)
     } catch (error) {
       console.error("AI Job Recommendations Error:", error)
       return availableJobs.map((job, index) => ({

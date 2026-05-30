@@ -187,6 +187,22 @@ app.use("/api/candidates",       require("./routes/candidates"));
 app.use("/api/skills",           require("./routes/skills"));
 app.use("/api/mock-interview",   require("./routes/mockInterview"));
 app.use("/api/recruiter-agent",   require("./routes/recruiterAgent"));
+app.use("/api/student-tracking", require("./routes/studentTracking"));
+app.use("/api/placement-analytics", require("./routes/placementAnalytics"));
+app.use("/api/bulk-operations",  require("./routes/bulkOperations"));
+app.use("/api/offer-letter",     require("./routes/offerLetter"));
+app.use("/api/referral",         require("./routes/referral"));
+app.use("/api/candidate-benchmark", require("./routes/candidateBenchmark"));
+app.use("/api/job-description-tailoring", require("./routes/jobDescriptionTailoring"));
+app.use("/api/advanced-analytics", require("./routes/advancedAnalytics"));
+app.use("/api/calendar",         require("./routes/calendar"));
+app.use("/api/background-verification", require("./routes/backgroundVerification"));
+app.use("/api/security",         require("./routes/admin"));
+app.use("/api/social-import",    require("./routes/socialImport"));
+app.use("/api/email-templates",  require("./routes/emailTemplates"));
+app.use("/api/export-reports",   require("./routes/exportReports"));
+app.use("/api/interview-scorecards", require("./routes/interviewScorecards"));
+app.use("/api/realtime-notifications", require("./routes/realtimeNotifications"));
 
 
 // ─── 404 catch-all ─────────────────────────────────────────────────────────

@@ -222,3 +222,9 @@ You now have **complete control** over your resume sections! This feature will h
 **Features: ✅ ALL WORKING**
 **Mobile: 📱 OPTIMIZED**
 **Design: 🎨 PROFESSIONAL**
+
+
+
+// reruiter: krishna@recruiter.com , Pass: Raj@12345
+// cooleg: jatindar@mmumullana.org , Pass: Raj@12345
+// jobseeker: raj.kumarcse58@gmail.com , Pass: Raj@12345

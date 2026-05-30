@@ -108,18 +108,20 @@ export default function LoginPage() {
         setOtpError(data?.msg || data?.message || "Invalid code")
         return
       }
-      await new Promise((r) => setTimeout(r, 100))
-      await refreshSession()
-      await new Promise((r) => setTimeout(r, 200))
+      // Redirect immediately without waiting for session refresh
       if (redirectPath && redirectPath.startsWith("/")) {
         router.push(redirectPath)
       } else if (data?.user?.role === "recruiter") {
         router.push("/dashboard/recruiter")
+      } else if (data?.user?.role === "college_admin") {
+        router.push("/dashboard/college")
       } else if (data?.user?.role === "job_seeker") {
         router.push("/dashboard/job-seeker")
       } else {
         router.push("/dashboard")
       }
+      // Refresh session after redirect
+      setTimeout(() => refreshSession(), 500)
     } catch (e) {
       setOtpError("Verification failed. Try again.")
     } finally {
@@ -127,15 +129,6 @@ export default function LoginPage() {
     }
   }
 
-  const fillDemoCredentials = (role: "recruiter" | "job_seeker") => {
-    if (role === "recruiter") {
-      setEmail("recruiter@demo.com");
-      setPassword("demo123");
-    } else {
-      setEmail("jobseeker@demo.com");
-      setPassword("demo123");
-    }
-  };
 
   // Responsive particle density
   useEffect(() => {
@@ -329,27 +322,6 @@ export default function LoginPage() {
                 </div>
               </form>
 
-              <div className="mt-6 space-y-2">
-                <p className="text-sm text-gray-600 text-center">Demo Accounts:</p>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 bg-transparent transition-transform active:scale-[0.99]"
-                    onClick={() => fillDemoCredentials("recruiter")}
-                  >
-                    Use Recruiter Demo
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 bg-transparent transition-transform active:scale-[0.99]"
-                    onClick={() => fillDemoCredentials("job_seeker")}
-                  >
-                    Use Job Seeker Demo
-                  </Button>
-                </div>
-              </div>
 
               {/* Footer */}
               <div className="mt-6 text-center text-xs text-gray-600/90">

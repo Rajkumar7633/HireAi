@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const bcrypt = require("bcryptjs");
 
 // Connect to MongoDB
 async function connectDB() {
@@ -33,6 +34,7 @@ const UserSchema = new mongoose.Schema(
     role: String,
     name: String,
     password: String,
+    passwordHash: String,
   },
   { timestamps: true }
 );
@@ -111,13 +113,17 @@ async function createTestData() {
     console.log("🔄 Creating test data...");
 
     // Create test users
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash("password123", salt);
+
     const recruiter = await User.findOneAndUpdate(
       { email: "server@gmail.com" },
       {
         email: "server@gmail.com",
         role: "recruiter",
         name: "Test Recruiter",
-        password: "hashedpassword",
+        password: hashedPassword,
+        passwordHash: hashedPassword,
       },
       { upsert: true, new: true }
     );
@@ -128,7 +134,8 @@ async function createTestData() {
         email: "raj@gmail.com",
         role: "job_seeker",
         name: "Raj Kumar",
-        password: "hashedpassword",
+        password: hashedPassword,
+        passwordHash: hashedPassword,
       },
       { upsert: true, new: true }
     );

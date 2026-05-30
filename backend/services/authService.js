@@ -17,6 +17,7 @@ const sendEmail = require("../utils/emailService")
 const isValidEmail = (v) => typeof v === "string" && /.+@.+\..+/.test(v.trim())
 const isValidPassword = (v) => typeof v === "string" && v.trim().length >= 6 && v.trim().length <= 200
 const isValidOtp = (v) => /^[0-9]{6}$/.test(String(v || "").trim())
+const isValidCollegeEmail = (v) => typeof v === "string" && v.trim().toLowerCase().endsWith("@mmumullana.org")
 
 function buildTokenPayload(user) {
   return { userId: user.id, email: user.email, name: user.name, role: user.role }
@@ -51,6 +52,15 @@ async function register({ email, password, role, name }) {
   }
 
   const requestedRole = role || "job_seeker"
+
+  // Validate college email for college_admin role
+  if (requestedRole === "college_admin") {
+    if (!isValidCollegeEmail(email)) {
+      const err = new Error("College admin must use @mmumullana.org email address")
+      err.statusCode = 400
+      throw err
+    }
+  }
 
   if (requestedRole === "admin") {
     const adminCount = await User.countDocuments({ role: "admin" })

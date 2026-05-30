@@ -83,7 +83,7 @@ Return EXACTLY a JSON object with:
         Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
       },
       body: JSON.stringify({
-        model: process.env.GROQ_MODEL || "llama-3.2-90b-text-preview",
+        model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
         messages: [{ role: "user", content: prompt }],
         temperature: 0.2,
         max_tokens: 500,
