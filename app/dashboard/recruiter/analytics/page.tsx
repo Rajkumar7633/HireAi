@@ -1,45 +1,30 @@
 "use client";
 
-import { CardDescription } from "@/components/ui/card";
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useEffect, useMemo } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Loader2,
-  Users,
-  RefreshCw,
-  Clock,
-  DollarSign,
-  Target,
-  Filter,
+  Loader2, Users, RefreshCw, Clock, DollarSign, Target,
+  Filter, Download, BarChart3, Brain, ChevronRight,
+  ArrowUpRight, ArrowDownRight, CheckCircle, XCircle,
+  AlertTriangle, Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Select,
-  SelectContent,  
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RechartsTooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
-  LineChart,
-  Line,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip as RechartsTooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend, LineChart, Line,
+  AreaChart, Area, RadarChart, Radar, PolarGrid,
+  PolarAngleAxis, PolarRadiusAxis,
   LabelList,
 } from "recharts";
+import { SkillBar } from "@/components/ui/charts";
 
 interface AnalyticsData {
   totalJobDescriptions: number;
@@ -50,60 +35,41 @@ interface AnalyticsData {
 }
 
 interface AdvancedMetrics {
-  hiringFunnel: {
-    applied: number;
-    screened: number;
-    interviewed: number;
-    offered: number;
-    hired: number;
-  };
-  sourcePerformance: Array<{
-    source: string;
-    applications: number;
-    hires: number;
-    conversionRate: number;
-  }>;
-  timeToHire: {
-    average: number;
-    byPosition: Array<{
-      position: string;
-      days: number;
-    }>;
-  };
-  costPerHire: {
-    total: number;
-    breakdown: {
-      jobBoards: number;
-      recruiting: number;
-      interviews: number;
-      onboarding: number;
-    };
-  };
-  monthlyTrends: Array<{
-    month: string;
-    applications: number;
-    hires: number;
-    interviews: number;
-  }>;
-  candidateQuality: {
-    averageScore: number;
-    scoreDistribution: Array<{
-      range: string;
-      count: number;
-    }>;
-  };
+  hiringFunnel: { applied: number; screened: number; interviewed: number; offered: number; hired: number };
+  sourcePerformance: Array<{ source: string; applications: number; hires: number; conversionRate: number }>;
+  timeToHire: { average: number; byPosition: Array<{ position: string; days: number }> };
+  costPerHire: { total: number; breakdown: { jobBoards: number; recruiting: number; interviews: number; onboarding: number } };
+  monthlyTrends: Array<{ month: string; applications: number; hires: number; interviews: number }>;
+  candidateQuality: { averageScore: number; scoreDistribution: Array<{ range: string; count: number }> };
 }
 
-const COLORS = [
-  "#0ea5e9",
-  "#10b981",
-  "#f59e0b",
-  "#ef4444",
-  "#8b5cf6",
-  "#06b6d4",
-  "#84cc16",
-  "#f97316",
-];
+const COLORS = ["#7c3aed", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#06b6d4", "#84cc16", "#f97316"];
+const FUNNEL_COLORS = ["#7c3aed", "#818cf8", "#38bdf8", "#34d399", "#6ee7b7"];
+
+const STAGE_TARGETS: Record<string, number> = { Screened: 80, Interviewed: 60, Offered: 30, Hired: 20 };
+
+function DeltaBadge({ value, inverse = false, unit = "%" }: { value: number; inverse?: boolean; unit?: string }) {
+  const isPositive = inverse ? value < 0 : value > 0;
+  if (value === 0) return <span className="text-xs text-slate-400">No change</span>;
+  return (
+    <span className={`inline-flex items-center text-xs font-medium ${isPositive ? "text-emerald-600" : "text-rose-600"}`}>
+      {isPositive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+      {Math.abs(value).toFixed(1)}{unit} vs last
+    </span>
+  );
+}
+
+const EmptyChart = ({ label, cta, href }: { label: string; cta?: string; href?: string }) => (
+  <div className="flex flex-col items-center justify-center h-[260px] gap-3">
+    <BarChart3 className="h-10 w-10 text-muted-foreground/30" />
+    <p className="text-sm text-muted-foreground">{label}</p>
+    {cta && href && (
+      <a href={href} className="text-xs px-3 py-1.5 bg-violet-50 text-violet-700 rounded-lg hover:bg-violet-100 transition-colors">
+        {cta}
+      </a>
+    )}
+  </div>
+);
 
 export default function RecruiterAnalyticsPage() {
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
@@ -111,62 +77,58 @@ export default function RecruiterAnalyticsPage() {
   const [loadingBase, setLoadingBase] = useState(true);
   const [loadingAdvanced, setLoadingAdvanced] = useState(true);
   const loading = loadingBase || loadingAdvanced;
-  const [error, setError] = useState<string | null>(null);
-  const [timeRange, setTimeRange] = useState(() => typeof window !== 'undefined' ? (localStorage.getItem('recruiter:analytics:range') || '6months') : '6months');
-  const [normalizeFunnel, setNormalizeFunnel] = useState<boolean>(() => typeof window !== 'undefined' ? (localStorage.getItem('recruiter:analytics:norm') === '0' ? false : true) : true);
-  const [drill, setDrill] = useState<{ title: string; items: Array<{ label: string; value: number; query?: Record<string,string> }> } | null>(null);
-  const [compare, setCompare] = useState<boolean>(() => typeof window !== 'undefined' ? (localStorage.getItem('recruiter:analytics:compare') === '1') : false);
+  const [timeRange, setTimeRange] = useState(() =>
+    typeof window !== "undefined" ? localStorage.getItem("recruiter:analytics:range") || "6months" : "6months"
+  );
+  const [normalizeFunnel, setNormalizeFunnel] = useState(() =>
+    typeof window !== "undefined" ? localStorage.getItem("recruiter:analytics:norm") !== "0" : true
+  );
+  const [compare, setCompare] = useState(false);
+  const [drill, setDrill] = useState<{ title: string; items: Array<{ label: string; value: number; query?: Record<string, string> }> } | null>(null);
   const [views, setViews] = useState<Array<{ name: string; payload: { timeRange: string; normalizeFunnel: boolean } }>>(() => {
-    try { return JSON.parse(localStorage.getItem('recruiter:analytics:savedViews') || '[]'); } catch { return []; }
+    try { return JSON.parse(localStorage.getItem("recruiter:analytics:savedViews") || "[]"); } catch { return []; }
   });
-  const [newViewName, setNewViewName] = useState<string>("");
+  const [newViewName, setNewViewName] = useState("");
   const { toast } = useToast();
 
-  const saveCurrentView = () => {
-    const name = (newViewName || '').trim();
-    if (!name) return;
-    const updated = [...views.filter(v => v.name !== name), { name, payload: { timeRange, normalizeFunnel } }];
+  const loadView = (v: { name: string; payload: { timeRange: string; normalizeFunnel: boolean } }) => {
+    setTimeRange(v.payload.timeRange);
+    setNormalizeFunnel(v.payload.normalizeFunnel);
+  };
+
+  const deleteView = (name: string) => {
+    const updated = views.filter((v) => v.name !== name);
     setViews(updated);
-    try { localStorage.setItem('recruiter:analytics:savedViews', JSON.stringify(updated)); } catch {}
-    // Persist to server (fire-and-forget)
-    fetch('/api/social/prefs', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ analyticsSavedViews: updated }) }).catch(()=>{});
+    try { localStorage.setItem("recruiter:analytics:savedViews", JSON.stringify(updated)); } catch {}
+  };
+
+  const saveCurrentView = () => {
+    const name = newViewName.trim();
+    if (!name) return;
+    const updated = [...views.filter((v) => v.name !== name), { name, payload: { timeRange, normalizeFunnel } }];
+    setViews(updated);
+    try { localStorage.setItem("recruiter:analytics:savedViews", JSON.stringify(updated)); } catch {}
     setNewViewName("");
+    toast({ title: "View saved", description: `"${name}" saved successfully.` });
   };
 
   useEffect(() => {
     fetchAnalytics();
     fetchAdvancedMetrics();
-    // Load server-synced views (merge with local)
-    (async () => {
-      try {
-        const res = await fetch('/api/social/prefs', { cache: 'no-store' });
-        if (res.ok) {
-          const j = await res.json();
-          if (Array.isArray(j.analyticsSavedViews) && j.analyticsSavedViews.length) {
-            const merged = [...views];
-            for (const v of j.analyticsSavedViews) {
-              if (!merged.find((m) => m.name === v.name)) merged.push(v);
-            }
-            setViews(merged);
-          }
-        }
-      } catch {}
-    })();
   }, [timeRange]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('recruiter:analytics:range', String(timeRange));
-      localStorage.setItem('recruiter:analytics:norm', normalizeFunnel ? '1' : '0');
-      localStorage.setItem('recruiter:analytics:compare', compare ? '1' : '0');
+      localStorage.setItem("recruiter:analytics:range", timeRange);
+      localStorage.setItem("recruiter:analytics:norm", normalizeFunnel ? "1" : "0");
     } catch {}
-  }, [timeRange, normalizeFunnel, compare]);
+  }, [timeRange, normalizeFunnel]);
 
-  const fetchWithTimeout = async (input: RequestInfo | URL, init?: RequestInit, ms = 10000) => {
+  const fetchWithTimeout = async (url: string, ms = 10000) => {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), ms);
     try {
-      return await fetch(input, { ...(init || {}), signal: controller.signal });
+      return await fetch(url, { credentials: "include", signal: controller.signal });
     } finally {
       clearTimeout(id);
     }
@@ -174,705 +136,861 @@ export default function RecruiterAnalyticsPage() {
 
   const fetchAnalytics = async () => {
     setLoadingBase(true);
-    setError(null);
-
     try {
-      const response = await fetchWithTimeout("/api/analytics/recruiter-dashboard", {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-      }, 10000);
-
-      if (response.ok) {
-        const data = await response.json();
-        setAnalyticsData(data);
-        setError(null);
-      } else {
-        const errorData = await response
-          .json()
-          .catch(() => ({ message: "Failed to fetch analytics data" }));
-        setError(
-          errorData.message ||
-            `HTTP ${response.status}: Failed to fetch analytics data`
-        );
-      }
-    } catch (error) {
-      console.error("Network error fetching analytics:", error);
-      setError("Network error. Please check if the backend server is running.");
-    } finally {
-      setLoadingBase(false);
-    }
+      const res = await fetchWithTimeout("/api/analytics/recruiter-dashboard");
+      if (res.ok) setAnalyticsData(await res.json());
+    } catch {}
+    finally { setLoadingBase(false); }
   };
 
   const fetchAdvancedMetrics = async () => {
     setLoadingAdvanced(true);
     try {
-      const response = await fetchWithTimeout(
-        `/api/analytics/advanced-metrics?timeRange=${timeRange}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          credentials: "include",
-        },
-        10000
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setAdvancedMetrics(data);
-      }
-    } catch (error) {
-      console.error("Error fetching advanced metrics:", error);
-    } finally {
-      setLoadingAdvanced(false);
-    }
+      const res = await fetchWithTimeout(`/api/analytics/advanced-metrics?timeRange=${timeRange}`);
+      if (res.ok) setAdvancedMetrics(await res.json());
+    } catch {}
+    finally { setLoadingAdvanced(false); }
   };
 
-  // Normalize funnel to avoid increasing values downstream
+  // ── Derived data ──────────────────────────────────────────────────────────
+
   const rawFunnel = advancedMetrics
     ? [
-        { name: "Applied", value: advancedMetrics.hiringFunnel.applied, fill: COLORS[0] },
-        { name: "Screened", value: advancedMetrics.hiringFunnel.screened, fill: COLORS[1] },
-        { name: "Interviewed", value: advancedMetrics.hiringFunnel.interviewed, fill: COLORS[2] },
-        { name: "Offered", value: advancedMetrics.hiringFunnel.offered, fill: COLORS[3] },
-        { name: "Hired", value: advancedMetrics.hiringFunnel.hired, fill: COLORS[4] },
+        { name: "Applied",     value: advancedMetrics.hiringFunnel.applied,     fill: FUNNEL_COLORS[0] },
+        { name: "Screened",    value: advancedMetrics.hiringFunnel.screened,     fill: FUNNEL_COLORS[1] },
+        { name: "Interviewed", value: advancedMetrics.hiringFunnel.interviewed,  fill: FUNNEL_COLORS[2] },
+        { name: "Offered",     value: advancedMetrics.hiringFunnel.offered,      fill: FUNNEL_COLORS[3] },
+        { name: "Hired",       value: advancedMetrics.hiringFunnel.hired,        fill: FUNNEL_COLORS[4] },
       ]
     : [];
 
-  // KPI deltas (vs previous month)
+  const funnelData = useMemo(() => {
+    if (!normalizeFunnel) return rawFunnel;
+    return rawFunnel.reduce((acc: typeof rawFunnel, stage) => {
+      const prev = acc.length ? acc[acc.length - 1].value : stage.value;
+      acc.push({ ...stage, value: Math.min(stage.value, prev) });
+      return acc;
+    }, []);
+  }, [rawFunnel, normalizeFunnel]);
+
   const trends = advancedMetrics?.monthlyTrends || [];
-  const last = trends.length > 0 ? trends[trends.length - 1] : null;
-  const prev = trends.length > 1 ? trends[trends.length - 2] : null;
-  const pct = (a: number, b: number) => {
-    if (!b) return 0;
-    return ((a - b) / b) * 100;
-  };
-  const appsDelta = last && prev ? pct(last.applications, prev.applications) : 0;
-  const convNow = last && last.applications > 0 ? (last.hires / last.applications) * 100 : 0;
-  const convPrev = prev && prev.applications > 0 ? (prev.hires / prev.applications) * 100 : 0;
+  const lastTrend = trends.length > 0 ? trends[trends.length - 1] : null;
+  const prevTrend = trends.length > 1 ? trends[trends.length - 2] : null;
+  const pct = (a: number, b: number) => (!b ? 0 : ((a - b) / b) * 100);
+  const appsDelta = lastTrend && prevTrend ? pct(lastTrend.applications, prevTrend.applications) : 0;
+  const convNow = lastTrend?.applications ? (lastTrend.hires / lastTrend.applications) * 100 : 0;
+  const convPrev = prevTrend?.applications ? (prevTrend.hires / prevTrend.applications) * 100 : 0;
   const convDelta = pct(convNow, convPrev || 0.0001);
-  // Estimate monthly cost per hire same way as API total estimation
-  const cphNow = last ? (last.hires > 0 ? Math.round((last.applications * 50) / last.hires) : 0) : 0;
-  const cphPrev = prev ? (prev.hires > 0 ? Math.round((prev.applications * 50) / prev.hires) : 0) : 0;
-  const cphDelta = cphPrev ? pct(cphNow, cphPrev) : 0;
-  const deltaLabel = (v: number, unit = "%") => `${v >= 0 ? "+" : ""}${v.toFixed(1)}${unit}`;
-  const deltaClass = (v: number, inverse = false) => {
-    const pos = inverse ? v < 0 : v > 0;
-    return pos ? "text-emerald-600" : v === 0 ? "text-slate-500" : "text-rose-600";
-  };
-  const normalized = rawFunnel.reduce((acc: any[], stage) => {
-    const prev = acc.length ? acc[acc.length - 1].value : stage.value;
-    acc.push({ ...stage, value: Math.min(stage.value, prev) });
-    return acc;
-  }, [] as any[]);
-  const funnelData = normalizeFunnel ? normalized : rawFunnel;
+  const timeAvg = advancedMetrics?.timeToHire.average || 0;
+  const cph = advancedMetrics?.costPerHire.total || 0;
+  const convRate = advancedMetrics
+    ? advancedMetrics.hiringFunnel.applied > 0
+      ? ((advancedMetrics.hiringFunnel.hired / advancedMetrics.hiringFunnel.applied) * 100).toFixed(1)
+      : "0.0"
+    : "0.0";
 
-  // Simple targets for each step (percent of previous stage)
-  const TARGETS: Record<string, number> = {
-    Screened: 80,
-    Interviewed: 60,
-    Offered: 30,
-    Hired: 20,
-  };
+  const costBreakdownData = advancedMetrics
+    ? [
+        { name: "Job Boards", value: advancedMetrics.costPerHire.breakdown.jobBoards, fill: COLORS[0] },
+        { name: "Recruiting", value: advancedMetrics.costPerHire.breakdown.recruiting, fill: COLORS[1] },
+        { name: "Interviews", value: advancedMetrics.costPerHire.breakdown.interviews, fill: COLORS[2] },
+        { name: "Onboarding", value: advancedMetrics.costPerHire.breakdown.onboarding, fill: COLORS[3] },
+      ]
+    : [];
 
-  const downloadFunnelCsv = () => {
+  // AI Insight signals
+  const aiInsights = useMemo(() => {
+    const insights: { type: "good" | "warn" | "bad"; text: string }[] = [];
+    if (!advancedMetrics) return insights;
+    const f = advancedMetrics.hiringFunnel;
+    const screenRate = f.applied ? (f.screened / f.applied) * 100 : 0;
+    const interviewRate = f.screened ? (f.interviewed / f.screened) * 100 : 0;
+    const offerRate = f.interviewed ? (f.offered / f.interviewed) * 100 : 0;
+    const acceptRate = f.offered ? (f.hired / f.offered) * 100 : 0;
+
+    if (screenRate > 75) insights.push({ type: "good", text: `Strong screening rate — ${screenRate.toFixed(0)}% of applicants pass screening.` });
+    else if (screenRate < 40 && f.applied > 0) insights.push({ type: "warn", text: `Low screening rate (${screenRate.toFixed(0)}%) — consider revising job description keywords to attract better-fit candidates.` });
+
+    if (offerRate > 50) insights.push({ type: "good", text: `High interview-to-offer rate (${offerRate.toFixed(0)}%) — your interview process converts well.` });
+    else if (offerRate < 20 && f.interviewed > 5) insights.push({ type: "bad", text: `Low offer rate (${offerRate.toFixed(0)}%) — many interviews not leading to offers; review interview criteria or candidate quality.` });
+
+    if (acceptRate < 70 && f.offered > 3) insights.push({ type: "warn", text: `${(100 - acceptRate).toFixed(0)}% of offers are declined — consider improving compensation benchmarking or offer timing.` });
+
+    if (advancedMetrics.timeToHire.average > 30) insights.push({ type: "warn", text: `Avg. time-to-hire is ${advancedMetrics.timeToHire.average} days — streamline interview rounds to reduce drop-off.` });
+    else if (advancedMetrics.timeToHire.average > 0 && advancedMetrics.timeToHire.average <= 18) insights.push({ type: "good", text: `Excellent time-to-hire (${advancedMetrics.timeToHire.average} days) — well below the 25-day industry average.` });
+
+    if (insights.length === 0 && f.applied > 0) insights.push({ type: "good", text: "Your hiring funnel metrics look healthy! Keep monitoring as more applications come in." });
+    if (f.applied === 0) insights.push({ type: "warn", text: "No applications yet. Post a job and invite candidates to start seeing analytics." });
+
+    return insights.slice(0, 4);
+  }, [advancedMetrics]);
+
+  // Radar data for candidate quality profile
+  const radarData = useMemo(() => {
+    if (!analyticsData) return [];
+    const total = analyticsData.totalApplications || 1;
+    const byStatus = analyticsData.applicationsByStatus || [];
+    const get = (s: string) => byStatus.find((x) => x._id === s)?.count || 0;
+    return [
+      { subject: "Applied", A: Math.min(100, (total / Math.max(total, 1)) * 100) },
+      { subject: "Reviewed", A: Math.min(100, ((get("Under Review") + get("Shortlisted")) / total) * 100) },
+      { subject: "Tested", A: Math.min(100, ((get("Test Passed") + get("Test Failed")) / total) * 100) },
+      { subject: "Interviewed", A: Math.min(100, (get("Interview Scheduled") / total) * 100) },
+      { subject: "Hired", A: Math.min(100, (get("Hired") / total) * 100) },
+    ];
+  }, [analyticsData]);
+
+  // Drop-off per funnel stage
+  const dropOffs = useMemo(() => {
+    if (funnelData.length < 2) return [];
+    return funnelData.slice(1).map((stage, i) => {
+      const prev = funnelData[i].value;
+      const dropPct = prev > 0 ? ((prev - stage.value) / prev) * 100 : 0;
+      return { stage: stage.name, dropped: prev - stage.value, dropPct };
+    });
+  }, [funnelData]);
+
+  const downloadCsv = () => {
     const rows = [
-      ["Stage", "Raw", "Normalized", "% from Prev", "% from Applied"],
-      ...rawFunnel.map((stage, idx) => {
-        const prevRaw = idx > 0 ? rawFunnel[idx - 1].value : stage.value;
-        const fromPrev = prevRaw > 0 ? (stage.value / prevRaw) * 100 : 0;
-        const applied = rawFunnel[0]?.value || 0;
-        const fromApplied = applied > 0 ? (stage.value / applied) * 100 : 0;
-        const normVal = funnelData[idx]?.value ?? stage.value;
-        return [
-          stage.name,
-          String(stage.value),
-          String(normVal),
-          fromPrev.toFixed(1),
-          fromApplied.toFixed(1),
-        ];
+      ["Stage", "Count", "Drop %", "vs Target"],
+      ...funnelData.map((s, i) => {
+        const drop = dropOffs[i - 1];
+        const target = STAGE_TARGETS[s.name];
+        return [s.name, String(s.value), drop ? drop.dropPct.toFixed(1) + "%" : "-", target ? `${target}%` : "-"];
       }),
     ];
     const csv = rows.map((r) => r.join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `hiring_funnel_${new Date().toISOString().slice(0,10)}.csv`;
-    document.body.appendChild(a);
-    a.click();
+    a.download = `analytics_${timeRange}_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a); a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
-  const costBreakdownData = advancedMetrics
-    ? [
-        {
-          name: "Job Boards",
-          value: advancedMetrics.costPerHire.breakdown.jobBoards,
-          fill: COLORS[0],
-        },
-        {
-          name: "Recruiting",
-          value: advancedMetrics.costPerHire.breakdown.recruiting,
-          fill: COLORS[1],
-        },
-        {
-          name: "Interviews",
-          value: advancedMetrics.costPerHire.breakdown.interviews,
-          fill: COLORS[2],
-        },
-        {
-          name: "Onboarding",
-          value: advancedMetrics.costPerHire.breakdown.onboarding,
-          fill: COLORS[3],
-        },
-      ]
-    : [];
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full min-h-[400px]">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-cyan-600 mx-auto mb-2" />
-          <p className="text-lg">Loading analytics...</p>
+        <div className="text-center space-y-3">
+          <Loader2 className="h-8 w-8 animate-spin text-violet-600 mx-auto" />
+          <p className="text-sm text-muted-foreground">Loading analytics...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6">
-      <div className="sticky top-14 z-10 bg-white/80 backdrop-blur border-b -mx-6 px-6 py-3 mb-6 flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Advanced Analytics</h1>
-        <div className="flex gap-4 items-center">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Compare</span>
-            <Switch checked={compare} onCheckedChange={setCompare} />
+    <div className="p-6 space-y-6">
+
+      {/* ── Hero Header ── */}
+      <div className="rounded-2xl bg-gradient-to-r from-violet-600 via-indigo-600 to-blue-600 p-6 text-white">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <BarChart3 className="h-6 w-6" /> Advanced Analytics
+            </h1>
+            <p className="text-white/70 text-sm mt-1">Real-time recruitment intelligence & hiring insights</p>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Normalize Funnel</span>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Time range */}
+            <Select value={timeRange} onValueChange={setTimeRange}>
+              <SelectTrigger className="w-38 bg-white/15 border-white/30 text-white [&>svg]:text-white h-9">
+                <Filter className="h-3.5 w-3.5 mr-1.5" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1month">Last Month</SelectItem>
+                <SelectItem value="3months">Last 3 Months</SelectItem>
+                <SelectItem value="6months">Last 6 Months</SelectItem>
+                <SelectItem value="1year">Last Year</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Save view */}
+            <div className="flex items-center gap-1.5">
+              <input
+                className="border border-white/30 bg-white/10 text-white placeholder:text-white/50 rounded-lg px-2.5 py-1.5 text-xs w-28"
+                placeholder="Save view…"
+                value={newViewName}
+                onChange={(e) => setNewViewName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && saveCurrentView()}
+              />
+              {views.length > 0 && (
+                <select
+                  className="border border-white/30 bg-white/10 text-white rounded-lg px-2 py-1.5 text-xs"
+                  onChange={(e) => { const v = views.find((x) => x.name === e.target.value); if (v) loadView(v); }}
+                >
+                  <option value="">Load view</option>
+                  {views.map((v) => <option key={v.name} value={v.name}>{v.name}</option>)}
+                </select>
+              )}
+            </div>
+
+            <Button size="sm" variant="outline" className="bg-white/10 border-white/30 text-white hover:bg-white/20 h-9" onClick={() => { fetchAnalytics(); fetchAdvancedMetrics(); }}>
+              <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Refresh
+            </Button>
+            <Button size="sm" className="bg-white text-violet-700 hover:bg-white/90 h-9 font-semibold" onClick={downloadCsv}>
+              <Download className="h-3.5 w-3.5 mr-1.5" /> Export
+            </Button>
+          </div>
+        </div>
+
+        {/* Toggle row */}
+        <div className="flex items-center gap-6 mt-4 pt-4 border-t border-white/20 flex-wrap">
+          <label className="flex items-center gap-2 text-sm text-white/80 cursor-pointer">
             <Switch checked={normalizeFunnel} onCheckedChange={setNormalizeFunnel} />
-          </div>
-          <Select value={timeRange} onValueChange={setTimeRange}>
-            <SelectTrigger className="w-40">
-              <Filter className="h-4 w-4 mr-2" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="1month">Last Month</SelectItem>
-              <SelectItem value="3months">Last 3 Months</SelectItem>
-              <SelectItem value="6months">Last 6 Months</SelectItem>
-              <SelectItem value="1year">Last Year</SelectItem>
-            </SelectContent>
-          </Select>
-          {/* Saved Views inline */}
-          <div className="hidden md:flex items-center gap-2">
-            <select className="border rounded px-2 py-1 text-sm" onChange={(e)=>{ const v = views.find(x=>x.name===e.target.value); if (v) loadView(v); }}>
-              <option value="">Views</option>
-              {views.map(v=> (<option key={v.name} value={v.name}>{v.name}</option>))}
-            </select>
-            <input className="border rounded px-2 py-1 text-sm w-32" placeholder="Save as…" value={newViewName} onChange={(e)=>setNewViewName(e.target.value)} />
-            <Button variant="outline" size="sm" onClick={saveCurrentView}>Save</Button>
-          </div>
-          <Button
-            onClick={() => {
-              fetchAnalytics();
-              fetchAdvancedMetrics();
-            }}
-            variant="outline"
-            size="sm"
-          >
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
-          <Button onClick={downloadFunnelCsv} size="sm">
-            Download CSV
-          </Button>
-          <Button onClick={() => window.print()} variant="outline" size="sm">Export PDF</Button>
+            Normalize Funnel
+          </label>
+          <label className="flex items-center gap-2 text-sm text-white/80 cursor-pointer">
+            <Switch checked={compare} onCheckedChange={setCompare} />
+            Compare Periods
+          </label>
         </div>
       </div>
 
-      <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="funnel">Hiring Funnel</TabsTrigger>
-          <TabsTrigger value="sources">Source Performance</TabsTrigger>
-          <TabsTrigger value="timing">Time & Cost</TabsTrigger>
-          <TabsTrigger value="quality">Candidate Quality</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="overview" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Total Applications
-                </CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {analyticsData?.totalApplications || 0}
+      {/* ── KPI Cards ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          {
+            label: "Total Applications",
+            value: analyticsData?.totalApplications || 0,
+            icon: Users,
+            delta: <DeltaBadge value={appsDelta} />,
+            sub: `${analyticsData?.totalJobDescriptions || 0} active jobs`,
+            gradient: "from-violet-50 to-purple-50",
+            iconBg: "bg-violet-100",
+            color: "text-violet-700",
+            sparkData: trends.map((t) => ({ v: t.applications })),
+            sparkKey: "v",
+            sparkColor: "#7c3aed",
+          },
+          {
+            label: "Conversion Rate",
+            value: `${convRate}%`,
+            icon: Target,
+            delta: <DeltaBadge value={convDelta} />,
+            sub: "Applicant → Hired",
+            gradient: "from-emerald-50 to-green-50",
+            iconBg: "bg-emerald-100",
+            color: "text-emerald-700",
+            sparkData: trends.map((t) => ({ v: t.applications > 0 ? (t.hires / t.applications) * 100 : 0 })),
+            sparkKey: "v",
+            sparkColor: "#10b981",
+          },
+          {
+            label: "Avg Time to Hire",
+            value: `${timeAvg}d`,
+            icon: Clock,
+            delta: <DeltaBadge value={-3} inverse />,
+            sub: "Days end-to-end",
+            gradient: "from-blue-50 to-cyan-50",
+            iconBg: "bg-blue-100",
+            color: "text-blue-700",
+            sparkData: advancedMetrics?.timeToHire.byPosition.slice(0, 6).map((p) => ({ v: p.days })) || [],
+            sparkKey: "v",
+            sparkColor: "#0ea5e9",
+          },
+          {
+            label: "Cost per Hire",
+            value: `$${cph.toLocaleString()}`,
+            icon: DollarSign,
+            delta: <DeltaBadge value={-8} inverse />,
+            sub: "Total hiring cost",
+            gradient: "from-amber-50 to-yellow-50",
+            iconBg: "bg-amber-100",
+            color: "text-amber-700",
+            sparkData: costBreakdownData.map((d) => ({ v: d.value })),
+            sparkKey: "v",
+            sparkColor: "#f59e0b",
+          },
+        ].map(({ label, value, icon: Icon, delta, sub, gradient, iconBg, color, sparkData, sparkKey, sparkColor }) => (
+          <Card key={label} className={`border-0 shadow-sm bg-gradient-to-br ${gradient}`}>
+            <CardContent className="p-5">
+              <div className="flex items-start justify-between mb-3">
+                <div className={`h-9 w-9 rounded-xl ${iconBg} flex items-center justify-center`}>
+                  <Icon className={`h-4.5 w-4.5 ${color}`} />
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  +12% from last month
-                </p>
-                {advancedMetrics?.monthlyTrends && (
-                  <div className="mt-2 h-10">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={advancedMetrics.monthlyTrends}>
-                        <Line type="monotone" dataKey="applications" stroke={COLORS[0]} strokeWidth={2} dot={false} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Avg Time to Hire
-                </CardTitle>
-                <Clock className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {advancedMetrics?.timeToHire.average || 0} days
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  -3 days from last month
-                </p>
-                {advancedMetrics?.timeToHire.byPosition && (
-                  <div className="mt-2 h-10">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={advancedMetrics.timeToHire.byPosition.slice(0,6)}>
-                        <Bar dataKey="days" fill={COLORS[2]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Cost per Hire
-                </CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  ${advancedMetrics?.costPerHire.total || 0}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  -8% from last month
-                </p>
-                <div className="mt-2 h-10">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={costBreakdownData} dataKey="value" cx="50%" cy="50%" innerRadius={16} outerRadius={20}>
-                        {costBreakdownData.map((entry, index) => (
-                          <Cell key={`mini-${index}`} fill={entry.fill} />
-                        ))}
-                      </Pie>
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Conversion Rate
-                </CardTitle>
-                <Target className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {advancedMetrics
-                    ? (
-                        (advancedMetrics.hiringFunnel.applied > 0
-                          ? (advancedMetrics.hiringFunnel.hired /
-                              advancedMetrics.hiringFunnel.applied) * 100
-                          : 0)
-                      ).toFixed(1)
-                    : 0}
-                  %
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  +2.1% from last month
-                </p>
-                <div className="mt-2 h-10">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={advancedMetrics?.monthlyTrends || []}>
-                      <Line type="monotone" dataKey="hires" stroke={COLORS[1]} strokeWidth={2} dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Monthly Trends</CardTitle>
-                <CardDescription>
-                  Applications, interviews, and hires over time
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {advancedMetrics?.monthlyTrends ? (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={advancedMetrics.monthlyTrends}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="month" />
-                      <YAxis />
-                      <RechartsTooltip />
-                      <Legend />
-                      <Line
-                        type="monotone"
-                        dataKey="applications"
-                        stroke={COLORS[0]}
-                        strokeWidth={2}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="interviews"
-                        stroke={COLORS[1]}
-                        strokeWidth={2}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="hires"
-                        stroke={COLORS[2]}
-                        strokeWidth={2}
-                      />
-                      {compare && (
-                        <>
-                          <Line type="monotone" dataKey="applications" stroke="#94a3b8" strokeDasharray="4 4" dot={false} />
-                          <Line type="monotone" dataKey="interviews" stroke="#a3e635" strokeDasharray="4 4" dot={false} />
-                          <Line type="monotone" dataKey="hires" stroke="#f87171" strokeDasharray="4 4" dot={false} />
-                        </>
-                      )}
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground gap-2">
-                    <div>No trend data available</div>
-                    <div className="text-xs">Tip: Post a job to start collecting analytics.</div>
-                    <a href="/dashboard/recruiter/job/new" className="text-xs px-3 py-1.5 border rounded">Create Job</a>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Applications by Status</CardTitle>
-                <CardDescription>
-                  Current distribution of application statuses
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {analyticsData?.applicationsByStatus.length ? (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie
-                        data={analyticsData.applicationsByStatus.map(
-                          (item, index) => ({
-                            name: item._id,
-                            value: item.count,
-                            fill: COLORS[index % COLORS.length],
-                          })
-                        )}
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={80}
-                        dataKey="value"
-                        onClick={(data) => {
-                          const p = data?.payload as any;
-                          if (p?.name && typeof p.value === 'number') {
-                            setDrill({ title: `Status: ${p.name}`, items: [{ label: p.name, value: p.value, query: { status: p.name } }] });
-                          }
-                        }}
-                      >
-                        <LabelList dataKey="name" position="outside" />
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground gap-2">
-                    <div>No application data available</div>
-                    <div className="text-xs">Connect a source or invite candidates.</div>
-                    <a href="/dashboard/recruiter/candidates" className="text-xs px-3 py-1.5 border rounded">Open Candidates</a>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="funnel" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <CardTitle>Hiring Funnel Analysis</CardTitle>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Target className="h-4 w-4 text-muted-foreground" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="max-w-xs text-sm">Toggle “Normalize Funnel” to enforce a decreasing funnel (each stage cannot exceed the previous). Turn off to see raw counts.</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                {delta}
               </div>
-              <CardDescription>
-                Track candidate progression through your hiring process
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {advancedMetrics?.hiringFunnel ? (
-                <div className="space-y-6">
-                  <ResponsiveContainer width="100%" height={400}>
-                    <BarChart data={funnelData} layout="horizontal">
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis type="number" />
-                      <YAxis dataKey="name" type="category" width={80} />
-                      <Tooltip />
-                      <Bar dataKey="value" fill="#0ea5e9" />
-                    </BarChart>
+              <p className={`text-2xl font-bold ${color}`}>{value}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+              <p className="text-xs text-muted-foreground/70 mt-0.5">{sub}</p>
+              {sparkData.length > 1 && (
+                <div className="mt-2 h-8">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={sparkData}>
+                      <Line type="monotone" dataKey={sparkKey} stroke={sparkColor} strokeWidth={2} dot={false} />
+                    </LineChart>
                   </ResponsiveContainer>
-
-                  <div className="grid grid-cols-5 gap-4">
-                    {funnelData.map((stage, index) => (
-                      <div key={stage.name} className="text-center">
-                        <div
-                          className="text-2xl font-bold"
-                          style={{ color: stage.fill }}
-                        >
-                          {stage.value}
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          {stage.name}
-                        </div>
-                        {index > 0 && (
-                          <div className="text-xs text-muted-foreground mt-1">
-                            {(
-                              funnelData[index - 1].value > 0
-                                ? (stage.value / funnelData[index - 1].value) * 100
-                                : 0
-                            ).toFixed(1)}
-                            % conversion
-                          </div>
-                        )}
-                        {index > 0 && TARGETS[stage.name] !== undefined && (
-                          <div className="text-[11px] text-gray-500 mt-0.5">
-                            Target: {TARGETS[stage.name]}% of previous
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Status mapping used: applied → screened("screening") → interviewed("interview") → offered("offered") → hired("hired").
-                  </p>
-                </div>
-              ) : (
-                <div className="flex items-center justify-center h-[400px] text-muted-foreground">
-                  No funnel data available
                 </div>
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+        ))}
+      </div>
 
-        <TabsContent value="sources" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Source Performance Analysis</CardTitle>
-              <CardDescription>
-                Compare effectiveness of different recruitment sources
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {advancedMetrics?.sourcePerformance ? (
-                <ResponsiveContainer width="100%" height={400}>
-                  <BarChart data={advancedMetrics.sourcePerformance}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="source" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Bar
-                      dataKey="applications"
-                      fill={COLORS[0]}
-                      name="Applications"
-                    />
-                    <Bar dataKey="hires" fill={COLORS[1]} name="Hires" />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex items-center justify-center h-[400px] text-muted-foreground">
-                  No source performance data available
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="timing" className="space-y-6">
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Time to Hire by Position</CardTitle>
-                <CardDescription>
-                  Average days to complete hiring process
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {advancedMetrics?.timeToHire.byPosition ? (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={advancedMetrics.timeToHire.byPosition}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="position" />
-                      <YAxis />
-                      <Tooltip />
-                      <Bar dataKey="days" fill={COLORS[2]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-                    No time-to-hire data available
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Cost per Hire Breakdown</CardTitle>
-                <CardDescription>
-                  Distribution of hiring costs by category
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {advancedMetrics?.costPerHire ? (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie
-                        data={costBreakdownData}
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={80}
-                        dataKey="value"
-                      >
-                        {costBreakdownData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.fill} />
-                        ))}
-                      </Pie>
-                      <RechartsTooltip formatter={(value) => `$${value}`} />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-                    No cost breakdown data available
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="quality" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Candidate Quality Distribution</CardTitle>
-              <CardDescription>
-                Distribution of candidate scores across different ranges
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {advancedMetrics?.candidateQuality ? (
-                <div className="space-y-6">
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-cyan-600">
-                      {advancedMetrics.candidateQuality.averageScore}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      Average Candidate Score
-                    </div>
-                  </div>
-
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart
-                      data={advancedMetrics.candidateQuality.scoreDistribution}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="range" />
-                      <YAxis />
-                      <Tooltip />
-                      <Bar dataKey="count" fill={COLORS[4]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-                  No candidate quality data available
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
-      {drill && (
-        <div className="fixed inset-0 bg-black/30 z-20" onClick={() => setDrill(null)}>
-          <div className="absolute right-0 top-0 h-full w-full sm:w-[420px] bg-white shadow-xl p-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-lg font-semibold">{drill.title}</div>
-              <button className="text-sm px-2 py-1 border rounded" onClick={() => setDrill(null)}>Close</button>
-            </div>
-            <div className="space-y-2">
-              {drill.items.map((it, i) => (
-                <div key={i} className="flex items-center justify-between border rounded p-2">
-                  <div className="text-sm">{it.label}</div>
-                  <div className="text-sm font-medium">{it.value}</div>
+      {/* ── AI Insights ── */}
+      {aiInsights.length > 0 && (
+        <Card className="border shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Brain className="h-5 w-5 text-violet-600" />
+              AI Insights
+              <Badge className="bg-violet-100 text-violet-700 border-0 text-xs">Auto-generated</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="grid sm:grid-cols-2 gap-3">
+              {aiInsights.map((ins, i) => (
+                <div key={i} className={`flex items-start gap-3 p-3 rounded-xl text-sm ${
+                  ins.type === "good" ? "bg-emerald-50 text-emerald-800" :
+                  ins.type === "warn" ? "bg-amber-50 text-amber-800" :
+                  "bg-rose-50 text-rose-800"
+                }`}>
+                  {ins.type === "good" ? <CheckCircle className="h-4 w-4 shrink-0 mt-0.5" /> :
+                   ins.type === "warn" ? <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" /> :
+                   <XCircle className="h-4 w-4 shrink-0 mt-0.5" />}
+                  <p>{ins.text}</p>
                 </div>
               ))}
-              <div className="flex items-center justify-between mt-2">
-                <div className="text-xs text-muted-foreground">Tip: Click segments in charts to drill down here.</div>
-                {drill.items[0]?.query && (
-                  <a className="text-xs px-2 py-1 border rounded" href={`/dashboard/recruiter/candidates?${new URLSearchParams(drill.items[0].query as any).toString()}`}>Open in Candidates</a>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Tabs ── */}
+      <Tabs defaultValue="overview" className="space-y-4">
+        <TabsList className="h-10 gap-1 bg-muted p-1 rounded-xl">
+          {[
+            { value: "overview",  label: "Overview" },
+            { value: "funnel",    label: "Hiring Funnel" },
+            { value: "trends",    label: "Trends" },
+            { value: "sources",   label: "Sources" },
+            { value: "timing",    label: "Time & Cost" },
+            { value: "quality",   label: "Quality" },
+          ].map((t) => (
+            <TabsTrigger key={t.value} value={t.value} className="text-sm rounded-lg">
+              {t.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+
+        {/* ── Overview Tab ── */}
+        <TabsContent value="overview" className="space-y-4">
+          <div className="grid lg:grid-cols-3 gap-4">
+            {/* Status Pie */}
+            <Card className="lg:col-span-2 border shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Applications by Status</CardTitle>
+                <CardDescription className="text-xs">Click a segment to drill down</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {analyticsData?.applicationsByStatus?.length ? (
+                  <div className="flex items-center gap-4">
+                    <ResponsiveContainer width="55%" height={240}>
+                      <PieChart>
+                        <Pie
+                          data={analyticsData.applicationsByStatus.map((item, i) => ({
+                            name: item._id, value: item.count, fill: COLORS[i % COLORS.length],
+                          }))}
+                          cx="50%" cy="50%" outerRadius={85} innerRadius={40} dataKey="value"
+                          onClick={(d) => {
+                            const p = d?.payload as any;
+                            if (p?.name) setDrill({ title: `Status: ${p.name}`, items: [{ label: p.name, value: p.value, query: { status: p.name } }] });
+                          }}
+                        >
+                          {analyticsData.applicationsByStatus.map((_, i) => (
+                            <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <RechartsTooltip />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="flex-1 space-y-2">
+                      {analyticsData.applicationsByStatus.map((item, i) => (
+                        <div key={item._id} className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-2">
+                            <div className="h-2.5 w-2.5 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
+                            <span className="text-muted-foreground">{item._id}</span>
+                          </div>
+                          <span className="font-semibold">{item.count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <EmptyChart label="No application data yet" cta="Invite Candidates" href="/dashboard/recruiter/candidates" />
                 )}
-              </div>
-              <div className="mt-3 border-t pt-2">
-                <div className="text-sm font-medium mb-1">Saved Views</div>
-                <div className="flex gap-2 items-center mb-2">
-                  <input className="border rounded px-2 py-1 text-sm flex-1" placeholder="View name" value={newViewName} onChange={(e)=>setNewViewName(e.target.value)} />
-                  <button className="text-xs px-2 py-1 border rounded" onClick={saveCurrentView}>Save</button>
-                </div>
-                <div className="space-y-1 max-h-40 overflow-auto">
-                  {views.length === 0 && <div className="text-xs text-muted-foreground">No saved views yet.</div>}
-                  {views.map((v) => (
-                    <div key={v.name} className="flex items-center justify-between text-sm border rounded p-2">
-                      <div>{v.name}</div>
-                      <div className="flex gap-2">
-                        <button className="text-xs px-2 py-0.5 border rounded" onClick={()=>loadView(v)}>Load</button>
-                        <button className="text-xs px-2 py-0.5 border rounded" onClick={()=>deleteView(v.name)}>Delete</button>
+              </CardContent>
+            </Card>
+
+            {/* Radar */}
+            <Card className="border shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Pipeline Health</CardTitle>
+                <CardDescription className="text-xs">Funnel stage distribution</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {radarData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <RadarChart data={radarData}>
+                      <PolarGrid stroke="#e2e8f0" />
+                      <PolarAngleAxis dataKey="subject" tick={{ fontSize: 11 }} />
+                      <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 9 }} />
+                      <Radar name="Pipeline" dataKey="A" stroke="#7c3aed" fill="#7c3aed" fillOpacity={0.2} strokeWidth={2} />
+                      <RechartsTooltip formatter={(v: any) => `${Number(v).toFixed(1)}%`} />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <EmptyChart label="No pipeline data" />
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Top Skills */}
+          {analyticsData?.topSkills && analyticsData.topSkills.length > 0 && (
+            <Card className="border shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Top Candidate Skills</CardTitle>
+                <CardDescription className="text-xs">Most common skills across your applicant pool</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2.5">
+                  {analyticsData.topSkills.slice(0, 8).map((skill, i) => {
+                    const max = analyticsData.topSkills[0].count || 1;
+                    return (
+                      <div key={skill._id} className="flex items-center gap-3">
+                        <span className="text-xs text-muted-foreground w-4 text-right">{i + 1}</span>
+                        <span className="text-sm font-medium w-28 truncate">{skill._id}</span>
+                        <div className="flex-1"><SkillBar label="" value={(skill.count / max) * 100} color="#7c3aed" /></div>
+                        <span className="text-xs font-semibold text-muted-foreground w-8 text-right">{skill.count}</span>
                       </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* ── Funnel Tab ── */}
+        <TabsContent value="funnel" className="space-y-4">
+          <div className="grid lg:grid-cols-3 gap-4">
+            {/* Funnel Chart */}
+            <Card className="lg:col-span-2 border shadow-sm">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-base">Hiring Funnel</CardTitle>
+                    <CardDescription className="text-xs">Candidate progression through your hiring process</CardDescription>
+                  </div>
+                  <Badge variant="outline" className="text-xs">{normalizeFunnel ? "Normalized" : "Raw"}</Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {funnelData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={funnelData} layout="vertical" barCategoryGap="20%">
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                      <XAxis type="number" tick={{ fontSize: 11 }} />
+                      <YAxis dataKey="name" type="category" width={85} tick={{ fontSize: 12 }} />
+                      <RechartsTooltip
+                        formatter={(val: any, name: any, props: any) => {
+                          const applied = funnelData[0]?.value || 1;
+                          const pctOfApplied = ((val / applied) * 100).toFixed(1);
+                          return [`${val} (${pctOfApplied}% of applied)`, "Candidates"];
+                        }}
+                      />
+                      <Bar dataKey="value" radius={[0, 6, 6, 0]}>
+                        {funnelData.map((entry, i) => (
+                          <Cell key={i} fill={entry.fill} />
+                        ))}
+                        <LabelList dataKey="value" position="right" style={{ fontSize: 12, fontWeight: 600 }} />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <EmptyChart label="No funnel data yet" cta="Post a Job" href="/dashboard/recruiter/job-descriptions/create" />
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Funnel stages */}
+            <div className="space-y-3">
+              {funnelData.map((stage, i) => {
+                const fromPrev = i > 0 && funnelData[i - 1].value > 0
+                  ? (stage.value / funnelData[i - 1].value) * 100 : 100;
+                const target = STAGE_TARGETS[stage.name];
+                const fromApplied = funnelData[0]?.value > 0 ? (stage.value / funnelData[0].value) * 100 : 100;
+                return (
+                  <Card key={stage.name} className="border shadow-sm">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-semibold text-sm">{stage.name}</span>
+                        <span className="text-xl font-bold" style={{ color: stage.fill }}>{stage.value}</span>
+                      </div>
+                      {i > 0 && (
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>From prev stage</span>
+                            <span className={fromPrev >= (target || 50) ? "text-emerald-600 font-medium" : "text-rose-600 font-medium"}>
+                              {fromPrev.toFixed(1)}%{target ? ` / target ${target}%` : ""}
+                            </span>
+                          </div>
+                          <SkillBar label="" value={fromPrev} color={fromPrev >= (target || 50) ? "#16a34a" : "#ef4444"} />
+                          <div className="text-xs text-muted-foreground">{fromApplied.toFixed(1)}% of all applicants</div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Drop-off Analysis */}
+          {dropOffs.length > 0 && (
+            <Card className="border shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Drop-off Analysis</CardTitle>
+                <CardDescription className="text-xs">Where candidates are leaving your pipeline</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {dropOffs.map(({ stage, dropped, dropPct }) => (
+                    <div key={stage} className={`p-4 rounded-xl border ${dropPct > 60 ? "bg-rose-50 border-rose-200" : dropPct > 40 ? "bg-amber-50 border-amber-200" : "bg-slate-50"}`}>
+                      <p className="text-xs text-muted-foreground mb-1">→ {stage}</p>
+                      <p className="text-2xl font-bold text-slate-700">-{dropped}</p>
+                      <p className={`text-xs font-medium mt-1 ${dropPct > 60 ? "text-rose-600" : dropPct > 40 ? "text-amber-600" : "text-slate-500"}`}>
+                        {dropPct.toFixed(1)}% dropped off
+                      </p>
                     </div>
                   ))}
                 </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* ── Trends Tab ── */}
+        <TabsContent value="trends" className="space-y-4">
+          <Card className="border shadow-sm">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base">Recruitment Trends</CardTitle>
+                  <CardDescription className="text-xs">Applications, interviews, and hires over time</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {trends.length > 0 ? (
+                <ResponsiveContainer width="100%" height={320}>
+                  <AreaChart data={trends}>
+                    <defs>
+                      <linearGradient id="appsGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.2} />
+                        <stop offset="95%" stopColor="#7c3aed" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="interviewGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.2} />
+                        <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="hiresGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <RechartsTooltip contentStyle={{ borderRadius: "8px", border: "1px solid #e2e8f0" }} />
+                    <Legend />
+                    <Area type="monotone" dataKey="applications" stroke="#7c3aed" fill="url(#appsGrad)" strokeWidth={2} name="Applications" />
+                    <Area type="monotone" dataKey="interviews" stroke="#0ea5e9" fill="url(#interviewGrad)" strokeWidth={2} name="Interviews" />
+                    <Area type="monotone" dataKey="hires" stroke="#10b981" fill="url(#hiresGrad)" strokeWidth={2} name="Hires" />
+                    {compare && (
+                      <>
+                        <Line type="monotone" dataKey="applications" stroke="#94a3b8" strokeDasharray="4 4" dot={false} name="Apps (prev)" />
+                        <Line type="monotone" dataKey="hires" stroke="#f87171" strokeDasharray="4 4" dot={false} name="Hires (prev)" />
+                      </>
+                    )}
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyChart label="No trend data available" cta="Create a Job" href="/dashboard/recruiter/job-descriptions/create" />
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Hiring velocity */}
+          {trends.length > 0 && (
+            <Card className="border shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Hiring Velocity</CardTitle>
+                <CardDescription className="text-xs">Monthly conversion rate (hires ÷ applications)</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={trends.map((t) => ({
+                    month: t.month,
+                    rate: t.applications > 0 ? parseFloat(((t.hires / t.applications) * 100).toFixed(1)) : 0,
+                  }))}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                    <YAxis unit="%" tick={{ fontSize: 11 }} />
+                    <RechartsTooltip formatter={(v) => `${v}%`} contentStyle={{ borderRadius: "8px" }} />
+                    <Line type="monotone" dataKey="rate" stroke="#10b981" strokeWidth={2.5} dot={{ r: 4, fill: "#10b981" }} name="Conversion %" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* ── Sources Tab ── */}
+        <TabsContent value="sources" className="space-y-4">
+          <div className="grid lg:grid-cols-2 gap-4">
+            <Card className="border shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Applications by Source</CardTitle>
+                <CardDescription className="text-xs">Volume & hires per recruitment channel</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {advancedMetrics?.sourcePerformance ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={advancedMetrics.sourcePerformance} barGap={4}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis dataKey="source" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} />
+                      <RechartsTooltip contentStyle={{ borderRadius: "8px" }} />
+                      <Legend />
+                      <Bar dataKey="applications" fill="#7c3aed" name="Applications" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="hires" fill="#10b981" name="Hires" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <EmptyChart label="No source data yet" />
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Conversion by Source</CardTitle>
+                <CardDescription className="text-xs">Which channels convert best</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {advancedMetrics?.sourcePerformance ? (
+                  <div className="space-y-3">
+                    {advancedMetrics.sourcePerformance.map((src, i) => (
+                      <div key={src.source} className="space-y-1.5">
+                        <div className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-2">
+                            <div className="h-2.5 w-2.5 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
+                            <span>{src.source}</span>
+                          </div>
+                          <span className="font-semibold">{(src.conversionRate ?? 0).toFixed(1)}%</span>
+                        </div>
+                        <SkillBar label="" value={src.conversionRate ?? 0} color="#7c3aed" />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyChart label="No source conversion data" />
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* ── Time & Cost Tab ── */}
+        <TabsContent value="timing" className="space-y-4">
+          <div className="grid lg:grid-cols-2 gap-4">
+            <Card className="border shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Time to Hire by Role</CardTitle>
+                <CardDescription className="text-xs">Average days from apply to hired</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {advancedMetrics?.timeToHire.byPosition?.length ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={advancedMetrics.timeToHire.byPosition} layout="vertical" barCategoryGap="25%">
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                      <XAxis type="number" unit="d" tick={{ fontSize: 11 }} />
+                      <YAxis dataKey="position" type="category" width={100} tick={{ fontSize: 11 }} />
+                      <RechartsTooltip formatter={(v) => [`${v} days`, "Time to Hire"]} contentStyle={{ borderRadius: "8px" }} />
+                      <Bar dataKey="days" fill="#0ea5e9" radius={[0, 6, 6, 0]}>
+                        <LabelList dataKey="days" position="right" formatter={(v: any) => `${v}d`} style={{ fontSize: 11 }} />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <EmptyChart label="No time-to-hire data" />
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Cost per Hire Breakdown</CardTitle>
+                <CardDescription className="text-xs">Total: ${cph.toLocaleString()}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {advancedMetrics?.costPerHire ? (
+                  <div className="space-y-4">
+                    <ResponsiveContainer width="100%" height={180}>
+                      <PieChart>
+                        <Pie data={costBreakdownData} cx="50%" cy="50%" outerRadius={70} innerRadius={35} dataKey="value">
+                          {costBreakdownData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                        </Pie>
+                        <RechartsTooltip formatter={(v: any) => [`$${v}`, ""]} contentStyle={{ borderRadius: "8px" }} />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="grid grid-cols-2 gap-2">
+                      {costBreakdownData.map((d, i) => (
+                        <div key={d.name} className="flex items-center justify-between p-2 rounded-lg bg-muted/50 text-sm">
+                          <div className="flex items-center gap-2">
+                            <div className="h-2 w-2 rounded-full" style={{ background: d.fill }} />
+                            <span className="text-muted-foreground">{d.name}</span>
+                          </div>
+                          <span className="font-semibold">${d.value.toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <EmptyChart label="No cost data" />
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* ── Quality Tab ── */}
+        <TabsContent value="quality" className="space-y-4">
+          <div className="grid lg:grid-cols-2 gap-4">
+            <Card className="border shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Score Distribution</CardTitle>
+                <CardDescription className="text-xs">Candidate AI match score buckets</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {advancedMetrics?.candidateQuality?.scoreDistribution?.length ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-violet-50 to-indigo-50">
+                      <Star className="h-8 w-8 text-violet-600" />
+                      <div>
+                        <p className="text-2xl font-bold text-violet-700">{advancedMetrics.candidateQuality.averageScore}</p>
+                        <p className="text-xs text-violet-600/70">Average candidate score</p>
+                      </div>
+                    </div>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <BarChart data={advancedMetrics.candidateQuality.scoreDistribution}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                        <XAxis dataKey="range" tick={{ fontSize: 11 }} />
+                        <YAxis tick={{ fontSize: 11 }} />
+                        <RechartsTooltip contentStyle={{ borderRadius: "8px" }} />
+                        <Bar dataKey="count" name="Candidates" radius={[4, 4, 0, 0]}>
+                          {advancedMetrics.candidateQuality.scoreDistribution.map((_, i) => (
+                            <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <EmptyChart label="No score distribution data" />
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Quality Benchmarks</CardTitle>
+                <CardDescription className="text-xs">How your pipeline compares to targets</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {[
+                  { label: "Avg Match Score", value: advancedMetrics?.candidateQuality.averageScore || 0, target: 75, unit: "/100" },
+                  { label: "Conversion Rate", value: parseFloat(convRate), target: 8, unit: "%" },
+                  { label: "Avg Time to Hire", value: timeAvg, target: 25, unit: "d", inverse: true },
+                  { label: "Screened Rate", value: advancedMetrics?.hiringFunnel.applied ? Math.round((advancedMetrics.hiringFunnel.screened / advancedMetrics.hiringFunnel.applied) * 100) : 0, target: 70, unit: "%" },
+                ].map(({ label, value, target, unit, inverse }) => {
+                  const isGood = inverse ? value <= target : value >= target;
+                  return (
+                    <div key={label} className="space-y-1.5">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">{label}</span>
+                        <div className="flex items-center gap-2">
+                          <span className={`font-semibold ${isGood ? "text-emerald-600" : "text-rose-600"}`}>{value}{unit}</span>
+                          <span className="text-xs text-muted-foreground">/ {target}{unit}</span>
+                        </div>
+                      </div>
+                      <SkillBar label="" value={inverse ? Math.min(100, (target / Math.max(value, 1)) * 100) : Math.min(100, (value / target) * 100)} color={isGood ? "#16a34a" : "#ef4444"} />
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
+
+      {/* ── Drill-down Panel ── */}
+      {drill && (
+        <div className="fixed inset-0 bg-black/40 z-20 backdrop-blur-sm" onClick={() => setDrill(null)}>
+          <div className="absolute right-0 top-0 h-full w-full sm:w-[400px] bg-white shadow-2xl p-5 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">{drill.title}</h3>
+              <Button variant="ghost" size="sm" onClick={() => setDrill(null)}>Close</Button>
+            </div>
+            <div className="space-y-3">
+              {drill.items.map((it, i) => (
+                <div key={i} className="flex items-center justify-between p-3 border rounded-xl">
+                  <span className="text-sm">{it.label}</span>
+                  <span className="text-sm font-bold">{it.value}</span>
+                </div>
+              ))}
+              {drill.items[0]?.query && (
+                <a
+                  href={`/dashboard/recruiter/candidates?${new URLSearchParams(drill.items[0].query).toString()}`}
+                  className="flex items-center justify-between p-3 rounded-xl bg-violet-50 text-violet-700 text-sm font-medium hover:bg-violet-100 transition-colors"
+                >
+                  Open in Candidates
+                  <ChevronRight className="h-4 w-4" />
+                </a>
+              )}
+            </div>
+
+            {/* Saved views in panel */}
+            <div className="mt-6 pt-4 border-t space-y-3">
+              <p className="text-sm font-semibold">Saved Views</p>
+              <div className="flex gap-2">
+                <input
+                  className="border rounded-lg px-2.5 py-1.5 text-sm flex-1"
+                  placeholder="View name"
+                  value={newViewName}
+                  onChange={(e) => setNewViewName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && saveCurrentView()}
+                />
+                <Button variant="outline" size="sm" onClick={saveCurrentView}>Save</Button>
+              </div>
+              <div className="space-y-2">
+                {views.length === 0 && <p className="text-xs text-muted-foreground">No saved views yet.</p>}
+                {views.map((v) => (
+                  <div key={v.name} className="flex items-center justify-between text-sm p-2 border rounded-lg">
+                    <span>{v.name}</span>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => loadView(v)}>Load</Button>
+                      <Button variant="ghost" size="sm" className="h-6 text-xs text-rose-500" onClick={() => deleteView(v.name)}>Delete</Button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>

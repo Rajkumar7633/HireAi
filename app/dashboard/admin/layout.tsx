@@ -19,5 +19,5 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
   }, [session, router])
 
-  return <div className="p-6 max-w-7xl mx-auto">{children}</div>
+  return <div className="p-6 w-full">{children}</div>
 }

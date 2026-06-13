@@ -8,7 +8,7 @@ import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
+import { SkillBar, ScoreRing } from "@/components/ui/charts"
 import { Separator } from "@/components/ui/separator"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, MapPin, DollarSign, Briefcase, ExternalLink } from "lucide-react"
@@ -102,14 +102,12 @@ export default function MatchDetailsPage() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-6 w-full">
       <Card>
         <CardHeader>
           <CardTitle className="text-3xl font-bold flex items-center justify-between">
             <span>{match.jobDescriptionId.title}</span>
-            <Badge variant="default" className="text-lg px-4 py-2">
-              Match: {match.matchScore}%
-            </Badge>
+            <ScoreRing value={match.matchScore} size={68} stroke={6} sublabel="Match" />
           </CardTitle>
           <CardDescription className="text-sm text-muted-foreground">
             Matched with your resume: {match.resumeId.filename} on {format(new Date(match.matchDate), "MMM dd, yyyy")}
@@ -147,10 +145,11 @@ export default function MatchDetailsPage() {
           <div>
             <h2 className="text-xl font-semibold mb-2">Match Analysis</h2>
             <div className="space-y-4">
-              <div>
-                <Label className="text-sm font-medium">ATS Score</Label>
-                <Progress value={match.atsScore} className="w-full mt-1" />
-                <p className="text-xs text-muted-foreground mt-1">{match.atsScore}% ATS Compatibility</p>
+              <div className="flex items-center gap-6">
+                <ScoreRing value={match.atsScore} size={72} stroke={6} label="ATS" sublabel="Compatibility" />
+                <div className="flex-1">
+                  <SkillBar label={`ATS Compatibility: ${match.atsScore}%`} value={match.atsScore} color={match.atsScore >= 70 ? "#16a34a" : match.atsScore >= 50 ? "#f59e0b" : "#ef4444"} />
+                </div>
               </div>
               <div>
                 <Label className="text-sm font-medium">Matched Skills</Label>

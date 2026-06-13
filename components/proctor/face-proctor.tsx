@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { authFetch } from "@/lib/client-auth";
 
 // Proctoring component using FaceDetector API and MediaPipe FaceMesh (CDN) fallback for landmarks.
 // Features
@@ -29,6 +30,7 @@ export type FaceProctorProps = {
   blockClipboard?: boolean; // prevent copy/paste/context menu
   maxWarningsBeforePause?: number; // auto-pause after N warnings
   onViolation?: (payload: { type: string; message: string }) => void; // callback to parent
+  autoStart?: boolean;
   className?: string;
 };
 
@@ -47,6 +49,7 @@ export function FaceProctor({
   blockClipboard = false,
   maxWarningsBeforePause = 3,
   onViolation,
+  autoStart = false,
   className,
 }: FaceProctorProps) {
   const { toast } = useToast();
@@ -148,6 +151,13 @@ export function FaceProctor({
     setEnabled(false);
   };
 
+  useEffect(() => {
+    if (autoStart && !enabled) {
+      start();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart]);
+
   const scheduleChecks = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(analyzeFrame, checkIntervalMs);
@@ -213,7 +223,7 @@ export function FaceProctor({
     const snap = captureSnapshot();
     if (snap) payload.snapshot = snap;
     try {
-      await fetch("/api/proctoring/event", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      await authFetch("/api/proctoring/event", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     } catch {}
   };
 

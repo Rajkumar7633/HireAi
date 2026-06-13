@@ -1,710 +1,513 @@
-"use client";
+"use client"
 
-import React from "react";
-
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useToast } from "@/hooks/use-toast"
+import { useSession } from "@/hooks/use-session"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
-import { useSession } from "@/hooks/use-session";
-import { Progress } from "@/components/ui/progress";
-import {
-  User,
-  Briefcase,
-  GraduationCap,
-  Globe,
-  Loader2,
-  CheckCircle,
-  ArrowRight,
-  ArrowLeft,
-} from "lucide-react";
+  User, Briefcase, GraduationCap, Globe, Loader2, CheckCircle2,
+  ArrowRight, ArrowLeft, MapPin, Phone, Mail, Linkedin, Github,
+  ExternalLink, Lightbulb, Target, DollarSign, Building2, X,
+  Sparkles, ChevronRight,
+} from "lucide-react"
 
 interface ProfileData {
-  // Personal Information
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  location: string;
-
-  // Professional Information
-  currentTitle: string;
-  experienceLevel: string;
-  industry: string;
-  skills: string[];
-
-  // Education
-  education: string;
-  university: string;
-  graduationYear: string;
-
-  // Online Presence
-  linkedinUrl: string;
-  portfolioUrl: string;
-  githubUrl: string;
-
-  // Career Goals
-  desiredRole: string;
-  salaryExpectation: string;
-  workPreference: string;
-  summary: string;
+  firstName: string; lastName: string; email: string; phone: string; location: string
+  currentTitle: string; experienceLevel: string; industry: string; skills: string[]
+  education: string; university: string; graduationYear: string
+  linkedinUrl: string; portfolioUrl: string; githubUrl: string
+  desiredRole: string; salaryExpectation: string; workPreference: string; summary: string
 }
 
 const STEPS = [
-  { id: 1, title: "Personal Info", icon: User },
-  { id: 2, title: "Professional", icon: Briefcase },
-  { id: 3, title: "Education", icon: GraduationCap },
-  { id: 4, title: "Online Presence", icon: Globe },
-  { id: 5, title: "Career Goals", icon: CheckCircle },
-];
+  {
+    id: 1, title: "Personal Info", subtitle: "Your basic contact details",
+    icon: User, tip: "Profiles with a phone & location get 3× more callbacks from local recruiters.",
+  },
+  {
+    id: 2, title: "Professional", subtitle: "Work background & skills",
+    icon: Briefcase, tip: "Add 8–12 skills to maximise keyword matches with job descriptions.",
+  },
+  {
+    id: 3, title: "Education", subtitle: "Academic background",
+    icon: GraduationCap, tip: "85% of companies filter by education level during initial screening.",
+  },
+  {
+    id: 4, title: "Online Presence", subtitle: "Your digital footprint",
+    icon: Globe, tip: "Candidates with LinkedIn get 40% more profile views from recruiters.",
+    optional: true,
+  },
+  {
+    id: 5, title: "Career Goals", subtitle: "Where you want to go",
+    icon: Target, tip: "Clear salary expectations save you 2–3 rounds of negotiation.",
+  },
+]
+
+/* ── Small ring component for the sidebar ── */
+function ProgressRing({ pct }: { pct: number }) {
+  const r = 28, c = 2 * Math.PI * r
+  return (
+    <svg width="72" height="72">
+      <circle cx="36" cy="36" r={r} fill="none" stroke="#f1f5f9" strokeWidth="6" />
+      <circle cx="36" cy="36" r={r} fill="none" stroke="#7c3aed" strokeWidth="6"
+        strokeDasharray={c} strokeDashoffset={c - (pct / 100) * c}
+        strokeLinecap="round" transform="rotate(-90 36 36)"
+        style={{ transition: "stroke-dashoffset 0.6s ease" }} />
+    </svg>
+  )
+}
+
+/* ── Field wrapper ── */
+function Field({ label, required, hint, children }: { label: string; required?: boolean; hint?: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-sm font-medium text-slate-700">
+        {label} {required && <span className="text-violet-600">*</span>}
+      </Label>
+      {children}
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+    </div>
+  )
+}
 
 export default function ProfileSetupPage() {
-  const { session } = useSession();
-  const { toast } = useToast();
-  const router = useRouter();
+  const { session } = useSession()
+  const { toast } = useToast()
+  const router = useRouter()
 
-  const [currentStep, setCurrentStep] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [profileData, setProfileData] = useState<ProfileData>({
-    firstName: "",
-    lastName: "",
-    email: session?.email || "",
-    phone: "",
-    location: "",
-    currentTitle: "",
-    experienceLevel: "",
-    industry: "",
-    skills: [],
-    education: "",
-    university: "",
-    graduationYear: "",
-    linkedinUrl: "",
-    portfolioUrl: "",
-    githubUrl: "",
-    desiredRole: "",
-    salaryExpectation: "",
-    workPreference: "",
-    summary: "",
-  });
-
-  const [skillInput, setSkillInput] = useState("");
+  const [step, setStep] = useState(1)
+  const [loading, setLoading] = useState(false)
+  const [skillInput, setSkillInput] = useState("")
+  const [data, setData] = useState<ProfileData>({
+    firstName: "", lastName: "", email: "", phone: "", location: "",
+    currentTitle: "", experienceLevel: "", industry: "", skills: [],
+    education: "", university: "", graduationYear: "",
+    linkedinUrl: "", portfolioUrl: "", githubUrl: "",
+    desiredRole: "", salaryExpectation: "", workPreference: "", summary: "",
+  })
 
   useEffect(() => {
     if (session?.name) {
-      const nameParts = session.name.split(" ");
-      setProfileData((prev) => ({
-        ...prev,
-        firstName: nameParts[0] || "",
-        lastName: nameParts.slice(1).join(" ") || "",
-      }));
+      const parts = session.name.split(" ")
+      setData(p => ({ ...p, firstName: parts[0] || "", lastName: parts.slice(1).join(" ") || "" }))
     }
-  }, [session]);
+    if (session?.email) setData(p => ({ ...p, email: session.email || "" }))
+  }, [session])
+
+  const set = (key: keyof ProfileData, val: string) =>
+    setData(p => ({ ...p, [key]: val }))
 
   const addSkill = () => {
-    if (skillInput.trim() && !profileData.skills.includes(skillInput.trim())) {
-      setProfileData((prev) => ({
-        ...prev,
-        skills: [...prev.skills, skillInput.trim()],
-      }));
-      setSkillInput("");
+    const s = skillInput.trim()
+    if (s && !data.skills.includes(s)) {
+      setData(p => ({ ...p, skills: [...p.skills, s] }))
+      setSkillInput("")
     }
-  };
+  }
 
-  const removeSkill = (skillToRemove: string) => {
-    setProfileData((prev) => ({
-      ...prev,
-      skills: prev.skills.filter((skill) => skill !== skillToRemove),
-    }));
-  };
-
-  const validateCurrentStep = (): boolean => {
-    switch (currentStep) {
-      case 1:
-        return !!(
-          profileData.firstName &&
-          profileData.lastName &&
-          profileData.email &&
-          profileData.location
-        );
-      case 2:
-        return !!(
-          profileData.currentTitle &&
-          profileData.experienceLevel &&
-          profileData.industry &&
-          profileData.skills.length > 0
-        );
-      case 3:
-        return !!profileData.education;
-      case 4:
-        return true; // Optional step
-      case 5:
-        return !!(profileData.desiredRole && profileData.workPreference);
-      default:
-        return false;
-    }
-  };
+  const valid = (): boolean => {
+    if (step === 1) return !!(data.firstName && data.lastName && data.email && data.location)
+    if (step === 2) return !!(data.currentTitle && data.experienceLevel && data.industry && data.skills.length > 0)
+    if (step === 3) return !!data.education
+    if (step === 4) return true
+    if (step === 5) return !!(data.desiredRole && data.workPreference)
+    return false
+  }
 
   const handleNext = () => {
-    if (!validateCurrentStep()) {
-      toast({
-        title: "Required Fields Missing",
-        description: "Please fill in all required fields before proceeding.",
-        variant: "destructive",
-      });
-      return;
+    if (!valid()) {
+      toast({ title: "Required fields missing", description: "Fill in all required fields first.", variant: "destructive" })
+      return
     }
-
-    if (currentStep < STEPS.length) {
-      setCurrentStep(currentStep + 1);
-    }
-  };
-
-  const handlePrevious = () => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
-    }
-  };
+    if (step < STEPS.length) setStep(s => s + 1)
+  }
 
   const handleSubmit = async () => {
-    setLoading(true);
+    setLoading(true)
     try {
-      const response = await fetch("/api/user/profile-setup", {
+      const res = await fetch("/api/user/profile-setup", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(profileData),
-      });
-
-      if (response.ok) {
-        toast({
-          title: "Profile Created Successfully!",
-          description:
-            "Your profile has been set up. You can now access all features.",
-        });
-        router.push("/dashboard/job-seeker");
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      })
+      if (res.ok) {
+        toast({ title: "Profile created!", description: "You're all set — welcome aboard." })
+        router.push("/dashboard/job-seeker")
       } else {
-        const errorData = await response.json();
-        toast({
-          title: "Setup Failed",
-          description: errorData.message || "Failed to create profile",
-          variant: "destructive",
-        });
+        const e = await res.json()
+        toast({ title: "Setup failed", description: e.message || "Please try again.", variant: "destructive" })
       }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Network error. Please try again.",
-        variant: "destructive",
-      });
+    } catch {
+      toast({ title: "Network error", description: "Please check your connection.", variant: "destructive" })
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
-  const renderStepContent = () => {
-    switch (currentStep) {
-      case 1:
-        return (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="firstName">First Name *</Label>
-                <Input
-                  id="firstName"
-                  value={profileData.firstName}
-                  onChange={(e) =>
-                    setProfileData((prev) => ({
-                      ...prev,
-                      firstName: e.target.value,
-                    }))
-                  }
-                  placeholder="John"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="lastName">Last Name *</Label>
-                <Input
-                  id="lastName"
-                  value={profileData.lastName}
-                  onChange={(e) =>
-                    setProfileData((prev) => ({
-                      ...prev,
-                      lastName: e.target.value,
-                    }))
-                  }
-                  placeholder="Doe"
-                  required
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email Address *</Label>
-              <Input
-                id="email"
-                type="email"
-                value={profileData.email}
-                onChange={(e) =>
-                  setProfileData((prev) => ({ ...prev, email: e.target.value }))
-                }
-                placeholder="john.doe@email.com"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="phone">Phone Number</Label>
-              <Input
-                id="phone"
-                value={profileData.phone}
-                onChange={(e) =>
-                  setProfileData((prev) => ({ ...prev, phone: e.target.value }))
-                }
-                placeholder="+1 (555) 123-4567"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="location">Location *</Label>
-              <Input
-                id="location"
-                value={profileData.location}
-                onChange={(e) =>
-                  setProfileData((prev) => ({
-                    ...prev,
-                    location: e.target.value,
-                  }))
-                }
-                placeholder="San Francisco, CA"
-                required
-              />
-            </div>
+  const pct = Math.round(((step - 1) / STEPS.length) * 100)
+  const currentStepMeta = STEPS[step - 1]
+  const StepIcon = currentStepMeta.icon
+
+  /* ── Step form content ── */
+  const renderForm = () => {
+    if (step === 1) return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="First Name" required>
+            <Input value={data.firstName} onChange={e => set("firstName", e.target.value)} placeholder="Jane" />
+          </Field>
+          <Field label="Last Name" required>
+            <Input value={data.lastName} onChange={e => set("lastName", e.target.value)} placeholder="Smith" />
+          </Field>
+        </div>
+        <Field label="Email Address" required>
+          <div className="relative">
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input type="email" className="pl-9" value={data.email} onChange={e => set("email", e.target.value)} placeholder="jane@email.com" />
           </div>
-        );
-
-      case 2:
-        return (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="currentTitle">Current Job Title *</Label>
-              <Input
-                id="currentTitle"
-                value={profileData.currentTitle}
-                onChange={(e) =>
-                  setProfileData((prev) => ({
-                    ...prev,
-                    currentTitle: e.target.value,
-                  }))
-                }
-                placeholder="Software Engineer"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="experienceLevel">Experience Level *</Label>
-              <Select
-                value={profileData.experienceLevel}
-                onValueChange={(value) =>
-                  setProfileData((prev) => ({
-                    ...prev,
-                    experienceLevel: value,
-                  }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select experience level" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="entry">Entry Level (0-2 years)</SelectItem>
-                  <SelectItem value="mid">Mid Level (3-5 years)</SelectItem>
-                  <SelectItem value="senior">
-                    Senior Level (6-10 years)
-                  </SelectItem>
-                  <SelectItem value="lead">
-                    Lead/Principal (10+ years)
-                  </SelectItem>
-                  <SelectItem value="executive">Executive Level</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="industry">Industry *</Label>
-              <Select
-                value={profileData.industry}
-                onValueChange={(value) =>
-                  setProfileData((prev) => ({ ...prev, industry: value }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select industry" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="technology">Technology</SelectItem>
-                  <SelectItem value="finance">Finance</SelectItem>
-                  <SelectItem value="healthcare">Healthcare</SelectItem>
-                  <SelectItem value="education">Education</SelectItem>
-                  <SelectItem value="retail">Retail</SelectItem>
-                  <SelectItem value="manufacturing">Manufacturing</SelectItem>
-                  <SelectItem value="consulting">Consulting</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="skills">Skills *</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="skills"
-                  value={skillInput}
-                  onChange={(e) => setSkillInput(e.target.value)}
-                  placeholder="Add a skill (e.g., JavaScript, React)"
-                  onKeyPress={(e) =>
-                    e.key === "Enter" && (e.preventDefault(), addSkill())
-                  }
-                />
-                <Button type="button" onClick={addSkill} variant="outline">
-                  Add
-                </Button>
-              </div>
-              <div className="flex flex-wrap gap-2 mt-2">
-                {profileData.skills.map((skill, index) => (
-                  <span
-                    key={index}
-                    className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm flex items-center gap-1"
-                  >
-                    {skill}
-                    <button
-                      type="button"
-                      onClick={() => removeSkill(skill)}
-                      className="ml-1 text-blue-600 hover:text-blue-800"
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-            </div>
+        </Field>
+        <Field label="Phone Number" hint="Include country code for international roles">
+          <div className="relative">
+            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input className="pl-9" value={data.phone} onChange={e => set("phone", e.target.value)} placeholder="+1 (555) 123-4567" />
           </div>
-        );
-
-      case 3:
-        return (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="education">Highest Education Level *</Label>
-              <Select
-                value={profileData.education}
-                onValueChange={(value) =>
-                  setProfileData((prev) => ({ ...prev, education: value }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select education level" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="high-school">High School</SelectItem>
-                  <SelectItem value="associate">Associate Degree</SelectItem>
-                  <SelectItem value="bachelor">Bachelor's Degree</SelectItem>
-                  <SelectItem value="master">Master's Degree</SelectItem>
-                  <SelectItem value="phd">PhD</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="university">University/Institution</Label>
-              <Input
-                id="university"
-                value={profileData.university}
-                onChange={(e) =>
-                  setProfileData((prev) => ({
-                    ...prev,
-                    university: e.target.value,
-                  }))
-                }
-                placeholder="Stanford University"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="graduationYear">Graduation Year</Label>
-              <Input
-                id="graduationYear"
-                value={profileData.graduationYear}
-                onChange={(e) =>
-                  setProfileData((prev) => ({
-                    ...prev,
-                    graduationYear: e.target.value,
-                  }))
-                }
-                placeholder="2020"
-              />
-            </div>
+        </Field>
+        <Field label="Location" required hint="City, State/Country — used to match local opportunities">
+          <div className="relative">
+            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input className="pl-9" value={data.location} onChange={e => set("location", e.target.value)} placeholder="San Francisco, CA" />
           </div>
-        );
+        </Field>
+      </div>
+    )
 
-      case 4:
-        return (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="linkedinUrl">LinkedIn Profile</Label>
-              <Input
-                id="linkedinUrl"
-                value={profileData.linkedinUrl}
-                onChange={(e) =>
-                  setProfileData((prev) => ({
-                    ...prev,
-                    linkedinUrl: e.target.value,
-                  }))
-                }
-                placeholder="https://linkedin.com/in/johndoe"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="portfolioUrl">Portfolio Website</Label>
-              <Input
-                id="portfolioUrl"
-                value={profileData.portfolioUrl}
-                onChange={(e) =>
-                  setProfileData((prev) => ({
-                    ...prev,
-                    portfolioUrl: e.target.value,
-                  }))
-                }
-                placeholder="https://johndoe.dev"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="githubUrl">GitHub Profile</Label>
-              <Input
-                id="githubUrl"
-                value={profileData.githubUrl}
-                onChange={(e) =>
-                  setProfileData((prev) => ({
-                    ...prev,
-                    githubUrl: e.target.value,
-                  }))
-                }
-                placeholder="https://github.com/johndoe"
-              />
-            </div>
+    if (step === 2) return (
+      <div className="space-y-4">
+        <Field label="Current Job Title" required hint="Your current or most recent role">
+          <div className="relative">
+            <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input className="pl-9" value={data.currentTitle} onChange={e => set("currentTitle", e.target.value)} placeholder="Software Engineer" />
           </div>
-        );
-
-      case 5:
-        return (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="desiredRole">Desired Job Title *</Label>
-              <Input
-                id="desiredRole"
-                value={profileData.desiredRole}
-                onChange={(e) =>
-                  setProfileData((prev) => ({
-                    ...prev,
-                    desiredRole: e.target.value,
-                  }))
-                }
-                placeholder="Senior Software Engineer"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="salaryExpectation">Salary Expectation</Label>
-              <Select
-                value={profileData.salaryExpectation}
-                onValueChange={(value) =>
-                  setProfileData((prev) => ({
-                    ...prev,
-                    salaryExpectation: value,
-                  }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select salary range" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="50k-75k">$50,000 - $75,000</SelectItem>
-                  <SelectItem value="75k-100k">$75,000 - $100,000</SelectItem>
-                  <SelectItem value="100k-150k">$100,000 - $150,000</SelectItem>
-                  <SelectItem value="150k-200k">$150,000 - $200,000</SelectItem>
-                  <SelectItem value="200k+">$200,000+</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="workPreference">Work Preference *</Label>
-              <Select
-                value={profileData.workPreference}
-                onValueChange={(value) =>
-                  setProfileData((prev) => ({ ...prev, workPreference: value }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select work preference" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="remote">Remote</SelectItem>
-                  <SelectItem value="hybrid">Hybrid</SelectItem>
-                  <SelectItem value="onsite">On-site</SelectItem>
-                  <SelectItem value="flexible">Flexible</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="summary">Professional Summary</Label>
-              <Textarea
-                id="summary"
-                value={profileData.summary}
-                onChange={(e) =>
-                  setProfileData((prev) => ({
-                    ...prev,
-                    summary: e.target.value,
-                  }))
-                }
-                placeholder="Brief summary of your professional background and career goals..."
-                className="min-h-[100px]"
-              />
-            </div>
+        </Field>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Experience Level" required>
+            <Select value={data.experienceLevel} onValueChange={v => set("experienceLevel", v)}>
+              <SelectTrigger><SelectValue placeholder="Select level" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="entry">Entry (0–2 yrs)</SelectItem>
+                <SelectItem value="mid">Mid (3–5 yrs)</SelectItem>
+                <SelectItem value="senior">Senior (6–10 yrs)</SelectItem>
+                <SelectItem value="lead">Lead / Principal (10+)</SelectItem>
+                <SelectItem value="executive">Executive</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="Industry" required>
+            <Select value={data.industry} onValueChange={v => set("industry", v)}>
+              <SelectTrigger><SelectValue placeholder="Select industry" /></SelectTrigger>
+              <SelectContent>
+                {["Technology", "Finance", "Healthcare", "Education", "Retail", "Manufacturing", "Consulting", "Other"]
+                  .map(i => <SelectItem key={i} value={i.toLowerCase()}>{i}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </Field>
+        </div>
+        <Field label="Skills" required hint="Press Enter or click Add — aim for 8–12 skills">
+          <div className="flex gap-2">
+            <Input
+              value={skillInput}
+              onChange={e => setSkillInput(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && (e.preventDefault(), addSkill())}
+              placeholder="e.g. JavaScript, React, Python…"
+            />
+            <Button type="button" variant="outline" onClick={addSkill} className="shrink-0">Add</Button>
           </div>
-        );
+          {data.skills.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              {data.skills.map(s => (
+                <span key={s} className="inline-flex items-center gap-1.5 bg-violet-50 text-violet-700 border border-violet-200 text-xs font-medium px-3 py-1.5 rounded-full">
+                  {s}
+                  <button type="button" onClick={() => setData(p => ({ ...p, skills: p.skills.filter(x => x !== s) }))}>
+                    <X className="h-3 w-3 hover:text-violet-900" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+        </Field>
+      </div>
+    )
 
-      default:
-        return null;
-    }
-  };
+    if (step === 3) return (
+      <div className="space-y-4">
+        <Field label="Highest Education Level" required>
+          <Select value={data.education} onValueChange={v => set("education", v)}>
+            <SelectTrigger><SelectValue placeholder="Select level" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="high-school">High School Diploma</SelectItem>
+              <SelectItem value="associate">Associate Degree</SelectItem>
+              <SelectItem value="bachelor">Bachelor's Degree</SelectItem>
+              <SelectItem value="master">Master's Degree</SelectItem>
+              <SelectItem value="phd">PhD / Doctorate</SelectItem>
+              <SelectItem value="other">Other / Self-taught</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="University / Institution" hint="Leave blank if not applicable">
+          <div className="relative">
+            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input className="pl-9" value={data.university} onChange={e => set("university", e.target.value)} placeholder="Stanford University" />
+          </div>
+        </Field>
+        <Field label="Graduation Year" hint="Estimated is fine">
+          <Input type="number" value={data.graduationYear} onChange={e => set("graduationYear", e.target.value)} placeholder="2022" className="w-32" />
+        </Field>
+      </div>
+    )
 
-  const progress = (currentStep / STEPS.length) * 100;
+    if (step === 4) return (
+      <div className="space-y-4">
+        <div className="rounded-xl bg-blue-50 border border-blue-100 px-4 py-3 text-sm text-blue-700 flex items-start gap-2">
+          <Sparkles className="h-4 w-4 shrink-0 mt-0.5 text-blue-500" />
+          All fields on this step are optional but significantly boost your visibility.
+        </div>
+        <Field label="LinkedIn Profile" hint="linkedin.com/in/your-name">
+          <div className="relative">
+            <Linkedin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input className="pl-9" value={data.linkedinUrl} onChange={e => set("linkedinUrl", e.target.value)} placeholder="https://linkedin.com/in/janesmith" />
+          </div>
+        </Field>
+        <Field label="Portfolio / Personal Website">
+          <div className="relative">
+            <ExternalLink className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input className="pl-9" value={data.portfolioUrl} onChange={e => set("portfolioUrl", e.target.value)} placeholder="https://janesmith.dev" />
+          </div>
+        </Field>
+        <Field label="GitHub Profile">
+          <div className="relative">
+            <Github className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input className="pl-9" value={data.githubUrl} onChange={e => set("githubUrl", e.target.value)} placeholder="https://github.com/janesmith" />
+          </div>
+        </Field>
+      </div>
+    )
+
+    if (step === 5) return (
+      <div className="space-y-4">
+        <Field label="Desired Job Title" required hint="Be specific — e.g. 'Senior Frontend Engineer' not just 'Engineer'">
+          <div className="relative">
+            <Target className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input className="pl-9" value={data.desiredRole} onChange={e => set("desiredRole", e.target.value)} placeholder="Senior Software Engineer" />
+          </div>
+        </Field>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Salary Expectation">
+            <Select value={data.salaryExpectation} onValueChange={v => set("salaryExpectation", v)}>
+              <SelectTrigger><SelectValue placeholder="Select range" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="50k-75k">$50k – $75k</SelectItem>
+                <SelectItem value="75k-100k">$75k – $100k</SelectItem>
+                <SelectItem value="100k-150k">$100k – $150k</SelectItem>
+                <SelectItem value="150k-200k">$150k – $200k</SelectItem>
+                <SelectItem value="200k+">$200k+</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="Work Preference" required>
+            <Select value={data.workPreference} onValueChange={v => set("workPreference", v)}>
+              <SelectTrigger><SelectValue placeholder="Select preference" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="remote">Remote</SelectItem>
+                <SelectItem value="hybrid">Hybrid</SelectItem>
+                <SelectItem value="onsite">On-site</SelectItem>
+                <SelectItem value="flexible">Flexible</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+        </div>
+        <Field label="Professional Summary" hint="2–4 sentences about your background and what you're looking for">
+          <Textarea
+            value={data.summary}
+            onChange={e => set("summary", e.target.value)}
+            placeholder="Experienced software engineer with 5+ years building scalable web applications. Passionate about clean code and great user experiences…"
+            className="min-h-[110px] resize-none"
+          />
+          <p className="text-xs text-muted-foreground text-right">{data.summary.length} / 500</p>
+        </Field>
+      </div>
+    )
+  }
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="max-w-2xl mx-auto">
-        <Card className="mb-6">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Complete Your Profile</CardTitle>
-            <CardDescription>
-              Help us personalize your job search experience
-            </CardDescription>
-            <div className="mt-4">
-              <Progress value={progress} className="w-full" />
-              <p className="text-sm text-muted-foreground mt-2">
-                Step {currentStep} of {STEPS.length}
-              </p>
+    <div className="w-full min-h-full bg-slate-50 px-4 py-8">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-5xl mx-auto">
+
+        {/* ── LEFT SIDEBAR ── */}
+        <div className="lg:col-span-4">
+          <div className="lg:sticky lg:top-6 space-y-4">
+
+            {/* Header */}
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Sparkles className="h-4 w-4 text-violet-600" />
+                <span className="text-xs font-semibold text-violet-600 uppercase tracking-wider">Profile Setup</span>
+              </div>
+              <h1 className="text-xl font-bold text-slate-900">Build your profile</h1>
+              <p className="text-sm text-muted-foreground mt-0.5">Complete all steps to unlock AI matching</p>
             </div>
-          </CardHeader>
-        </Card>
 
-        <div className="flex justify-center mb-6">
-          <div className="flex items-center space-x-4">
-            {STEPS.map((step, index) => {
-              const Icon = step.icon;
-              const isActive = currentStep === step.id;
-              const isCompleted = currentStep > step.id;
-
-              return (
-                <div key={step.id} className="flex items-center">
-                  <div
-                    className={`
-                    flex items-center justify-center w-10 h-10 rounded-full border-2 
-                    ${
-                      isActive
-                        ? "border-blue-600 bg-blue-600 text-white"
-                        : isCompleted
-                        ? "border-green-600 bg-green-600 text-white"
-                        : "border-gray-300 bg-white text-gray-400"
-                    }
-                  `}
-                  >
-                    <Icon className="h-5 w-5" />
+            {/* Progress ring + pct */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-5">
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  <ProgressRing pct={pct} />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-sm font-bold text-slate-800">{pct}%</span>
                   </div>
-                  {index < STEPS.length - 1 && (
-                    <div
-                      className={`w-12 h-0.5 mx-2 ${
-                        isCompleted ? "bg-green-600" : "bg-gray-300"
-                      }`}
-                    />
-                  )}
                 </div>
-              );
-            })}
+                <div>
+                  <p className="font-semibold text-sm text-slate-800">
+                    {pct === 0 ? "Just getting started" : pct < 60 ? "Good progress" : pct < 100 ? "Almost there!" : "All done!"}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Step {step} of {STEPS.length}</p>
+                </div>
+              </div>
+              <div className="mt-4 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-violet-500 to-purple-600 rounded-full transition-all duration-500"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Step list */}
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+              {STEPS.map((s, idx) => {
+                const Icon = s.icon
+                const isActive = step === s.id
+                const isDone = step > s.id
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => isDone && setStep(s.id)}
+                    className={`w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors border-b border-slate-100 last:border-0
+                      ${isActive ? "bg-violet-50" : isDone ? "hover:bg-slate-50 cursor-pointer" : "cursor-default opacity-50"}`}
+                  >
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold transition-all
+                      ${isActive ? "bg-violet-600 text-white shadow-md shadow-violet-200" : isDone ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-400"}`}>
+                      {isDone ? <CheckCircle2 className="h-4 w-4" /> : <Icon className="h-3.5 w-3.5" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className={`text-sm font-medium ${isActive ? "text-violet-700" : isDone ? "text-slate-700" : "text-slate-400"}`}>
+                          {s.title}
+                        </p>
+                        {s.optional && (
+                          <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-medium">optional</span>
+                        )}
+                      </div>
+                      <p className={`text-xs mt-0.5 ${isActive ? "text-violet-500" : "text-muted-foreground"}`}>{s.subtitle}</p>
+                    </div>
+                    {isActive && <ChevronRight className="h-4 w-4 text-violet-400 shrink-0" />}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Tip card */}
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+              <div className="flex items-start gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
+                  <Lightbulb className="h-3.5 w-3.5 text-amber-600" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-amber-800 mb-1">Pro tip</p>
+                  <p className="text-xs text-amber-700 leading-relaxed">{currentStepMeta.tip}</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              {React.createElement(STEPS[currentStep - 1].icon, {
-                className: "h-5 w-5",
-              })}
-              {STEPS[currentStep - 1].title}
-            </CardTitle>
-            <CardDescription>
-              {currentStep === 1 && "Let's start with your basic information"}
-              {currentStep === 2 &&
-                "Tell us about your professional background"}
-              {currentStep === 3 && "Share your educational background"}
-              {currentStep === 4 && "Add your online presence"}
-              {currentStep === 5 && "Define your career goals"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {renderStepContent()}
+        {/* ── RIGHT FORM ── */}
+        <div className="lg:col-span-8">
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
 
-            <div className="flex justify-between mt-6">
+            {/* Form header */}
+            <div className="px-6 py-5 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center shrink-0">
+                  <StepIcon className="h-5 w-5 text-violet-600" />
+                </div>
+                <div>
+                  <h2 className="font-bold text-slate-900">{currentStepMeta.title}</h2>
+                  <p className="text-sm text-muted-foreground mt-0.5">{currentStepMeta.subtitle}</p>
+                </div>
+                {currentStepMeta.optional && (
+                  <span className="ml-auto text-xs bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-medium shrink-0">
+                    Optional
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Form body */}
+            <div className="px-6 py-6">
+              {renderForm()}
+            </div>
+
+            {/* Navigation footer */}
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between gap-3">
               <Button
                 type="button"
                 variant="outline"
-                onClick={handlePrevious}
-                disabled={currentStep === 1}
+                onClick={() => setStep(s => s - 1)}
+                disabled={step === 1}
+                className="gap-2"
               >
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Previous
+                <ArrowLeft className="h-3.5 w-3.5" /> Back
               </Button>
 
-              {currentStep < STEPS.length ? (
-                <Button
-                  type="button"
-                  onClick={handleNext}
-                  className={
-                    validateCurrentStep()
-                      ? "bg-blue-600 hover:bg-blue-700"
-                      : "bg-gray-400 cursor-not-allowed"
-                  }
-                >
-                  Next
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  onClick={handleSubmit}
-                  disabled={loading || !validateCurrentStep()}
-                  className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400"
-                >
-                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Complete Setup
-                  <CheckCircle className="ml-2 h-4 w-4" />
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                {/* Dot indicators */}
+                <div className="hidden sm:flex items-center gap-1.5 mr-2">
+                  {STEPS.map(s => (
+                    <div key={s.id} className={`rounded-full transition-all ${step === s.id ? "w-5 h-1.5 bg-violet-600" : step > s.id ? "w-1.5 h-1.5 bg-emerald-400" : "w-1.5 h-1.5 bg-slate-200"}`} />
+                  ))}
+                </div>
+
+                {step < STEPS.length ? (
+                  <Button
+                    type="button"
+                    onClick={handleNext}
+                    disabled={!valid()}
+                    className="gap-2 bg-violet-600 hover:bg-violet-700 text-white border-0 disabled:opacity-40"
+                  >
+                    Continue <ArrowRight className="h-3.5 w-3.5" />
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    onClick={handleSubmit}
+                    disabled={loading || !valid()}
+                    className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white border-0 disabled:opacity-40"
+                  >
+                    {loading
+                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…</>
+                      : <><CheckCircle2 className="h-3.5 w-3.5" /> Complete Setup</>}
+                  </Button>
+                )}
+              </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     </div>
-  );
+  )
 }

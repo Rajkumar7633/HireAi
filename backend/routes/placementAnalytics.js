@@ -9,7 +9,7 @@ const User = require("../models/User")
 // @desc    Get placement readiness overview for college
 // @access  Private (College Admin)
 router.get("/:collegeId/overview", auth, async (req, res) => {
-  if (req.user.role !== "college_admin" && req.user.role !== "admin") {
+  if ((req.user.role !== "college" && req.user.role !== "college_admin" && req.user.role !== "admin")) {
     return res.status(403).json({ msg: "Access denied" })
   }
 
@@ -97,7 +97,7 @@ router.get("/:collegeId/overview", auth, async (req, res) => {
 // @desc    Get skills heatmap showing strong/weak skills by cohort
 // @access  Private (College Admin)
 router.get("/:collegeId/skills-heatmap", auth, async (req, res) => {
-  if (req.user.role !== "college_admin" && req.user.role !== "admin") {
+  if ((req.user.role !== "college" && req.user.role !== "college_admin" && req.user.role !== "admin")) {
     return res.status(403).json({ msg: "Access denied" })
   }
 
@@ -162,7 +162,7 @@ router.get("/:collegeId/skills-heatmap", auth, async (req, res) => {
 // @desc    Get leaderboard by batch/branch/skill
 // @access  Private (College Admin)
 router.get("/:collegeId/leaderboard", auth, async (req, res) => {
-  if (req.user.role !== "college_admin" && req.user.role !== "admin") {
+  if ((req.user.role !== "college" && req.user.role !== "college_admin" && req.user.role !== "admin")) {
     return res.status(403).json({ msg: "Access denied" })
   }
 
@@ -211,7 +211,7 @@ router.get("/:collegeId/leaderboard", auth, async (req, res) => {
 // @desc    Get placement funnel analytics
 // @access  Private (College Admin)
 router.get("/:collegeId/placement-funnel", auth, async (req, res) => {
-  if (req.user.role !== "college_admin" && req.user.role !== "admin") {
+  if ((req.user.role !== "college" && req.user.role !== "college_admin" && req.user.role !== "admin")) {
     return res.status(403).json({ msg: "Access denied" })
   }
 
@@ -268,7 +268,7 @@ router.get("/:collegeId/placement-funnel", auth, async (req, res) => {
 // @desc    Get company-wise placement performance
 // @access  Private (College Admin)
 router.get("/:collegeId/company-performance", auth, async (req, res) => {
-  if (req.user.role !== "college_admin" && req.user.role !== "admin") {
+  if ((req.user.role !== "college" && req.user.role !== "college_admin" && req.user.role !== "admin")) {
     return res.status(403).json({ msg: "Access denied" })
   }
 

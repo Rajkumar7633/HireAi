@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
+import { HalfGauge } from "@/components/ui/charts";
 import {
   Select,
   SelectContent,
@@ -94,6 +94,15 @@ interface JobSeekerProfile {
     current?: boolean;
     description?: string;
   }>;
+  collegeInfo?: {
+    collegeName?: string;
+    department?: string;
+    batch?: string;
+    cgpa?: number;
+    placementStatus?: string;
+    companyPlacedAt?: string;
+    packageLPA?: number;
+  } | null;
 }
 
 export default function JobSeekerProfilePage() {
@@ -917,7 +926,7 @@ export default function JobSeekerProfilePage() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-6">
-      <div className="max-w-6xl mx-auto space-y-8">
+      <div className="w-full space-y-8">
         {/* Header Section */}
         <Card className="border-2 border-teal-200 shadow-xl bg-gradient-to-br from-white via-teal-50/30 to-sky-50/30 backdrop-blur">
           <CardContent className="p-8">
@@ -950,18 +959,19 @@ export default function JobSeekerProfilePage() {
                 </div>
               </div>
               <div className="lg:text-right space-y-4">
+                {session?.id && (
+                  <Link href={`/dashboard/job-seeker/profile/${session.id}`}>
+                    <button className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-teal-200 bg-white text-teal-700 text-sm font-semibold hover:bg-teal-50 transition-colors shadow-sm">
+                      <User className="h-4 w-4" /> View Public Profile
+                    </button>
+                  </Link>
+                )}
                 <div className="inline-flex items-center gap-3 px-5 py-3 rounded-2xl bg-gradient-to-r from-emerald-100 to-teal-100 text-emerald-900 text-sm font-bold shadow-md border border-emerald-200">
                   <TrendingUp className="h-6 w-6 text-emerald-600" />
                   <span>Profile Strength</span>
                 </div>
-                <div className="w-56 ml-auto bg-white/50 backdrop-blur rounded-2xl p-4 shadow-sm border border-teal-100">
-                  <Progress
-                    value={profile.profileCompleteness}
-                    className="h-4 rounded-full"
-                  />
-                  <p className="text-base font-bold text-slate-800 mt-3">
-                    {profile.profileCompleteness}% Complete
-                  </p>
+                <div className="w-56 ml-auto bg-white/50 backdrop-blur rounded-2xl p-4 shadow-sm border border-teal-100 flex flex-col items-center">
+                  <HalfGauge value={profile.profileCompleteness} size={140} label="Profile" />
                   <p className="text-xs text-slate-500 mt-1">
                     Last updated: {lastSavedLabel}
                   </p>
@@ -1387,6 +1397,41 @@ export default function JobSeekerProfilePage() {
               )}
             </CardContent>
           </Card>
+
+          {/* College Placement Info (shown if onboarded by a college) */}
+          {(profile as any).collegeInfo && (
+            <Card className="border-blue-200 bg-blue-50/40">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-2">
+                  <GraduationCap className="h-5 w-5 text-blue-600" />
+                  <CardTitle className="text-blue-900">College Placement Cell</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                  {(profile as any).collegeInfo.collegeName && (
+                    <div><span className="text-muted-foreground">College</span><p className="font-medium">{(profile as any).collegeInfo.collegeName}</p></div>
+                  )}
+                  {(profile as any).collegeInfo.department && (
+                    <div><span className="text-muted-foreground">Department</span><p className="font-medium">{(profile as any).collegeInfo.department}</p></div>
+                  )}
+                  {(profile as any).collegeInfo.batch && (
+                    <div><span className="text-muted-foreground">Batch</span><p className="font-medium">{(profile as any).collegeInfo.batch}</p></div>
+                  )}
+                  {(profile as any).collegeInfo.cgpa != null && (
+                    <div><span className="text-muted-foreground">CGPA</span><p className="font-medium">{(profile as any).collegeInfo.cgpa}</p></div>
+                  )}
+                  <div>
+                    <span className="text-muted-foreground">Placement Status</span>
+                    <p className="font-medium capitalize">{((profile as any).collegeInfo.placementStatus || "unplaced").replace("_", " ")}</p>
+                  </div>
+                  {(profile as any).collegeInfo.companyPlacedAt && (
+                    <div><span className="text-muted-foreground">Placed At</span><p className="font-medium">{(profile as any).collegeInfo.companyPlacedAt}{(profile as any).collegeInfo.packageLPA ? ` — ₹${(profile as any).collegeInfo.packageLPA} LPA` : ""}</p></div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Education */}
           <Card>

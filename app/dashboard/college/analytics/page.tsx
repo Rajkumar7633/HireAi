@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Progress } from "@/components/ui/progress"
+import { SkillBar } from "@/components/ui/charts"
 import { Loader2, BarChart3, TrendingUp, Users, DollarSign, Calendar, Download, Building2 } from "lucide-react"
 
 export default function AnalyticsPage() {
@@ -195,7 +195,7 @@ export default function AnalyticsPage() {
                             <span className="font-medium">{dept}</span>
                             <span className="text-gray-600">{count} students</span>
                           </div>
-                          <Progress value={(count / analytics.overview.totalStudents) * 100} className="h-2" />
+                          <SkillBar label="" value={(count / analytics.overview.totalStudents) * 100} color="#7c3aed" />
                         </div>
                       ))}
                     </div>
@@ -217,7 +217,7 @@ export default function AnalyticsPage() {
                             <span className="font-medium">{branch}</span>
                             <span className="text-gray-600">{count} students</span>
                           </div>
-                          <Progress value={(count / analytics.overview.totalStudents) * 100} className="h-2" />
+                          <SkillBar label="" value={(count / analytics.overview.totalStudents) * 100} color="#7c3aed" />
                         </div>
                       ))}
                     </div>
@@ -313,7 +313,7 @@ export default function AnalyticsPage() {
                           <span className="font-medium">{trend.month}</span>
                           <span className="text-gray-600">{trend.count} placements</span>
                         </div>
-                        <Progress value={(trend.count / (analytics.overview.totalPlaced || 1)) * 100} className="h-2" />
+                        <SkillBar label="" value={(trend.count / (analytics.overview.totalPlaced || 1)) * 100} color="#16a34a" />
                       </div>
                     ))}
                   </div>
@@ -335,7 +335,7 @@ export default function AnalyticsPage() {
                           <span className="font-medium">{trend.month}</span>
                           <span className="text-gray-600">{trend.count} drives</span>
                         </div>
-                        <Progress value={(trend.count / (analytics.overview.totalDrives || 1)) * 100} className="h-2" />
+                        <SkillBar label="" value={(trend.count / (analytics.overview.totalDrives || 1)) * 100} color="#2563eb" />
                       </div>
                     ))}
                   </div>

@@ -1,6 +1,3 @@
-
-
-
 import { type NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
@@ -10,8 +7,6 @@ import Notification from "@/models/Notification"
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("[DEBUG] Assessment assignment API called")
-
     const session = await getSession(request)
     if (!session || session.role !== "recruiter") {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
@@ -19,140 +14,114 @@ export async function POST(request: NextRequest) {
 
     await connectDB()
 
-    const { assessmentId, applicationIds, jobSeekerIds, expirationDays = 7 } = await request.json()
-    console.log("[DEBUG] Input data:", { assessmentId, applicationIds, jobSeekerIds, sessionUserId: session.userId })
+    const { assessmentId, applicationIds, userIds, expirationDays = 7 } = await request.json()
 
-    // Support both applicationIds (from frontend) and jobSeekerIds (direct assignment)
-    let targetJobSeekerIds = jobSeekerIds;
-    
-    if (!targetJobSeekerIds && applicationIds && Array.isArray(applicationIds)) {
-      // Convert applicationIds to jobSeekerIds by fetching the applications
-      const applications = await Application.find({ _id: { $in: applicationIds } });
-      targetJobSeekerIds = applications.map(app => app.jobSeekerId.toString());
-      console.log("[DEBUG] Converted applicationIds to jobSeekerIds:", { applicationIds, targetJobSeekerIds });
+    if (!assessmentId) {
+      return NextResponse.json({ message: "assessmentId is required" }, { status: 400 })
     }
 
-    if (!assessmentId || !targetJobSeekerIds || !Array.isArray(targetJobSeekerIds)) {
-      return NextResponse.json(
-        {
-          message: "Assessment ID and job seeker IDs are required",
-        },
-        { status: 400 },
-      )
-    }
-
-    // Verify assessment exists and belongs to recruiter
     const assessment = await Assessment.findById(assessmentId)
-    console.log("[DEBUG] Assessment found:", {
-      exists: !!assessment,
-      id: assessment?._id,
-      createdBy: assessment?.createdBy?.toString(),
-      sessionUserId: session.userId,
-    })
-
     if (!assessment) {
-      return NextResponse.json(
-        {
-          message: "Assessment not found",
-        },
-        { status: 404 },
-      )
+      return NextResponse.json({ message: "Assessment not found" }, { status: 404 })
     }
 
     const expiresAt = new Date(Date.now() + expirationDays * 24 * 60 * 60 * 1000)
-    const assignedApplications = []
+    const assignedJobSeekerIds: string[] = []
 
-    // If we have applicationIds, update existing applications
-    if (applicationIds && Array.isArray(applicationIds)) {
-      const updateResult = await Application.updateMany(
-        {
-          _id: { $in: applicationIds },
-          assessmentId: { $exists: false } // Only update if not already assigned
-        },
+    // ── Path A: update existing Application records (from job applicants list) ──
+    if (Array.isArray(applicationIds) && applicationIds.length > 0) {
+      // Fetch the applications so we know their jobSeekerIds
+      const apps = await Application.find({ _id: { $in: applicationIds } }).select("jobSeekerId")
+      const jsIds = apps.map((a) => a.jobSeekerId?.toString()).filter(Boolean) as string[]
+
+      await Application.updateMany(
+        { _id: { $in: applicationIds } },
         {
           $set: {
-            assessmentId: assessmentId,
+            assessmentId,
             assignedBy: session.userId,
             status: "Assessment Assigned",
             assignedAt: new Date(),
-            expiresAt: expiresAt,
+            expiresAt,
           },
         }
       )
 
-      console.log("[DEBUG] Updated existing applications:", updateResult.modifiedCount)
+      assignedJobSeekerIds.push(...jsIds)
+    }
 
-      // Get the updated applications for notifications
-      const updatedApplications = await Application.find({
-        _id: { $in: applicationIds },
-        assessmentId: assessmentId
-      })
-      assignedApplications.push(...updatedApplications)
-    } else {
-      // Direct assignment to job seekers (create new application records)
-      for (const jobSeekerId of targetJobSeekerIds) {
-        // Check if already assigned
-        const existingApplication = await Application.findOne({
-          jobSeekerId: jobSeekerId,
-          assessmentId: assessmentId,
-        })
+    // ── Path B: direct user assignment (from "All Job Seekers" search) ──────────
+    if (Array.isArray(userIds) && userIds.length > 0) {
+      for (const userId of userIds) {
+        const existing = await Application.findOne({ jobSeekerId: userId, assessmentId })
 
-        if (!existingApplication) {
-          const newApplication = new Application({
-            jobSeekerId: jobSeekerId,
-            assessmentId: assessmentId,
+        if (existing) {
+          // Re-assign if not currently in progress
+          if (existing.status !== "in_progress") {
+            await Application.findByIdAndUpdate(existing._id, {
+              $set: {
+                assessmentId,
+                assignedBy: session.userId,
+                status: "Assessment Assigned",
+                assignedAt: new Date(),
+                expiresAt,
+              },
+            })
+          }
+        } else {
+          // Create a new assessment-only application record
+          await Application.create({
+            jobSeekerId: userId,
+            assessmentId,
             assignedBy: session.userId,
             status: "Assessment Assigned",
             assignedAt: new Date(),
-            expiresAt: expiresAt,
+            expiresAt,
           })
-
-          const savedApplication = await newApplication.save()
-          assignedApplications.push(savedApplication)
         }
+        assignedJobSeekerIds.push(String(userId))
       }
     }
 
-    console.log("[DEBUG] Created new assignments:", assignedApplications.length)
+    if (assignedJobSeekerIds.length === 0) {
+      return NextResponse.json(
+        { message: "No candidates provided. Pass applicationIds or userIds." },
+        { status: 400 }
+      )
+    }
 
-    const notificationPromises = assignedApplications.map(async (application) => {
+    // ── Send notifications ────────────────────────────────────────────────────
+    const notifPromises = assignedJobSeekerIds.map(async (jsId) => {
       try {
-        const notification = new Notification({
-          userId: application.jobSeekerId,
+        await Notification.create({
+          userId: jsId,
           type: "assessment_assigned",
           message: `New assessment "${assessment.title}" has been assigned to you. Complete it before ${expiresAt.toLocaleDateString()}.`,
-          relatedEntity: {
-            id: assessmentId,
-            type: "assessment",
-          },
+          relatedEntity: { id: assessmentId, type: "assessment" },
           read: false,
-          createdAt: new Date(),
         })
-
-        return await notification.save()
-      } catch (error) {
-        console.error("[DEBUG] Error creating notification:", error)
-        return null
+      } catch (e) {
+        console.error("[assign] notification error:", e)
       }
     })
+    await Promise.all(notifPromises)
 
-    await Promise.all(notificationPromises)
-    console.log("[DEBUG] Created notifications for", assignedApplications.length, "job seekers")
+    // ── Update assessment candidate count ─────────────────────────────────────
+    await Assessment.findByIdAndUpdate(assessmentId, {
+      $set: { candidatesAssigned: await Application.countDocuments({ assessmentId }) },
+    })
 
     return NextResponse.json({
       success: true,
-      message: `Assessment assigned to ${assignedApplications.length} candidates`,
-      assignedCount: assignedApplications.length,
-      expiresAt: expiresAt,
+      message: `Assessment assigned to ${assignedJobSeekerIds.length} candidate(s)`,
+      assignedCount: assignedJobSeekerIds.length,
+      expiresAt,
     })
-  } catch (error) {
-    console.error("[DEBUG] Error assigning assessment:", error)
+  } catch (error: any) {
+    console.error("[assign] error:", error)
     return NextResponse.json(
-      {
-        message: "Failed to assign assessment",
-        error: error.message,
-      },
-      { status: 500 },
+      { message: "Failed to assign assessment", error: error.message },
+      { status: 500 }
     )
   }
 }

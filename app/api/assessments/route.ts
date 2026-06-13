@@ -68,14 +68,6 @@ export async function GET(request: NextRequest) {
       assessments.map(async (assessment) => {
         const assignedCount = await Application.countDocuments({
           assessmentId: assessment._id,
-          status: { $in: [
-            "Assessment Assigned",
-            "Assessment Completed",
-            // legacy statuses
-            "assigned",
-            "in_progress",
-            "completed",
-          ] },
         })
 
         const completedCount = await Application.countDocuments({

@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "All fields are required" }, { status: 400 })
     }
 
-    if (!["job_seeker", "recruiter", "admin", "college_admin"].includes(role)) {
+    if (!["job_seeker", "recruiter", "admin", "college", "college_admin"].includes(role)) {
       return NextResponse.json({ message: "Invalid role" }, { status: 400 })
     }
 

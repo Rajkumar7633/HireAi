@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams } from "next/navigation"
 import Link from "next/link"
 import { format } from "date-fns"
 import {
@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
+import { SkillBar } from "@/components/ui/charts"
 import {
   Dialog,
   DialogContent,
@@ -36,7 +36,23 @@ import {
   Zap,
   BarChart3,
   Flag,
+  ShieldCheck,
+  Eye,
+  ThumbsUp,
+  ThumbsDown,
+  Code2,
 } from "lucide-react"
+import { extractCodeAnswers, extractSubmissionLanguage } from "@/lib/submission-utils"
+
+interface SubmissionAnswer {
+  questionId: string
+  questionType?: string
+  answer: string
+  language?: string
+  passedTestCases?: number
+  totalTestCases?: number
+  score?: number
+}
 
 interface Submission {
   _id: string
@@ -44,6 +60,8 @@ interface Submission {
   applicationId: { _id: string; status: string; testScore?: number } | null
   percentage: number
   totalScore: number
+  language?: string
+  answers?: SubmissionAnswer[]
   plagiarismScore: number
   plagiarismFlags: string[]
   roundStage?: string
@@ -61,19 +79,31 @@ interface Analytics {
   avgPlagiarismScore: number
 }
 
+function integrityScore(plagiarism: number, flags: string[]): number {
+  const flagPenalty = Math.min(flags.length * 5, 30)
+  return Math.max(0, 100 - plagiarism - flagPenalty)
+}
+
+function integrityLabel(score: number) {
+  if (score >= 80) return { label: "High", cls: "bg-green-100 text-green-800 border-green-200" }
+  if (score >= 60) return { label: "Medium", cls: "bg-yellow-100 text-yellow-800 border-yellow-200" }
+  return { label: "Low", cls: "bg-red-100 text-red-800 border-red-200" }
+}
+
 export default function TestResultsPage() {
   const params = useParams()
-  const router = useRouter()
-  const testId = params.id as string
+  const testId = (params?.id as string) ?? ""
   const { toast } = useToast()
 
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [analytics, setAnalytics] = useState<Analytics | null>(null)
   const [loading, setLoading] = useState(true)
   const [autoSelecting, setAutoSelecting] = useState(false)
-  const [sortBy, setSortBy] = useState<"score" | "date" | "plagiarism">("score")
+  const [sortBy, setSortBy] = useState<"score" | "date" | "plagiarism" | "integrity">("score")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
   const [autoSelectOpen, setAutoSelectOpen] = useState(false)
+  const [detailSub, setDetailSub] = useState<Submission | null>(null)
+  const [statusUpdating, setStatusUpdating] = useState<string | null>(null)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -102,7 +132,6 @@ export default function TestResultsPage() {
         setAnalytics(data)
       }
     } catch (err) {
-      console.error("Error fetching test results:", err)
       toast({ title: "Network Error", description: "Could not load results.", variant: "destructive" })
     } finally {
       setLoading(false)
@@ -123,19 +152,44 @@ export default function TestResultsPage() {
       })
       if (res.ok) {
         const data = await res.json()
-        toast({
-          title: "Auto-select Complete",
-          description: `${data.selectedCount} candidate(s) shortlisted and notified via email.`,
-        })
+        toast({ title: "Auto-select Complete", description: `${data.selectedCount} candidate(s) shortlisted.` })
         fetchData()
       } else {
         const err = await res.json().catch(() => ({}))
         toast({ title: "Auto-select Failed", description: (err as any).msg || "Unknown error.", variant: "destructive" })
       }
-    } catch (err) {
+    } catch {
       toast({ title: "Network Error", description: "Could not run auto-select.", variant: "destructive" })
     } finally {
       setAutoSelecting(false)
+      setAutoSelectOpen(false)
+    }
+  }
+
+  const handleCandidateStatus = async (sub: Submission, newStatus: "Shortlisted" | "Rejected") => {
+    const appId = sub.applicationId?._id
+    if (!appId) {
+      toast({ title: "Cannot update", description: "No linked application found.", variant: "destructive" })
+      return
+    }
+    setStatusUpdating(sub._id)
+    try {
+      const res = await fetch(`/api/applications/${appId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      })
+      if (res.ok) {
+        toast({ title: `Candidate ${newStatus}`, description: `${sub.candidateId?.name} has been ${newStatus.toLowerCase()}.` })
+        fetchData()
+      } else {
+        const err = await res.json().catch(() => ({}))
+        toast({ title: "Update Failed", description: (err as any).message || "Failed to update status.", variant: "destructive" })
+      }
+    } catch {
+      toast({ title: "Network Error", description: "Could not update candidate status.", variant: "destructive" })
+    } finally {
+      setStatusUpdating(null)
     }
   }
 
@@ -157,16 +211,18 @@ export default function TestResultsPage() {
     let valA: number, valB: number
     if (sortBy === "score") { valA = a.percentage; valB = b.percentage }
     else if (sortBy === "plagiarism") { valA = a.plagiarismScore; valB = b.plagiarismScore }
-    else { valA = new Date(a.submittedAt).getTime(); valB = new Date(b.submittedAt).getTime() }
+    else if (sortBy === "integrity") {
+      valA = integrityScore(a.plagiarismScore, a.plagiarismFlags)
+      valB = integrityScore(b.plagiarismScore, b.plagiarismFlags)
+    } else { valA = new Date(a.submittedAt).getTime(); valB = new Date(b.submittedAt).getTime() }
     return sortDir === "desc" ? valB - valA : valA - valB
   })
 
-  const toggleSort = (col: "score" | "date" | "plagiarism") => {
+  const toggleSort = (col: "score" | "date" | "plagiarism" | "integrity") => {
     if (sortBy === col) setSortDir((d) => (d === "desc" ? "asc" : "desc"))
     else { setSortBy(col); setSortDir("desc") }
   }
 
-  // ─── Loading ───────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4">
@@ -176,9 +232,8 @@ export default function TestResultsPage() {
     )
   }
 
-  // ─── Main UI ───────────────────────────────────────────────────────────────
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="p-4 md:p-6 space-y-6 w-full">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
@@ -196,7 +251,6 @@ export default function TestResultsPage() {
           <Button variant="outline" size="sm" onClick={fetchData}>
             <RefreshCw className="mr-2 h-4 w-4" /> Refresh
           </Button>
-          {/* Auto-select dialog */}
           <Dialog open={autoSelectOpen} onOpenChange={setAutoSelectOpen}>
             <DialogTrigger asChild>
               <Button
@@ -204,11 +258,7 @@ export default function TestResultsPage() {
                 className="bg-purple-600 hover:bg-purple-700"
                 disabled={autoSelecting || submissions.length === 0}
               >
-                {autoSelecting ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Zap className="mr-2 h-4 w-4" />
-                )}
+                {autoSelecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Zap className="mr-2 h-4 w-4" />}
                 Auto-Select Top Candidates
               </Button>
             </DialogTrigger>
@@ -216,21 +266,14 @@ export default function TestResultsPage() {
               <DialogHeader>
                 <DialogTitle>Auto-Select Top Candidates</DialogTitle>
                 <DialogDescription>
-                  This will shortlist the top 3 candidates with score ≥ 70% and plagiarism ≤ 40%, 
-                  update their application status to <strong>Shortlisted</strong>, and 
-                  send them a congratulations email automatically.
+                  Shortlists the top 3 candidates with score ≥ 70% and plagiarism ≤ 40%, updates their
+                  status to <strong>Shortlisted</strong>, and sends a congratulations email automatically.
                 </DialogDescription>
               </DialogHeader>
               <div className="flex justify-end gap-2 mt-4">
                 <Button variant="outline" onClick={() => setAutoSelectOpen(false)}>Cancel</Button>
-                <Button
-                  onClick={() => {
-                    handleAutoSelect(70, 3);
-                    setAutoSelectOpen(false);
-                  }}
-                  className="bg-purple-600 hover:bg-purple-700"
-                >
-                  Confirm & Shortlist
+                <Button onClick={() => handleAutoSelect(70, 3)} className="bg-purple-600 hover:bg-purple-700">
+                  Confirm &amp; Shortlist
                 </Button>
               </div>
             </DialogContent>
@@ -289,7 +332,7 @@ export default function TestResultsPage() {
             <Badge variant="secondary" className="ml-2">{submissions.length}</Badge>
           </CardTitle>
           <CardDescription>
-            Click column headers to sort. Plagiarism ≥ 80% is flagged 🚩.
+            Click column headers to sort. Use Shortlist / Reject to update candidate status. Plagiarism ≥ 80% is flagged 🚩.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -312,12 +355,18 @@ export default function TestResultsPage() {
                     >
                       Score {sortBy === "score" ? (sortDir === "desc" ? "↓" : "↑") : ""}
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Progress</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Progress</th>
                     <th
                       className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-purple-700 select-none"
                       onClick={() => toggleSort("plagiarism")}
                     >
                       Plagiarism {sortBy === "plagiarism" ? (sortDir === "desc" ? "↓" : "↑") : ""}
+                    </th>
+                    <th
+                      className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-purple-700 select-none"
+                      onClick={() => toggleSort("integrity")}
+                    >
+                      Integrity {sortBy === "integrity" ? (sortDir === "desc" ? "↓" : "↑") : ""}
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Flags</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
@@ -327,64 +376,121 @@ export default function TestResultsPage() {
                     >
                       Submitted {sortBy === "date" ? (sortDir === "desc" ? "↓" : "↑") : ""}
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Attempt</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {sortedSubmissions.map((sub, idx) => (
-                    <tr
-                      key={sub._id}
-                      className={sub.plagiarismScore >= 80 ? "bg-red-50" : sub.percentage >= 70 ? "bg-green-50/30" : ""}
-                    >
-                      <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{idx + 1}</td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <div>
-                          <p className="font-semibold text-gray-900">{sub.candidateId?.name || "Unknown"}</p>
-                          <p className="text-xs text-gray-500">{sub.candidateId?.email || "—"}</p>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">{scoreBadge(sub.percentage)}</td>
-                      <td className="px-4 py-3 whitespace-nowrap w-32">
-                        <Progress
-                          value={sub.percentage}
-                          className="h-2"
-                        />
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {plagiarismBadge(sub.plagiarismScore, sub.plagiarismFlags)}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {sub.plagiarismFlags && sub.plagiarismFlags.length > 0 ? (
-                          <div className="flex flex-col gap-0.5">
-                            {sub.plagiarismFlags.map((flag, i) => (
-                              <Badge key={i} variant="outline" className="text-[10px] text-orange-700 border-orange-200 bg-orange-50 w-fit">
-                                {flag.replace(/_/g, " ")}
-                              </Badge>
-                            ))}
+                  {sortedSubmissions.map((sub, idx) => {
+                    const integrity = integrityScore(sub.plagiarismScore, sub.plagiarismFlags)
+                    const { label: intLabel, cls: intCls } = integrityLabel(integrity)
+                    const appStatus = sub.applicationId?.status || ""
+                    const alreadyDecided = ["Shortlisted", "Rejected", "Hired"].includes(appStatus)
+
+                    return (
+                      <tr
+                        key={sub._id}
+                        className={sub.plagiarismScore >= 80 ? "bg-red-50" : sub.percentage >= 70 ? "bg-green-50/30" : ""}
+                      >
+                        <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{idx + 1}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div>
+                            <p className="font-semibold text-gray-900">{sub.candidateId?.name || "Unknown"}</p>
+                            <p className="text-xs text-gray-500">{sub.candidateId?.email || "—"}</p>
                           </div>
-                        ) : (
-                          <span className="text-xs text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {sub.percentage >= 70 ? (
-                          <Badge className="bg-green-100 text-green-800 flex w-fit items-center gap-1">
-                            <CheckCircle2 className="h-3 w-3" /> Passed
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">{scoreBadge(sub.percentage)}</td>
+                        <td className="px-4 py-3 whitespace-nowrap w-32">
+                          <SkillBar label="" value={sub.percentage} color={sub.percentage >= 70 ? "#16a34a" : sub.percentage >= 50 ? "#f59e0b" : "#ef4444"} />
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {plagiarismBadge(sub.plagiarismScore, sub.plagiarismFlags)}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <Badge className={`${intCls} flex items-center gap-1 w-fit`}>
+                            <ShieldCheck className="h-3 w-3" />{intLabel} {integrity}%
                           </Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-red-700 border-red-200 bg-red-50 flex w-fit items-center gap-1">
-                            <XCircle className="h-3 w-3" /> Failed
-                          </Badge>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
-                        {format(new Date(sub.submittedAt), "MMM dd, yyyy HH:mm")}
-                      </td>
-                      <td className="px-4 py-3 text-center whitespace-nowrap">
-                        <Badge variant="secondary">#{sub.attemptNumber}</Badge>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {sub.plagiarismFlags && sub.plagiarismFlags.length > 0 ? (
+                            <div className="flex flex-col gap-0.5">
+                              {sub.plagiarismFlags.map((flag, i) => (
+                                <Badge key={i} variant="outline" className="text-[10px] text-orange-700 border-orange-200 bg-orange-50 w-fit">
+                                  {flag.replace(/_/g, " ")}
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {sub.percentage >= 70 ? (
+                            <Badge className="bg-green-100 text-green-800 flex w-fit items-center gap-1">
+                              <CheckCircle2 className="h-3 w-3" /> Passed
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-red-700 border-red-200 bg-red-50 flex w-fit items-center gap-1">
+                              <XCircle className="h-3 w-3" /> Failed
+                            </Badge>
+                          )}
+                          {appStatus && (
+                            <span className="mt-1 block text-[10px] text-muted-foreground">{appStatus}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
+                          {format(new Date(sub.submittedAt), "MMM dd, yyyy HH:mm")}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="flex items-center gap-1">
+                            {/* Detail dialog */}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs"
+                              onClick={() => setDetailSub(sub)}
+                            >
+                              <Eye className="h-3 w-3 mr-1" /> Detail
+                            </Button>
+                            {/* Shortlist / Reject — only if not already decided */}
+                            {!alreadyDecided && (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs border-green-400 text-green-700 hover:bg-green-50"
+                                  disabled={statusUpdating === sub._id}
+                                  onClick={() => handleCandidateStatus(sub, "Shortlisted")}
+                                >
+                                  {statusUpdating === sub._id
+                                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                                    : <ThumbsUp className="h-3 w-3" />}
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs border-red-400 text-red-600 hover:bg-red-50"
+                                  disabled={statusUpdating === sub._id}
+                                  onClick={() => handleCandidateStatus(sub, "Rejected")}
+                                >
+                                  {statusUpdating === sub._id
+                                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                                    : <ThumbsDown className="h-3 w-3" />}
+                                </Button>
+                              </>
+                            )}
+                            {alreadyDecided && (
+                              <Badge
+                                variant={appStatus === "Shortlisted" ? "secondary" : "destructive"}
+                                className="text-[10px]"
+                              >
+                                {appStatus}
+                              </Badge>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -392,7 +498,7 @@ export default function TestResultsPage() {
         </CardContent>
       </Card>
 
-      {/* Plagiarism warning */}
+      {/* Plagiarism warning banner */}
       {submissions.some((s) => s.plagiarismScore >= 80) && (
         <Card className="border-red-200 bg-red-50">
           <CardContent className="p-4 flex items-center gap-3">
@@ -400,12 +506,113 @@ export default function TestResultsPage() {
             <div>
               <p className="font-semibold text-red-800">Plagiarism Detected</p>
               <p className="text-sm text-red-700">
-                One or more submissions have high similarity scores (≥80%). Please review these carefully before shortlisting.
+                One or more submissions have similarity scores ≥ 80%. Review before shortlisting.
               </p>
             </div>
           </CardContent>
         </Card>
       )}
+
+      {/* Submission detail dialog */}
+      <Dialog open={!!detailSub} onOpenChange={(open) => { if (!open) setDetailSub(null) }}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Submission Detail</DialogTitle>
+            <DialogDescription>
+              {detailSub?.candidateId?.name} — {detailSub?.candidateId?.email}
+            </DialogDescription>
+          </DialogHeader>
+          {detailSub && (
+            <div className="space-y-4 mt-2">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground mb-1">Score</p>
+                  <p className="text-2xl font-bold text-purple-700">{detailSub.percentage}%</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground mb-1">Raw Points</p>
+                  <p className="text-2xl font-bold text-blue-700">{detailSub.totalScore}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground mb-1">Plagiarism</p>
+                  <p className="text-2xl font-bold text-orange-600">{detailSub.plagiarismScore}%</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground mb-1">Integrity</p>
+                  <p className="text-2xl font-bold text-green-700">
+                    {integrityScore(detailSub.plagiarismScore, detailSub.plagiarismFlags)}%
+                  </p>
+                </div>
+              </div>
+              <div className="text-sm space-y-1">
+                <div><span className="font-medium">Attempt:</span> #{detailSub.attemptNumber}</div>
+                <div><span className="font-medium">Round:</span> {detailSub.roundStage || "—"}</div>
+                <div><span className="font-medium">Language:</span>{" "}
+                  <span className="capitalize">{extractSubmissionLanguage(detailSub) || "—"}</span>
+                </div>
+                <div><span className="font-medium">Submitted:</span> {format(new Date(detailSub.submittedAt), "MMM dd, yyyy HH:mm")}</div>
+                <div><span className="font-medium">Application status:</span> {detailSub.applicationId?.status || "—"}</div>
+              </div>
+
+              {extractCodeAnswers(detailSub).length > 0 && (
+                <div className="space-y-3">
+                  <p className="text-sm font-semibold flex items-center gap-1.5">
+                    <Code2 className="h-4 w-4 text-purple-600" /> Submitted Code
+                  </p>
+                  {extractCodeAnswers(detailSub).map((sol, idx) => (
+                    <div key={sol.questionId || idx} className="rounded-lg border overflow-hidden">
+                      <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50 border-b text-xs">
+                        <span className="font-medium text-gray-700">
+                          Problem {idx + 1}
+                          {sol.totalTestCases > 0 && ` · ${sol.passedTestCases}/${sol.totalTestCases} cases`}
+                        </span>
+                        <Badge variant="outline" className="text-[10px] capitalize">{sol.language}</Badge>
+                      </div>
+                      <pre className="p-3 text-xs overflow-x-auto bg-[#0d1117] text-[#e6edf3] font-mono max-h-64">
+                        {sol.code}
+                      </pre>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {detailSub.plagiarismFlags.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium mb-1">Plagiarism flags</p>
+                  <div className="flex flex-wrap gap-1">
+                    {detailSub.plagiarismFlags.map((f, i) => (
+                      <Badge key={i} variant="outline" className="text-orange-700 border-orange-200 bg-orange-50 text-[11px]">
+                        {f.replace(/_/g, " ")}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <SkillBar label={`Score: ${detailSub.percentage}%`} value={detailSub.percentage} color={detailSub.percentage >= 70 ? "#16a34a" : detailSub.percentage >= 50 ? "#f59e0b" : "#ef4444"} />
+              {!["Shortlisted", "Rejected", "Hired"].includes(detailSub.applicationId?.status || "") && (
+                <div className="flex gap-2 pt-1">
+                  <Button
+                    className="flex-1 bg-green-600 hover:bg-green-700"
+                    size="sm"
+                    disabled={statusUpdating === detailSub._id}
+                    onClick={() => { handleCandidateStatus(detailSub, "Shortlisted"); setDetailSub(null) }}
+                  >
+                    <ThumbsUp className="h-4 w-4 mr-2" /> Shortlist
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    className="flex-1"
+                    size="sm"
+                    disabled={statusUpdating === detailSub._id}
+                    onClick={() => { handleCandidateStatus(detailSub, "Rejected"); setDetailSub(null) }}
+                  >
+                    <ThumbsDown className="h-4 w-4 mr-2" /> Reject
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

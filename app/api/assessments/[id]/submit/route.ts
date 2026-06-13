@@ -17,12 +17,6 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const timedOut = !!body?.timedOut
     const forcedEnd = !!body?.forcedEnd
 
-    console.log("[v0] Submitting assessment:", assessmentId)
-    console.log("[v0] Answers provided:", typeof answers === 'object' ? Object.keys(answers).length : 0)
-    console.log("[v0] Proctoring alerts:", proctoringData?.alerts?.length || 0)
-    console.log("[v0] Tab switches:", proctoringData?.tabSwitchCount || 0)
-    console.log("[v0] Timed out:", timedOut)
-
     const session = await getSession(request)
     if (!session || session.role !== "job_seeker") {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
@@ -30,25 +24,28 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     await connectDB()
 
-    let application = await Application.findOne({
+    // Check for already-completed application first (idempotency)
+    const alreadyCompleted = await Application.findOne({
       jobSeekerId: session.userId,
-      assessmentId: assessmentId,
-      status: { $in: ["assigned", "in_progress", "Assessment Assigned"] },
+      assessmentId,
+      status: { $in: ["Assessment Completed", "completed", "test_completed"] },
     })
-
-    if (!application) {
-      // Fallback without status filter in case status naming differs
-      application = await Application.findOne({
-        jobSeekerId: session.userId,
-        assessmentId: assessmentId,
+    if (alreadyCompleted) {
+      return NextResponse.json({
+        success: true,
+        score: alreadyCompleted.score ?? 0,
+        message: "Assessment already submitted",
+        alreadyCompleted: true,
       })
     }
 
+    const application = await Application.findOne({
+      jobSeekerId: session.userId,
+      assessmentId,
+      status: { $in: ["assigned", "in_progress", "Assessment Assigned", "test_assigned", "Test Assigned"] },
+    })
+
     if (!application) {
-      console.warn("[v0] No application found for submission", {
-        assessmentId,
-        jobSeekerId: session.userId,
-      })
       return NextResponse.json({ message: "Assessment not found or already completed" }, { status: 404 })
     }
 
@@ -131,19 +128,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       },
     })
 
-    // Notify the recruiter who assigned this assessment (if available)
+    // Notify the recruiter who assigned this assessment
     if ((application as any).assignedBy) {
       await Notification.create({
         userId: (application as any).assignedBy,
-        type: "assessment_assigned", // reuse type; could add a new "assessment_completed"
-        message: `Candidate completed assessment ${assessment.title} with score ${finalScore}%`,
+        type: "assessment_completed",
+        message: `Candidate completed assessment "${assessment.title}" with score ${finalScore}%.`,
         relatedEntity: { id: assessment._id, type: "assessment" },
       })
     }
-
-    console.log("[v0] Assessment scored:", finalScore)
-    console.log("[v0] Proctoring score:", proctoringScore)
-    console.log("[v0] Application status updated to completed")
 
     // Recompute candidate Talent Pool score
     try {
@@ -155,7 +148,6 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           ; (user as any).scoreVersion = 1
           ; (user as any).lastScoreComputedAt = new Date()
         await user.save()
-        console.log("[v0] Talent Pool score recomputed:", breakdown.total)
       }
     } catch (e) {
       console.warn("[v0] Failed to recompute candidate score (non-fatal)", e)

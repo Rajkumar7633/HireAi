@@ -7,7 +7,7 @@ const User = require("../models/User");
 // POST /api/college/students - Add student to college
 router.post("/students", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -51,7 +51,7 @@ router.post("/students", auth, async (req, res) => {
 // GET /api/college/students - Get all students for college
 router.get("/students", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -77,7 +77,7 @@ router.get("/students", auth, async (req, res) => {
 // GET /api/college/students/:id - Get student details
 router.get("/students/:id", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -100,7 +100,7 @@ router.get("/students/:id", auth, async (req, res) => {
 // PUT /api/college/students/:id - Update student details
 router.put("/students/:id", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -139,7 +139,7 @@ router.put("/students/:id", auth, async (req, res) => {
 // DELETE /api/college/students/:id - Remove student from college
 router.delete("/students/:id", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -162,7 +162,7 @@ router.delete("/students/:id", auth, async (req, res) => {
 // POST /api/college/students/bulk - Bulk import students
 router.post("/students/bulk", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -220,7 +220,7 @@ router.post("/students/bulk", auth, async (req, res) => {
 // GET /api/college/students/analytics - Get student analytics
 router.get("/students/analytics", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 

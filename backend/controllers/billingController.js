@@ -3,11 +3,16 @@ const crypto = require('crypto')
 const User = require('../models/User')
 const { planFromPrice, entitlementsFromPlan } = require('../utils/entitlements')
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: '2024-06-20',
-  maxNetworkRetries: 2,
-  timeout: 20000,
-})
+const stripe = process.env.STRIPE_SECRET_KEY
+  ? new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2024-06-20',
+      maxNetworkRetries: 2,
+      timeout: 20000,
+    })
+  : null
+
+const stripeUnavailable = (res) =>
+  res.status(503).json({ message: 'Billing not configured — set STRIPE_SECRET_KEY' })
 
 function getIdempotencyKey(req) {
   return (
@@ -18,6 +23,7 @@ function getIdempotencyKey(req) {
 
 // One-click sync: pull latest subscription from Stripe and update user entitlements
 exports.sync = async (req, res) => {
+  if (!stripe) return stripeUnavailable(res)
   try {
     const userId = (req.user?.id || req.user?.userId || req.user?._id)?.toString()
     if (!userId) return res.status(401).json({ message: 'Unauthorized' })
@@ -99,6 +105,7 @@ exports.sync = async (req, res) => {
 }
 // Return recent invoices for authenticated user
 exports.getHistory = async (req, res) => {
+  if (!stripe) return res.json({ invoices: [] })
   try {
     const userId = (req.user?.id || req.user?.userId || req.user?._id)?.toString()
     if (!userId) return res.status(401).json({ message: 'Unauthorized' })
@@ -147,6 +154,7 @@ exports.getHistory = async (req, res) => {
 }
 
 exports.createCheckout = async (req, res) => {
+  if (!stripe) return stripeUnavailable(res)
   try {
     const { priceId, mode = 'subscription', successUrl, cancelUrl } = req.body || {}
     if (!priceId) return res.status(400).json({ message: 'priceId required' })
@@ -204,6 +212,7 @@ exports.createCheckout = async (req, res) => {
 }
 
 exports.createPortal = async (req, res) => {
+  if (!stripe) return stripeUnavailable(res)
   try {
     const userId = (req.user?.id || req.user?.userId || req.user?._id)?.toString()
     if (!userId) return res.status(401).json({ message: 'Unauthorized' })
@@ -246,6 +255,7 @@ exports.createPortal = async (req, res) => {
 
 // Webhook: must be mounted with express.raw({ type: 'application/json' })
 exports.webhook = async (req, res) => {
+  if (!stripe) return res.json({ received: true })
   const sig = req.headers['stripe-signature']
   let event
   try {

@@ -73,6 +73,17 @@ const TestSchema = new Schema<ITest>(
       ref: "User",
       required: true,
     },
+    collegeId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      index: true,
+      sparse: true,
+    },
+    ownerType: {
+      type: String,
+      enum: ["recruiter", "college"],
+      default: "recruiter",
+    },
     isActive: {
       type: Boolean,
       default: true,

@@ -5,11 +5,11 @@ import { getSession } from "@/lib/auth"
 export async function GET(req: NextRequest) {
   try {
     const session = await getSession(req)
-    if (!session || session.role !== "college") {
+    if (!session || session.role !== "college" && session.role !== "college_admin") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const backendUrl = process.env.BACKEND_URL || "http://localhost:5000"
+    const backendUrl = process.env.BACKEND_URL || "http://localhost:5001"
     const response = await fetch(`${backendUrl}/api/college/activities`)
     const data = await response.json()
 

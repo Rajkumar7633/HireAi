@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Progress } from "@/components/ui/progress"
+import { SkillBar, DonutChart, ScoreRing } from "@/components/ui/charts"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, BarChart3, TrendingUp, Users, Award, AlertTriangle } from "lucide-react"
 
@@ -41,14 +41,12 @@ export default function PlacementAnalyticsPage() {
   const fetchData = async () => {
     setLoading(true)
     try {
-      const collegeId = "your-college-id" // Replace with actual college ID
-
       const [overviewRes, heatmapRes, leaderboardRes, funnelRes, companyRes] = await Promise.all([
-        fetch(`/api/placement-analytics?collegeId=${collegeId}&overview=true`),
-        fetch(`/api/placement-analytics?collegeId=${collegeId}&skills-heatmap=true`),
-        fetch(`/api/placement-analytics?collegeId=${collegeId}&leaderboard=true`),
-        fetch(`/api/placement-analytics?collegeId=${collegeId}&placement-funnel=true`),
-        fetch(`/api/placement-analytics?collegeId=${collegeId}&company-performance=true`)
+        fetch(`/api/placement-analytics?overview=true`),
+        fetch(`/api/placement-analytics?skills-heatmap=true`),
+        fetch(`/api/placement-analytics?leaderboard=true`),
+        fetch(`/api/placement-analytics?placement-funnel=true`),
+        fetch(`/api/placement-analytics?company-performance=true`)
       ])
 
       const [overviewData, heatmapData, leaderboardData, funnelData, companyData] = await Promise.all([
@@ -93,43 +91,33 @@ export default function PlacementAnalyticsPage() {
       {overview && (
         <div className="grid md:grid-cols-5 gap-4 mb-6">
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">Total Students</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{overview.totalStudents}</div>
+            <CardContent className="p-4 flex flex-col items-center gap-2">
+              <ScoreRing value={overview.totalStudents} max={Math.max(overview.totalStudents, 1)} size={64} stroke={6} color="#7c3aed" />
+              <p className="text-xs text-muted-foreground text-center">Total Students</p>
             </CardContent>
           </Card>
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">Ready for Placement</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-green-600">{overview.readyForPlacement}</div>
+            <CardContent className="p-4 flex flex-col items-center gap-2">
+              <ScoreRing value={overview.readyForPlacement} max={Math.max(overview.totalStudents, 1)} size={64} stroke={6} color="#16a34a" />
+              <p className="text-xs text-muted-foreground text-center">Ready</p>
             </CardContent>
           </Card>
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">Need Improvement</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-yellow-600">{overview.needImprovement}</div>
+            <CardContent className="p-4 flex flex-col items-center gap-2">
+              <ScoreRing value={overview.needImprovement} max={Math.max(overview.totalStudents, 1)} size={64} stroke={6} color="#d97706" />
+              <p className="text-xs text-muted-foreground text-center">Need Improvement</p>
             </CardContent>
           </Card>
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">Not Ready</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-red-600">{overview.notReady}</div>
+            <CardContent className="p-4 flex flex-col items-center gap-2">
+              <ScoreRing value={overview.notReady} max={Math.max(overview.totalStudents, 1)} size={64} stroke={6} color="#dc2626" />
+              <p className="text-xs text-muted-foreground text-center">Not Ready</p>
             </CardContent>
           </Card>
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">Avg Readiness</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{overview.averageReadinessScore}%</div>
+            <CardContent className="p-4 flex flex-col items-center gap-2">
+              <ScoreRing value={overview.averageReadinessScore} size={64} stroke={6} label="Avg" sublabel="Ready" />
+              <p className="text-xs text-muted-foreground text-center">Avg Readiness</p>
             </CardContent>
           </Card>
         </div>
@@ -212,11 +200,11 @@ export default function PlacementAnalyticsPage() {
                 <div className="space-y-3">
                   {Object.entries(overview.skillGaps).map(([skill, data]) => (
                     <div key={skill} className="space-y-1">
-                      <div className="flex justify-between text-sm">
-                        <span className="font-medium capitalize">{skill}</span>
-                        <span className="text-gray-600">Required: {data.required} | Missing: {data.missing}</span>
-                      </div>
-                      <Progress value={(data.required / (data.required + data.missing)) * 100} className="h-2" />
+                      <SkillBar
+                        label={skill}
+                        value={(data.required / (data.required + data.missing)) * 100}
+                        color={(data.required / (data.required + data.missing)) >= 0.7 ? "#10b981" : (data.required / (data.required + data.missing)) >= 0.5 ? "#f59e0b" : "#ef4444"}
+                      />
                     </div>
                   ))}
                 </div>
@@ -327,56 +315,24 @@ export default function PlacementAnalyticsPage() {
                   <CardTitle>Placement Funnel</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span>Total Students</span>
-                        <span className="font-semibold">{funnel.totalStudents}</span>
+                  <div className="space-y-3">
+                    {[
+                      { label: "Total Students", value: funnel.totalStudents, pct: 100,          color: "#7c3aed" },
+                      { label: "Eligible",       value: funnel.eligible,      pct: (funnel.eligible      / funnel.totalStudents) * 100, color: "#2563eb" },
+                      { label: "Applied",        value: funnel.applied,       pct: (funnel.applied       / funnel.totalStudents) * 100, color: "#0891b2" },
+                      { label: "Shortlisted",    value: funnel.shortlisted,   pct: (funnel.shortlisted   / funnel.totalStudents) * 100, color: "#d97706" },
+                      { label: "Interviewed",    value: funnel.interviewed,   pct: (funnel.interviewed   / funnel.totalStudents) * 100, color: "#f59e0b" },
+                      { label: "Offered",        value: funnel.offered,       pct: (funnel.offered       / funnel.totalStudents) * 100, color: "#10b981" },
+                      { label: "Placed",         value: funnel.placed,        pct: (funnel.placed        / funnel.totalStudents) * 100, color: "#16a34a" },
+                    ].map(step => (
+                      <div key={step.label}>
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="font-medium">{step.label}</span>
+                          <span className="text-muted-foreground font-semibold">{step.value}</span>
+                        </div>
+                        <SkillBar label="" value={Math.min(step.pct, 100)} color={step.color} />
                       </div>
-                      <Progress value={100} className="h-3" />
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span>Eligible</span>
-                        <span className="font-semibold">{funnel.eligible}</span>
-                      </div>
-                      <Progress value={(funnel.eligible / funnel.totalStudents) * 100} className="h-3" />
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span>Applied</span>
-                        <span className="font-semibold">{funnel.applied}</span>
-                      </div>
-                      <Progress value={(funnel.applied / funnel.totalStudents) * 100} className="h-3" />
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span>Shortlisted</span>
-                        <span className="font-semibold">{funnel.shortlisted}</span>
-                      </div>
-                      <Progress value={(funnel.shortlisted / funnel.totalStudents) * 100} className="h-3" />
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span>Interviewed</span>
-                        <span className="font-semibold">{funnel.interviewed}</span>
-                      </div>
-                      <Progress value={(funnel.interviewed / funnel.totalStudents) * 100} className="h-3" />
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span>Offered</span>
-                        <span className="font-semibold">{funnel.offered}</span>
-                      </div>
-                      <Progress value={(funnel.offered / funnel.totalStudents) * 100} className="h-3" />
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span>Placed</span>
-                        <span className="font-semibold text-green-600">{funnel.placed}</span>
-                      </div>
-                      <Progress value={(funnel.placed / funnel.totalStudents) * 100} className="h-3" />
-                    </div>
+                    ))}
                   </div>
                 </CardContent>
               </Card>

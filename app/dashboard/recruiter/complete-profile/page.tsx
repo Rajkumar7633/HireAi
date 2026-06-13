@@ -18,7 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Camera, Building2, MapPin, CheckCircle } from "lucide-react";
 import { useSession } from "@/hooks/use-session";
 import Image from "next/image";
-import { Progress } from "@/components/ui/progress";
+import { SkillBar } from "@/components/ui/charts";
 
 interface RecruiterProfile {
   id: string;
@@ -332,7 +332,7 @@ export default function CompleteProfilePage() {
 
   return (
     <div className="min-h-screen bg-background p-6">
-      <div className="max-w-4xl mx-auto space-y-8">
+      <div className="w-full space-y-8">
         <Card className="border-blue-200 bg-blue-50">
           <CardHeader className="text-center">
             <CardTitle className="text-3xl font-bold text-blue-900">
@@ -343,8 +343,7 @@ export default function CompleteProfilePage() {
               talent
             </CardDescription>
             <div className="mt-4">
-              <Progress value={progress} className="w-full" />
-              <p className="text-sm text-blue-600 mt-2">{progress}% Complete</p>
+              <SkillBar label={`${progress}% Complete`} value={progress} color={progress >= 70 ? "#16a34a" : progress >= 40 ? "#2563eb" : "#f59e0b"} />
             </div>
           </CardHeader>
         </Card>

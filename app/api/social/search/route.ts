@@ -18,10 +18,13 @@ export async function GET(req: NextRequest) {
         { lastName: regex },
         { email: regex },
         { currentTitle: regex },
+        { location: regex },
+        { skills: regex },
+        { university: regex },
       ],
     })
-      .select("firstName lastName email currentTitle location profileImage userId")
-      .limit(20)
+      .select("firstName lastName email currentTitle location profileImage bannerImage userId skills experienceLevel university")
+      .limit(30)
       .lean();
 
     return NextResponse.json({ items });

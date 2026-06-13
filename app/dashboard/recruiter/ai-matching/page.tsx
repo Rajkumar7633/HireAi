@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, MessageSquare, Eye, Brain } from "lucide-react";
+import { ScoreRing, SkillBar as ProgressBar } from "@/components/ui/charts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { RadarChart } from "@/components/ui/radar-chart";
 
@@ -383,6 +384,19 @@ export default function RecruiterAIMatchingPage() {
             <div className="text-sm text-muted-foreground">No results yet. Enter a job description and click Run Matching.</div>
           ) : (
             <div className="space-y-3">
+              {/* Visual stats banner */}
+              <div className="grid grid-cols-3 gap-3 mb-2">
+                {[
+                  { label: "Candidates Found", value: results.length, color: "text-violet-700" },
+                  { label: "Avg AI Score", value: `${Math.round(results.reduce((s, r) => s + r.aiMatchScore, 0) / results.length)}%`, color: "text-emerald-700" },
+                  { label: "Top Match", value: `${Math.max(...results.map(r => r.aiMatchScore))}%`, color: "text-amber-700" },
+                ].map(s => (
+                  <div key={s.label} className="rounded-xl border bg-muted/30 p-3 text-center">
+                    <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
+                  </div>
+                ))}
+              </div>
               {results.map((r) => (
                 <div key={r.userId} className="flex flex-col border rounded-md p-4 bg-card shadow-sm space-y-4">
                   <div className="flex items-center justify-between">
@@ -393,8 +407,13 @@ export default function RecruiterAIMatchingPage() {
                       </div>
                       <div className="text-xs text-muted-foreground mt-1">Candidate ID: {r.userId}{r.email ? ` • ${r.email}` : ""}{r.resumeFile ? ` • ${r.resumeFile}` : ""}</div>
                       {r.skillsMatched && r.skillsMatched.length > 0 && (
-                        <div className="mt-2 text-xs text-muted-foreground">
-                          <span className="font-medium">Matched skills:</span> {r.skillsMatched.slice(0, 6).join(", ")}
+                        <div className="mt-2 space-y-1">
+                          <ProgressBar label={`${r.skillsMatched.length} skills matched`} value={parsedSkills.length > 0 ? Math.round((r.skillsMatched.length / parsedSkills.length) * 100) : 100} color="#7c3aed" />
+                          <div className="flex flex-wrap gap-1">
+                            {r.skillsMatched.slice(0, 6).map((s, i) => (
+                              <span key={i} className="rounded-md bg-violet-100 text-violet-700 text-xs px-2 py-0.5">{s}</span>
+                            ))}
+                          </div>
                         </div>
                       )}
                       {(r as any).snippet && (
@@ -404,9 +423,9 @@ export default function RecruiterAIMatchingPage() {
                       )}
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge className={r.aiMatchScore >= 70 ? "bg-green-600" : r.aiMatchScore >= 50 ? "bg-yellow-600" : "bg-gray-600"}>{r.aiMatchScore}%</Badge>
+                      <ScoreRing value={r.aiMatchScore} size={52} stroke={5} sublabel="AI Match" />
                       {typeof r.atsScore === "number" && (
-                        <Badge variant="outline">ATS: {r.atsScore}%</Badge>
+                        <ScoreRing value={r.atsScore} size={52} stroke={5} sublabel="ATS" />
                       )}
                       <Button variant="outline" size="sm" onClick={() => setExpandedRadar(prev => ({ ...prev, [r.userId]: !prev[r.userId] }))}>
                         <Brain className="h-4 w-4 mr-1" /> Match Analysis

@@ -11,11 +11,16 @@ const NotificationSchema = new mongoose.Schema({
     required: true,
     enum: [
       "assessment_assigned",
+      "assessment_completed",
       "assessment_reminder",
+      "assessment_violation",
       "interview_scheduled",
       "application_status_update",
       "message_received",
-      "assessment_violation",
+      "test_assigned",
+      "test_completed",
+      "campus_drive_published",
+      "campus_drive_application",
     ],
   },
   message: {
@@ -33,7 +38,7 @@ const NotificationSchema = new mongoose.Schema({
     },
     type: {
       type: String,
-      enum: ["assessment", "interview", "application", "message"],
+      enum: ["assessment", "interview", "application", "message", "test", "job_application", "JobApplication", "campus_drive"],
       required: false,
     },
   },

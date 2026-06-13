@@ -54,7 +54,7 @@ const ResumeSchema = new Schema<IResume>(
     },
     rawText: {
       type: String,
-      required: true,
+      default: "",
     },
     parsedSkills: [
       {

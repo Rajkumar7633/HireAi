@@ -13,7 +13,6 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     await connectDB()
 
-    // Verify job belongs to recruiter
     const jobDescription = await JobDescription.findById(params.id)
     if (!jobDescription || jobDescription.recruiterId.toString() !== session.userId) {
       return NextResponse.json({ message: "Job not found or unauthorized" }, { status: 404 })
@@ -22,7 +21,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const apps = await Application.find({ jobDescriptionId: params.id })
       .populate({ path: "jobSeekerId", select: "name email" })
       .populate({ path: "resumeId", select: "filename originalName" })
-      .populate({ path: "testId", select: "title" })
+      .populate({ path: "testId", select: "title _id" })
       .sort({ applicationDate: -1 })
       .lean()
 
@@ -30,16 +29,47 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       _id: String(a._id),
       status: a.status,
       applicationDate: a.applicationDate,
-      testScore: a.testScore,
-      testCompletedAt: a.testCompletedAt,
-      jobSeekerId: a.jobSeekerId ? { _id: String(a.jobSeekerId._id), name: a.jobSeekerId.name, email: a.jobSeekerId.email } : undefined,
-      resumeId: a.resumeId ? { _id: String(a.resumeId._id), filename: a.resumeId.filename, originalName: a.resumeId.originalName } : undefined,
+      // Test system fields
       testId: a.testId ? { _id: String(a.testId._id), title: a.testId.title } : undefined,
+      testScore: a.testScore ?? null,
+      testCompletedAt: a.testCompletedAt ?? null,
+      // Assessment system fields
+      assessmentId: a.assessmentId ? String(a.assessmentId) : undefined,
+      score: a.score ?? null,
+      completedAt: a.completedAt ?? null,
+      startedAt: a.startedAt ?? null,
+      // Candidate info
+      jobSeekerId: a.jobSeekerId
+        ? { _id: String(a.jobSeekerId._id), name: a.jobSeekerId.name, email: a.jobSeekerId.email }
+        : undefined,
+      resumeId: a.resumeId
+        ? { _id: String(a.resumeId._id), filename: a.resumeId.filename, originalName: a.resumeId.originalName }
+        : undefined,
       screeningAnswers: a.screeningAnswers || [],
       applicationProfile: a.applicationProfile || undefined,
+      // AI screening
+      aiMatchScore: a.aiMatchScore ?? null,
+      atsScore: a.atsScore ?? null,
+      skillsMatched: a.skillsMatched || [],
+      missingSkills: a.missingSkills || [],
+      aiExplanation: a.aiExplanation || "",
+      shortlisted: a.shortlisted ?? false,
+      // Multi-round workflow
+      currentStage: a.currentStage || "application",
+      rounds: (a.rounds || []).map((r: any) => ({
+        roundName: r.roundName,
+        stageKey: r.stageKey,
+        status: r.status,
+        latestScore: r.latestScore ?? null,
+        testId: r.testId ? String(r.testId) : undefined,
+      })),
     }))
 
-    return NextResponse.json({ applications, jobTitle: jobDescription.title, applicationMode: jobDescription.applicationMode })
+    return NextResponse.json({
+      applications,
+      jobTitle: jobDescription.title,
+      applicationMode: jobDescription.applicationMode,
+    })
   } catch (error) {
     console.error("Error fetching candidates:", error)
     return NextResponse.json({ message: "Failed to fetch candidates" }, { status: 500 })

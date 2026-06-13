@@ -226,7 +226,7 @@ export default function TestEditPage() {
   if (!test) {
     return (
       <div className="premium-edit-container">
-        <div className="p-6 max-w-4xl mx-auto">
+        <div className="p-6 w-full">
           <Card className="premium-edit-card">
             <CardContent className="py-12 text-center">
               <div className="space-y-4">
@@ -256,7 +256,7 @@ export default function TestEditPage() {
 
   return (
     <div className="premium-edit-container">
-      <div className="p-6 max-w-6xl mx-auto space-y-6">
+      <div className="p-6 w-full space-y-6">
         <div className="premium-edit-card">
           <div className="premium-edit-header p-6">
             <div className="flex items-center justify-between">

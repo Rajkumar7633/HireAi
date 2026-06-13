@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: "languageId or language and code are required" }, { status: 400 });
     }
 
-    const JUDGE0_URL = process.env.JUDGE0_URL || "https://judge0-ce.p.rapidapi.com";
+    const JUDGE0_URL = process.env.JUDGE0_URL || "https://ce.judge0.com";
     const JUDGE0_KEY = process.env.JUDGE0_KEY; // optional
 
     const body = {

@@ -1,531 +1,380 @@
-"use client";
+"use client"
 
-import React, { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  Plus, 
-  Trash2, 
-  Code, 
-  FileText, 
-  Video, 
-  Hash, 
-  Clock, 
-  Star, 
-  Lightbulb,
-  TestTube,
-  Settings
-} from "lucide-react";
-
-interface TestCase {
-  id: string;
-  input: string;
-  expectedOutput: string;
-  description?: string;
-  isHidden?: boolean;
-}
-
-interface Example {
-  input: string;
-  output: string;
-  explanation?: string;
-}
+import { useState } from "react"
+import { Card, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
+import {
+  Plus, Trash2, Code, FileText, Video, Hash,
+  CheckCircle2, GripVertical, ChevronDown, ChevronUp, Lightbulb,
+} from "lucide-react"
 
 interface QuestionData {
-  id: string;
-  questionText: string;
-  type: "multiple_choice" | "short_answer" | "code_snippet" | "video_response";
-  options: string[];
-  correctAnswer: string;
-  points: number;
-  difficulty: "Easy" | "Medium" | "Hard";
-  timeLimit?: number;
-  tags: string[];
-  hint?: string;
-  examples: Example[];
-  testCases: TestCase[];
+  id: string
+  questionText: string
+  type: "multiple_choice" | "short_answer" | "code_snippet" | "video_response"
+  options: string[]
+  correctAnswer: string
+  points: number
+  difficulty: "Easy" | "Medium" | "Hard"
+  timeLimit?: number
+  tags: string[]
+  hint?: string
+  examples: Array<{ input: string; output: string; explanation?: string }>
+  testCases: Array<{ id: string; input: string; expectedOutput: string; description?: string; isHidden?: boolean }>
 }
 
-interface QuestionBuilderProps {
-  question: QuestionData;
-  onChange: (question: QuestionData) => void;
-  onRemove?: () => void;
-  questionNumber: number;
+interface Props {
+  question: QuestionData
+  onChange: (q: QuestionData) => void
+  onRemove?: () => void
+  questionNumber: number
 }
 
-export function QuestionBuilder({ question, onChange, onRemove, questionNumber }: QuestionBuilderProps) {
-  const [newOption, setNewOption] = useState("");
-  const [newTag, setNewTag] = useState("");
-  const [activeTab, setActiveTab] = useState("basic");
+const TYPE_CONFIG = {
+  multiple_choice: { label: "Multiple Choice", icon: Hash, color: "bg-blue-100 text-blue-700" },
+  short_answer: { label: "Short Answer", icon: FileText, color: "bg-purple-100 text-purple-700" },
+  code_snippet: { label: "Coding", icon: Code, color: "bg-orange-100 text-orange-700" },
+  video_response: { label: "Video", icon: Video, color: "bg-pink-100 text-pink-700" },
+}
 
-  const updateQuestion = (field: keyof QuestionData, value: any) => {
-    onChange({ ...question, [field]: value });
-  };
+const DIFF_CONFIG = {
+  Easy: "bg-green-100 text-green-700 border-green-200",
+  Medium: "bg-yellow-100 text-yellow-700 border-yellow-200",
+  Hard: "bg-red-100 text-red-700 border-red-200",
+}
+
+export function QuestionBuilder({ question, onChange, onRemove, questionNumber }: Props) {
+  const [expanded, setExpanded] = useState(true)
+  const [showHint, setShowHint] = useState(false)
+
+  const update = (field: keyof QuestionData, value: any) =>
+    onChange({ ...question, [field]: value })
+
+  const updateOption = (idx: number, val: string) => {
+    const opts = [...question.options]
+    const wasCorrect = question.correctAnswer === opts[idx]
+    opts[idx] = val
+    onChange({
+      ...question,
+      options: opts,
+      // keep correctAnswer in sync if user edits the correct option text
+      correctAnswer: wasCorrect ? val : question.correctAnswer,
+    })
+  }
 
   const addOption = () => {
-    if (newOption.trim()) {
-      updateQuestion("options", [...question.options, newOption.trim()]);
-      setNewOption("");
-    }
-  };
+    if (question.options.length < 6) update("options", [...question.options, ""])
+  }
 
-  const removeOption = (index: number) => {
-    updateQuestion("options", question.options.filter((_, i) => i !== index));
-  };
+  const removeOption = (idx: number) => {
+    const opts = question.options.filter((_, i) => i !== idx)
+    onChange({
+      ...question,
+      options: opts,
+      correctAnswer: question.correctAnswer === question.options[idx] ? "" : question.correctAnswer,
+    })
+  }
 
-  const addTag = () => {
-    if (newTag.trim() && !question.tags.includes(newTag.trim())) {
-      updateQuestion("tags", [...question.tags, newTag.trim()]);
-      setNewTag("");
-    }
-  };
+  const selectCorrect = (opt: string) => {
+    if (opt.trim()) update("correctAnswer", opt)
+  }
 
-  const removeTag = (tagToRemove: string) => {
-    updateQuestion("tags", question.tags.filter(tag => tag !== tagToRemove));
-  };
-
-  const addTestCase = () => {
-    const newTestCase: TestCase = {
-      id: Date.now().toString(),
-      input: "",
-      expectedOutput: "",
-      description: "",
-      isHidden: false
-    };
-    updateQuestion("testCases", [...question.testCases, newTestCase]);
-  };
-
-  const updateTestCase = (index: number, field: keyof TestCase, value: any) => {
-    const updatedTestCases = [...question.testCases];
-    updatedTestCases[index] = { ...updatedTestCases[index], [field]: value };
-    updateQuestion("testCases", updatedTestCases);
-  };
-
-  const removeTestCase = (index: number) => {
-    updateQuestion("testCases", question.testCases.filter((_, i) => i !== index));
-  };
-
-  const addExample = () => {
-    const newExample: Example = { input: "", output: "", explanation: "" };
-    updateQuestion("examples", [...question.examples, newExample]);
-  };
-
-  const updateExample = (index: number, field: keyof Example, value: any) => {
-    const updatedExamples = [...question.examples];
-    updatedExamples[index] = { ...updatedExamples[index], [field]: value };
-    updateQuestion("examples", updatedExamples);
-  };
-
-  const removeExample = (index: number) => {
-    updateQuestion("examples", question.examples.filter((_, i) => i !== index));
-  };
-
-  const getQuestionIcon = (type: string) => {
-    switch (type) {
-      case "multiple_choice":
-        return <Hash className="h-4 w-4" />;
-      case "short_answer":
-        return <FileText className="h-4 w-4" />;
-      case "code_snippet":
-        return <Code className="h-4 w-4" />;
-      case "video_response":
-        return <Video className="h-4 w-4" />;
-      default:
-        return <FileText className="h-4 w-4" />;
-    }
-  };
-
-  const getDifficultyColor = (difficulty: string) => {
-    switch (difficulty) {
-      case "Easy":
-        return "bg-green-100 text-green-800 border-green-200";
-      case "Medium":
-        return "bg-yellow-100 text-yellow-800 border-yellow-200";
-      case "Hard":
-        return "bg-red-100 text-red-800 border-red-200";
-      default:
-        return "bg-gray-100 text-gray-800 border-gray-200";
-    }
-  };
+  const TypeIcon = TYPE_CONFIG[question.type]?.icon || FileText
+  const isValid =
+    question.questionText.trim() &&
+    question.correctAnswer.trim() &&
+    (question.type !== "multiple_choice" || question.options.every((o) => o.trim()))
 
   return (
-    <Card className="w-full">
-      <CardHeader>
-        <div className="flex justify-between items-start">
-          <div className="flex items-center gap-3">
-            <Badge variant="outline" className="text-sm">
-              Question {questionNumber}
-            </Badge>
-            <div className="flex items-center gap-1 text-sm text-muted-foreground">
-              {getQuestionIcon(question.type)}
-              <span>{question.type.replace("_", " ")}</span>
-            </div>
-            <Badge className={getDifficultyColor(question.difficulty)}>
-              {question.difficulty}
-            </Badge>
-            <Badge variant="outline" className="flex items-center gap-1">
-              <Star className="h-3 w-3" />
-              {question.points} pts
-            </Badge>
-            {question.timeLimit && (
-              <Badge variant="outline" className="flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                {question.timeLimit} min
-              </Badge>
-            )}
-          </div>
-          {onRemove && (
-            <Button variant="ghost" size="sm" onClick={onRemove}>
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          )}
+    <Card
+      className={`border-l-4 transition-all ${
+        isValid ? "border-l-green-500" : "border-l-yellow-400"
+      }`}
+    >
+      {/* ── Header ── */}
+      <div
+        className="flex items-center gap-3 px-4 py-3 cursor-pointer select-none"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <GripVertical className="h-4 w-4 text-muted-foreground shrink-0" />
+        <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-xs font-bold shrink-0">
+          {questionNumber}
         </div>
-      </CardHeader>
+        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_CONFIG[question.type]?.color}`}>
+          <TypeIcon className="h-3 w-3" />
+          {TYPE_CONFIG[question.type]?.label}
+        </div>
+        <Badge variant="outline" className={`text-xs ${DIFF_CONFIG[question.difficulty]}`}>
+          {question.difficulty}
+        </Badge>
+        <Badge variant="outline" className="text-xs">
+          {question.points} pts
+        </Badge>
+        <p className="flex-1 text-sm text-muted-foreground truncate">
+          {question.questionText || <span className="italic">No question text yet…</span>}
+        </p>
+        {isValid && <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />}
+        {onRemove && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0 hover:text-red-600"
+            onClick={(e) => { e.stopPropagation(); onRemove() }}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )}
+        {expanded ? (
+          <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" />
+        ) : (
+          <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+        )}
+      </div>
 
-      <CardContent>
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="basic">Basic</TabsTrigger>
-            <TabsTrigger value="options">Options</TabsTrigger>
-            <TabsTrigger value="examples">Examples</TabsTrigger>
-            <TabsTrigger value="tests">Test Cases</TabsTrigger>
-          </TabsList>
+      {/* ── Body ── */}
+      {expanded && (
+        <CardContent className="pt-0 pb-4 px-4 space-y-4 border-t">
+          {/* Question text */}
+          <div className="space-y-1 pt-3">
+            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Question *
+            </Label>
+            <Textarea
+              value={question.questionText}
+              onChange={(e) => update("questionText", e.target.value)}
+              placeholder="Type your question here…"
+              rows={3}
+              className="resize-none"
+            />
+          </div>
 
-          <TabsContent value="basic" className="space-y-4">
-            <div className="space-y-2">
-              <Label>Question Text</Label>
-              <Textarea
-                value={question.questionText}
-                onChange={(e) => updateQuestion("questionText", e.target.value)}
-                placeholder="Enter your question here... You can use **bold**, *italic*, and `code` formatting"
-                rows={4}
+          {/* Type / Difficulty / Points row */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Type</Label>
+              <Select value={question.type} onValueChange={(v) => update("type", v)}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="multiple_choice">Multiple Choice</SelectItem>
+                  <SelectItem value="short_answer">Short Answer</SelectItem>
+                  <SelectItem value="code_snippet">Coding Challenge</SelectItem>
+                  <SelectItem value="video_response">Video Response</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Difficulty</Label>
+              <Select
+                value={question.difficulty}
+                onValueChange={(v) => update("difficulty", v as "Easy" | "Medium" | "Hard")}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Easy">Easy</SelectItem>
+                  <SelectItem value="Medium">Medium</SelectItem>
+                  <SelectItem value="Hard">Hard</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Points</Label>
+              <Input
+                type="number"
+                value={question.points}
+                onChange={(e) => update("points", parseInt(e.target.value) || 1)}
+                min={1}
+                className="h-8 text-xs"
               />
-              <div className="text-xs text-muted-foreground">
-                Supports markdown: **bold**, *italic*, `inline code`, ```code blocks```
-              </div>
             </div>
+          </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label>Type</Label>
-                <Select value={question.type} onValueChange={(value) => updateQuestion("type", value)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="multiple_choice">Multiple Choice</SelectItem>
-                    <SelectItem value="short_answer">Short Answer</SelectItem>
-                    <SelectItem value="code_snippet">Code Challenge</SelectItem>
-                    <SelectItem value="video_response">Video Response</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Difficulty</Label>
-                <Select value={question.difficulty} onValueChange={(value) => updateQuestion("difficulty", value as "Easy" | "Medium" | "Hard")}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Easy">Easy</SelectItem>
-                    <SelectItem value="Medium">Medium</SelectItem>
-                    <SelectItem value="Hard">Hard</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Points</Label>
-                <Input
-                  type="number"
-                  value={question.points}
-                  onChange={(e) => updateQuestion("points", parseInt(e.target.value) || 0)}
-                  min="1"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Time Limit (minutes)</Label>
-                <Input
-                  type="number"
-                  value={question.timeLimit || ""}
-                  onChange={(e) => updateQuestion("timeLimit", parseInt(e.target.value) || undefined)}
-                  placeholder="Optional"
-                  min="1"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Correct Answer (for grading)</Label>
-                <Input
-                  value={question.correctAnswer}
-                  onChange={(e) => updateQuestion("correctAnswer", e.target.value)}
-                  placeholder="For reference only"
-                />
-              </div>
-            </div>
-
+          {/* ── MCQ Options ── */}
+          {question.type === "multiple_choice" && (
             <div className="space-y-2">
-              <Label>Hint (optional)</Label>
-              <div className="flex items-start gap-2">
-                <Lightbulb className="h-4 w-4 mt-2 text-muted-foreground" />
-                <Textarea
-                  value={question.hint || ""}
-                  onChange={(e) => updateQuestion("hint", e.target.value)}
-                  placeholder="Provide a hint for the candidate..."
-                  rows={2}
-                />
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Answer Options
+                  <span className="ml-2 font-normal normal-case text-muted-foreground">
+                    — click an option row to mark it correct
+                  </span>
+                </Label>
+                {question.correctAnswer && (
+                  <span className="text-xs text-green-600 font-medium flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" />
+                    Correct answer set
+                  </span>
+                )}
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label>Tags</Label>
-              <div className="flex flex-wrap gap-2 mb-2">
-                {question.tags.map((tag) => (
-                  <Badge key={tag} variant="secondary" className="flex items-center gap-1">
-                    {tag}
-                    <button
-                      onClick={() => removeTag(tag)}
-                      className="ml-1 text-xs hover:text-destructive"
+              <div className="space-y-2">
+                {question.options.map((opt, i) => {
+                  const isCorrect = question.correctAnswer === opt && opt.trim() !== ""
+                  return (
+                    <div
+                      key={i}
+                      onClick={() => selectCorrect(opt)}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border-2 cursor-pointer transition-all ${
+                        isCorrect
+                          ? "border-green-500 bg-green-50"
+                          : "border-slate-200 hover:border-slate-300 bg-white"
+                      }`}
                     >
-                      ×
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  value={newTag}
-                  onChange={(e) => setNewTag(e.target.value)}
-                  placeholder="Add a tag..."
-                  onKeyPress={(e) => e.key === "Enter" && addTag()}
-                />
-                <Button type="button" variant="outline" onClick={addTag}>
-                  Add
-                </Button>
-              </div>
-            </div>
-          </TabsContent>
+                      {/* Radio indicator */}
+                      <div
+                        className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
+                          isCorrect ? "border-green-500 bg-green-500" : "border-slate-300"
+                        }`}
+                      >
+                        {isCorrect && <div className="w-2 h-2 rounded-full bg-white" />}
+                      </div>
 
-          <TabsContent value="options" className="space-y-4">
-            {question.type === "multiple_choice" && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label>Answer Options</Label>
-                  <div className="text-sm text-muted-foreground">
-                    {question.options.length} options
-                  </div>
-                </div>
-                
-                {question.options.map((option, index) => (
-                  <div key={index} className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full border-2 border-gray-300 flex items-center justify-center text-sm font-medium">
-                      {String.fromCharCode(65 + index)}
-                    </div>
-                    <Input
-                      value={option}
-                      onChange={(e) => {
-                        const newOptions = [...question.options];
-                        newOptions[index] = e.target.value;
-                        updateQuestion("options", newOptions);
-                      }}
-                      placeholder={`Option ${String.fromCharCode(65 + index)}`}
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeOption(index)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-                
-                <div className="flex gap-2">
-                  <Input
-                    value={newOption}
-                    onChange={(e) => setNewOption(e.target.value)}
-                    placeholder="New option..."
-                    onKeyPress={(e) => e.key === "Enter" && addOption()}
-                  />
-                  <Button type="button" variant="outline" onClick={addOption}>
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add Option
-                  </Button>
-                </div>
-              </div>
-            )}
+                      {/* Letter badge */}
+                      <span
+                        className={`w-6 h-6 rounded text-xs font-bold flex items-center justify-center shrink-0 ${
+                          isCorrect ? "bg-green-500 text-white" : "bg-slate-100 text-slate-600"
+                        }`}
+                      >
+                        {String.fromCharCode(65 + i)}
+                      </span>
 
-            {question.type !== "multiple_choice" && (
-              <div className="text-center py-8 text-muted-foreground">
-                Options are only available for multiple choice questions
-              </div>
-            )}
-          </TabsContent>
+                      {/* Option input */}
+                      <Input
+                        value={opt}
+                        onChange={(e) => updateOption(i, e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        placeholder={`Option ${String.fromCharCode(65 + i)}`}
+                        className={`flex-1 border-none shadow-none focus-visible:ring-0 h-7 text-sm p-0 bg-transparent ${
+                          isCorrect ? "font-medium text-green-800" : ""
+                        }`}
+                      />
 
-          <TabsContent value="examples" className="space-y-4">
-            <div className="flex items-center justify-between">
-              <Label>Examples</Label>
-              <Button type="button" variant="outline" size="sm" onClick={addExample}>
-                <Plus className="h-4 w-4 mr-1" />
-                Add Example
-              </Button>
-            </div>
+                      {isCorrect && (
+                        <span className="text-xs text-green-600 font-medium shrink-0">✓ Correct</span>
+                      )}
 
-            {question.examples.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">
-                No examples added. Examples help candidates understand the expected input/output format.
-              </div>
-            ) : (
-              question.examples.map((example, index) => (
-                <Card key={index} className="p-4">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-medium">Example {index + 1}</h4>
                       <Button
                         type="button"
                         variant="ghost"
-                        size="sm"
-                        onClick={() => removeExample(index)}
+                        size="icon"
+                        className="h-6 w-6 shrink-0 opacity-40 hover:opacity-100 hover:text-red-600"
+                        onClick={(e) => { e.stopPropagation(); removeOption(i) }}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Input</Label>
-                        <Textarea
-                          value={example.input}
-                          onChange={(e) => updateExample(index, "input", e.target.value)}
-                          placeholder="Example input..."
-                          rows={3}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Output</Label>
-                        <Textarea
-                          value={example.output}
-                          onChange={(e) => updateExample(index, "output", e.target.value)}
-                          placeholder="Example output..."
-                          rows={3}
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label>Explanation (optional)</Label>
-                      <Textarea
-                        value={example.explanation || ""}
-                        onChange={(e) => updateExample(index, "explanation", e.target.value)}
-                        placeholder="Explain why this input produces this output..."
-                        rows={2}
-                      />
-                    </div>
-                  </div>
-                </Card>
-              ))
-            )}
-          </TabsContent>
-
-          <TabsContent value="tests" className="space-y-4">
-            {question.type === "code_snippet" && (
-              <>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <TestTube className="h-4 w-4" />
-                    <Label>Test Cases</Label>
-                  </div>
-                  <Button type="button" variant="outline" size="sm" onClick={addTestCase}>
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add Test Case
-                  </Button>
-                </div>
-
-                {question.testCases.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">
-                    No test cases added. Test cases are used to automatically validate code submissions.
-                  </div>
-                ) : (
-                  question.testCases.map((testCase, index) => (
-                    <Card key={testCase.id} className="p-4">
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <h4 className="font-medium">Test Case {index + 1}</h4>
-                          <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-2">
-                              <Switch
-                                checked={testCase.isHidden}
-                                onCheckedChange={(checked) => updateTestCase(index, "isHidden", checked)}
-                              />
-                              <Label className="text-sm">Hidden</Label>
-                            </div>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => removeTestCase(index)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <Label>Description (optional)</Label>
-                          <Input
-                            value={testCase.description || ""}
-                            onChange={(e) => updateTestCase(index, "description", e.target.value)}
-                            placeholder="Describe what this test case checks..."
-                          />
-                        </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label>Input</Label>
-                            <Textarea
-                              value={testCase.input}
-                              onChange={(e) => updateTestCase(index, "input", e.target.value)}
-                              placeholder="Test input..."
-                              rows={3}
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Expected Output</Label>
-                            <Textarea
-                              value={testCase.expectedOutput}
-                              onChange={(e) => updateTestCase(index, "expectedOutput", e.target.value)}
-                              placeholder="Expected output..."
-                              rows={3}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </Card>
-                  ))
-                )}
-              </>
-            )}
-
-            {question.type !== "code_snippet" && (
-              <div className="text-center py-8 text-muted-foreground">
-                Test cases are only available for code challenges
+                  )
+                })}
               </div>
+
+              {question.options.length < 6 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addOption}
+                  className="w-full border-dashed text-muted-foreground hover:text-foreground"
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  Add Option ({question.options.length}/6)
+                </Button>
+              )}
+
+              {!question.correctAnswer && question.options.some((o) => o.trim()) && (
+                <p className="text-xs text-amber-600 flex items-center gap-1">
+                  ⚠ Click an option row above to mark the correct answer
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* ── Short Answer ── */}
+          {question.type === "short_answer" && (
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Expected Answer *
+              </Label>
+              <Input
+                value={question.correctAnswer}
+                onChange={(e) => update("correctAnswer", e.target.value)}
+                placeholder="Type the expected correct answer…"
+                className={question.correctAnswer ? "border-green-400 bg-green-50" : ""}
+              />
+              {question.correctAnswer && (
+                <p className="text-xs text-green-600 flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3" /> Answer set
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* ── Coding Challenge ── */}
+          {question.type === "code_snippet" && (
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Expected Output / Model Answer *
+                </Label>
+                <Textarea
+                  value={question.correctAnswer}
+                  onChange={(e) => update("correctAnswer", e.target.value)}
+                  placeholder="Describe the expected output or provide a model solution…"
+                  rows={3}
+                  className={question.correctAnswer ? "border-green-400 bg-green-50" : ""}
+                />
+              </div>
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+                For coding questions, describe the expected behavior or provide a sample solution for grader reference.
+              </div>
+            </div>
+          )}
+
+          {/* ── Video Response ── */}
+          {question.type === "video_response" && (
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Evaluation Criteria *
+              </Label>
+              <Textarea
+                value={question.correctAnswer}
+                onChange={(e) => update("correctAnswer", e.target.value)}
+                placeholder="Describe what a good video response should include…"
+                rows={3}
+                className={question.correctAnswer ? "border-green-400 bg-green-50" : ""}
+              />
+            </div>
+          )}
+
+          {/* ── Hint (collapsible) ── */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowHint((v) => !v)}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <Lightbulb className="h-3.5 w-3.5" />
+              {showHint ? "Hide hint" : "Add hint for candidates (optional)"}
+            </button>
+            {showHint && (
+              <Textarea
+                value={question.hint || ""}
+                onChange={(e) => update("hint", e.target.value)}
+                placeholder="Give candidates a helpful nudge without revealing the answer…"
+                rows={2}
+                className="mt-2 text-sm"
+              />
             )}
-          </TabsContent>
-        </Tabs>
-      </CardContent>
+          </div>
+        </CardContent>
+      )}
     </Card>
-  );
+  )
 }

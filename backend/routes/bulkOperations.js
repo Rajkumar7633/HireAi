@@ -11,7 +11,7 @@ const { Parser } = require("json2csv")
 // @desc    Import students from CSV file
 // @access  Private (College Admin)
 router.post("/import-students", auth, async (req, res) => {
-  if (req.user.role !== "college_admin" && req.user.role !== "admin") {
+  if ((req.user.role !== "college" && req.user.role !== "college_admin" && req.user.role !== "admin")) {
     return res.status(403).json({ msg: "Access denied. Only college admins can import students." })
   }
 
@@ -132,7 +132,7 @@ router.post("/import-students", auth, async (req, res) => {
 // @desc    Bulk eligibility filtering for placement drives
 // @access  Private (College Admin)
 router.post("/eligibility-filter", auth, async (req, res) => {
-  if (req.user.role !== "college_admin" && req.user.role !== "admin") {
+  if ((req.user.role !== "college" && req.user.role !== "college_admin" && req.user.role !== "admin")) {
     return res.status(403).json({ msg: "Access denied" })
   }
 
@@ -225,7 +225,7 @@ router.post("/eligibility-filter", auth, async (req, res) => {
 // @desc    Send bulk invitations for assessments/interviews
 // @access  Private (College Admin)
 router.post("/bulk-invite", auth, async (req, res) => {
-  if (req.user.role !== "college_admin" && req.user.role !== "admin") {
+  if ((req.user.role !== "college" && req.user.role !== "college_admin" && req.user.role !== "admin")) {
     return res.status(403).json({ msg: "Access denied" })
   }
 
@@ -281,7 +281,7 @@ router.post("/bulk-invite", auth, async (req, res) => {
 // @desc    Bulk update student records
 // @access  Private (College Admin)
 router.post("/bulk-update", auth, async (req, res) => {
-  if (req.user.role !== "college_admin" && req.user.role !== "admin") {
+  if ((req.user.role !== "college" && req.user.role !== "college_admin" && req.user.role !== "admin")) {
     return res.status(403).json({ msg: "Access denied" })
   }
 
@@ -365,7 +365,7 @@ router.post("/bulk-update", auth, async (req, res) => {
 // @desc    Export student data to CSV
 // @access  Private (College Admin)
 router.get("/export-students", auth, async (req, res) => {
-  if (req.user.role !== "college_admin" && req.user.role !== "admin") {
+  if ((req.user.role !== "college" && req.user.role !== "college_admin" && req.user.role !== "admin")) {
     return res.status(403).json({ msg: "Access denied" })
   }
 
@@ -416,7 +416,7 @@ router.get("/export-students", auth, async (req, res) => {
 // @desc    Bulk delete student records
 // @access  Private (College Admin)
 router.post("/bulk-delete", auth, async (req, res) => {
-  if (req.user.role !== "college_admin" && req.user.role !== "admin") {
+  if ((req.user.role !== "college" && req.user.role !== "college_admin" && req.user.role !== "admin")) {
     return res.status(403).json({ msg: "Access denied" })
   }
 

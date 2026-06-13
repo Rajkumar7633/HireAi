@@ -83,7 +83,7 @@ router.post("/applications", auth, async (req, res) => {
 // @desc    Export student data to CSV or PDF
 // @access  Private (College Admin)
 router.post("/students", auth, async (req, res) => {
-  if (req.user.role !== "college_admin" && req.user.role !== "admin") {
+  if ((req.user.role !== "college" && req.user.role !== "college_admin" && req.user.role !== "admin")) {
     return res.status(403).json({ msg: "Access denied" })
   }
 

@@ -58,6 +58,16 @@ export function AuthForm({ type }: AuthFormProps) {
       });
 
       if (response.ok) {
+        // Store token in sessionStorage so API calls can send it as Authorization header
+        // (fallback for browsers where the httpOnly cookie isn't forwarded correctly)
+        try {
+          const data = await response.clone().json()
+          const token = data.token || data.accessToken || data.jwt || data.access_token
+          if (token) {
+            sessionStorage.setItem("auth-token", token)
+          }
+        } catch { /* ignore parse errors */ }
+
         toast({
           title: type === "login" ? "Logged In" : "Account Created",
           description:

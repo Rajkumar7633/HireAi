@@ -51,6 +51,13 @@ interface TestCase {
   weight: number;
 }
 
+interface Example {
+  id: string;
+  input: string;
+  output: string;
+  explanation: string;
+}
+
 interface Question {
   id: string;
   questionText: string;
@@ -63,6 +70,10 @@ interface Question {
   starterCode?: string;
   functionSignature?: string;
   testCases?: TestCase[];
+  difficulty?: "Easy" | "Medium" | "Hard";
+  tags?: string[];
+  constraints?: string;
+  examples?: Example[];
 }
 
 interface TestTemplate {
@@ -187,6 +198,9 @@ export default function PremiumTestBuilder({
   const [selectedQuestionType, setSelectedQuestionType] =
     useState<Question["type"]>("multiple_choice");
 
+  // Tag inputs (per question id)
+  const [tagInputs, setTagInputs] = useState<Record<string, string>>({});
+
   // Drag and drop
   const [draggedQuestion, setDraggedQuestion] = useState<number | null>(null);
   const dragCounter = useRef(0);
@@ -206,6 +220,10 @@ export default function PremiumTestBuilder({
         starterCode: type === "code_snippet" ? "" : undefined,
         functionSignature: type === "code_snippet" ? "" : undefined,
         testCases: type === "code_snippet" ? [] : undefined,
+        difficulty: type === "code_snippet" ? "Medium" : undefined,
+        tags: type === "code_snippet" ? [] : undefined,
+        constraints: type === "code_snippet" ? "" : undefined,
+        examples: type === "code_snippet" ? [] : undefined,
       };
       setQuestions((prev) => [...prev, newQuestion]);
     },
@@ -274,7 +292,12 @@ export default function PremiumTestBuilder({
       title,
       description,
       durationMinutes,
-      questions: questions.map(({ id, ...q }) => q),
+      questions: questions.map(({ id, ...q }) => ({
+        ...q,
+        // Strip internal `id` fields from examples and testCases
+        examples: q.examples?.map(({ id: _id, ...ex }) => ex),
+        testCases: q.testCases?.map(({ id: _id, ...tc }) => tc),
+      })),
     };
 
     await onSubmit(testData);
@@ -709,6 +732,156 @@ export default function PremiumTestBuilder({
 
                             {question.type === "code_snippet" && (
                               <div className="space-y-4">
+                                {/* Difficulty + Tags row */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div className="space-y-2">
+                                    <Label>Difficulty</Label>
+                                    <Select
+                                      value={question.difficulty || "Medium"}
+                                      onValueChange={(v) => updateQuestion(question.id, "difficulty", v)}
+                                    >
+                                      <SelectTrigger className="premium-input">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="Easy">Easy</SelectItem>
+                                        <SelectItem value="Medium">Medium</SelectItem>
+                                        <SelectItem value="Hard">Hard</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label>Tags</Label>
+                                    <div className="flex flex-wrap gap-1 mb-1">
+                                      {(question.tags || []).map((tag) => (
+                                        <Badge key={tag} variant="secondary" className="text-xs gap-1">
+                                          {tag}
+                                          <button
+                                            type="button"
+                                            onClick={() => updateQuestion(question.id, "tags", (question.tags || []).filter(t => t !== tag))}
+                                            className="hover:text-destructive"
+                                          >×</button>
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                    <div className="flex gap-2">
+                                      <Input
+                                        value={tagInputs[question.id] || ""}
+                                        onChange={(e) => setTagInputs(prev => ({ ...prev, [question.id]: e.target.value }))}
+                                        placeholder="e.g. Arrays, HashMap"
+                                        className="premium-input h-8 text-sm"
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter" || e.key === ",") {
+                                            e.preventDefault();
+                                            const t = (tagInputs[question.id] || "").trim();
+                                            if (t && !(question.tags || []).includes(t)) {
+                                              updateQuestion(question.id, "tags", [...(question.tags || []), t]);
+                                            }
+                                            setTagInputs(prev => ({ ...prev, [question.id]: "" }));
+                                          }
+                                        }}
+                                      />
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-8"
+                                        onClick={() => {
+                                          const t = (tagInputs[question.id] || "").trim();
+                                          if (t && !(question.tags || []).includes(t)) {
+                                            updateQuestion(question.id, "tags", [...(question.tags || []), t]);
+                                          }
+                                          setTagInputs(prev => ({ ...prev, [question.id]: "" }));
+                                        }}
+                                      >Add</Button>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Constraints */}
+                                <div className="space-y-2">
+                                  <Label>Constraints</Label>
+                                  <Textarea
+                                    value={question.constraints || ""}
+                                    onChange={(e) => updateQuestion(question.id, "constraints", e.target.value)}
+                                    placeholder={"1 ≤ nums.length ≤ 10^4\n-10^9 ≤ nums[i] ≤ 10^9"}
+                                    rows={2}
+                                    className="premium-input font-mono text-sm resize-none"
+                                  />
+                                </div>
+
+                                {/* Examples (visible sample I/O) */}
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <Label>Examples <span className="text-xs text-muted-foreground font-normal">(visible to candidates)</span></Label>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 text-xs"
+                                      onClick={() => {
+                                        const ex: Example = { id: generateId(), input: "", output: "", explanation: "" };
+                                        updateQuestion(question.id, "examples", [...(question.examples || []), ex]);
+                                      }}
+                                    >
+                                      <Plus className="h-3 w-3 mr-1" /> Add Example
+                                    </Button>
+                                  </div>
+                                  {(question.examples || []).map((ex, exIdx) => (
+                                    <div key={ex.id} className="border rounded-lg p-3 space-y-2 bg-muted/20">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-xs font-semibold text-muted-foreground">Example {exIdx + 1}</span>
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-6 w-6"
+                                          onClick={() => updateQuestion(question.id, "examples", (question.examples || []).filter((_, i) => i !== exIdx))}
+                                        >
+                                          <Trash2 className="h-3 w-3" />
+                                        </Button>
+                                      </div>
+                                      <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                          <Label className="text-xs">Input</Label>
+                                          <Textarea
+                                            value={ex.input}
+                                            onChange={(e) => {
+                                              const next = (question.examples || []).map((e2, i) => i === exIdx ? { ...e2, input: e.target.value } : e2);
+                                              updateQuestion(question.id, "examples", next);
+                                            }}
+                                            rows={2}
+                                            className="premium-input text-xs font-mono resize-none mt-1"
+                                          />
+                                        </div>
+                                        <div>
+                                          <Label className="text-xs">Output</Label>
+                                          <Textarea
+                                            value={ex.output}
+                                            onChange={(e) => {
+                                              const next = (question.examples || []).map((e2, i) => i === exIdx ? { ...e2, output: e.target.value } : e2);
+                                              updateQuestion(question.id, "examples", next);
+                                            }}
+                                            rows={2}
+                                            className="premium-input text-xs font-mono resize-none mt-1"
+                                          />
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <Label className="text-xs">Explanation (optional)</Label>
+                                        <Input
+                                          value={ex.explanation}
+                                          onChange={(e) => {
+                                            const next = (question.examples || []).map((e2, i) => i === exIdx ? { ...e2, explanation: e.target.value } : e2);
+                                            updateQuestion(question.id, "examples", next);
+                                          }}
+                                          className="premium-input text-xs mt-1"
+                                        />
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                   <div className="space-y-2">
                                     <Label>Language</Label>
@@ -726,14 +899,16 @@ export default function PremiumTestBuilder({
                                         <SelectValue placeholder="Select language" />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        <SelectItem value="javascript">
-                                          JavaScript
-                                        </SelectItem>
-                                        <SelectItem value="typescript">
-                                          TypeScript
-                                        </SelectItem>
+                                        <SelectItem value="javascript">JavaScript</SelectItem>
+                                        <SelectItem value="typescript">TypeScript</SelectItem>
                                         <SelectItem value="python">Python</SelectItem>
                                         <SelectItem value="java">Java</SelectItem>
+                                        <SelectItem value="cpp">C++</SelectItem>
+                                        <SelectItem value="c">C</SelectItem>
+                                        <SelectItem value="go">Go</SelectItem>
+                                        <SelectItem value="rust">Rust</SelectItem>
+                                        <SelectItem value="kotlin">Kotlin</SelectItem>
+                                        <SelectItem value="swift">Swift</SelectItem>
                                       </SelectContent>
                                     </Select>
                                   </div>
@@ -840,6 +1015,22 @@ export default function PremiumTestBuilder({
                                                   }}
                                                 />
                                                 <span>Hidden</span>
+                                              </label>
+                                              <label className="flex items-center gap-1 text-xs">
+                                                <span className="text-muted-foreground">Weight</span>
+                                                <input
+                                                  type="number"
+                                                  min={1}
+                                                  max={10}
+                                                  value={tc.weight ?? 1}
+                                                  onChange={(e) => {
+                                                    const next = (question.testCases || []).map(
+                                                      (c) => c.id === tc.id ? { ...c, weight: parseInt(e.target.value) || 1 } : c
+                                                    );
+                                                    updateQuestion(question.id, "testCases", next);
+                                                  }}
+                                                  className="w-12 border rounded px-1 py-0.5 text-xs"
+                                                />
                                               </label>
                                               <Button
                                                 type="button"

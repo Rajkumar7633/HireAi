@@ -1,467 +1,473 @@
-# HireAI - AI-Powered Recruitment & Placement Platform
+# HireAI — AI-Powered Recruitment & Campus Placement Platform
 
-HireAI is a comprehensive AI-powered recruitment and placement management system designed for colleges, placement cells, recruiters, and job seekers. The platform leverages advanced NLP, machine learning, and real-time analytics to streamline the hiring process.
+HireAI is a full-stack hiring and placement platform that connects **job seekers**, **recruiters**, **colleges**, and **admins** in one system. It combines AI-assisted screening, coding assessments, campus drives, proctored tests, analytics, and real-time notifications.
 
-## Features
+**Live stack:** Next.js 14 (App Router) + Express backend + MongoDB + Redis + Socket.IO + Judge0 (code execution) + Groq/OpenAI (AI features).
 
-### Core Features
+---
 
-#### 1. AI Job Description Tailoring
-- **Backend**: `/backend/routes/jobDescriptionTailoring.js`
-- **Frontend**: `/app/dashboard/recruiter/job-description-tailor/page.tsx`
-- **API**: `/app/api/job-description/tailor/route.ts`
+## Table of Contents
 
-AI-powered analysis and optimization of job descriptions for better clarity, inclusivity, and effectiveness.
+1. [What HireAI Does](#what-hireai-does)
+2. [Architecture](#architecture)
+3. [User Roles](#user-roles)
+4. [Feature Overview by Role](#feature-overview-by-role)
+5. [Core Platform Features (Existing)](#core-platform-features-existing)
+6. [Recently Added & Enhanced](#recently-added--enhanced)
+7. [Campus Drive Pipeline](#campus-drive-pipeline)
+8. [Technology Stack](#technology-stack)
+9. [Getting Started](#getting-started)
+10. [Environment Variables](#environment-variables)
+11. [Project Structure](#project-structure)
+12. [API Overview](#api-overview)
+13. [Documentation & Guides](#documentation--guides)
 
-**Features:**
-- Analyze job descriptions for clarity, inclusivity, completeness, and effectiveness
-- Get AI-powered suggestions for improvement
-- Generate optimized versions of job descriptions
-- Heuristic-based analysis with dynamic skill extraction
+---
 
-#### 2. Candidate Benchmark vs Job Requirements
-- **Backend**: `/backend/routes/candidateBenchmark.js`
-- **Frontend**: `/app/dashboard/recruiter/benchmark/[id]/page.tsx`
-- **API**: `/app/api/benchmark/candidate/route.ts`
+## What HireAI Does
 
-Compare candidate profiles against job requirements with detailed matching analysis.
+| Stakeholder | Primary use |
+|-------------|-------------|
+| **Job seeker** | Build profile/resume, apply to jobs, take coding tests & assessments, practice interviews, analyze skill gaps, apply to campus drives |
+| **Recruiter** | Post jobs, screen candidates, assign tests, run analytics, manage campus drive proposals, video interviews, offer letters |
+| **College / placement cell** | Onboard students, run campus drives, invite companies, track placements, bulk operations, partnerships |
+| **Admin** | User moderation, security, job stats, email templates, system oversight |
 
-**Features:**
-- Skill matching analysis
-- Experience comparison
-- Education requirements check
-- Keyword matching
-- Soft skills assessment
-- Strengths, gaps, and recommendations
+---
 
-#### 3. Offer Letter Workflow
-- **Backend**: `/backend/routes/offerLetter.js`
-- **Model**: `/backend/models/OfferLetter.js`
-- **Frontend**: `/app/dashboard/recruiter/offer-letters/create/page.tsx`
-- **API**: `/app/api/offer-letter/route.ts`
+## Architecture
 
-Complete offer letter management system with status tracking and PDF generation.
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│  Next.js 14     │────▶│  Express API     │────▶│  MongoDB        │
+│  (port 3000)    │     │  (port 5001)     │     │  (Mongoose)     │
+│  App + API      │     │  Auth, jobs, ML  │     │                 │
+└────────┬────────┘     └────────┬─────────┘     └─────────────────┘
+         │                       │
+         │              ┌────────▼─────────┐
+         │              │  Redis, Socket.IO │
+         └──────────────│  Judge0, Groq AI  │
+                        └──────────────────┘
+```
 
-**Features:**
-- Create and send offer letters
-- Track offer status (Draft, Sent, Accepted, Rejected, Expired)
-- PDF generation capability
-- E-signature placeholders
-- Audit trail for all changes
-- Custom offer templates
+- **Frontend:** `app/` — dashboards, UI, and many Next.js API routes (`app/api/*`)
+- **Backend:** `backend/` — Express server, legacy routes, auth (OTP login), webhooks
+- **Shared models:** `models/` — Mongoose schemas used by Next.js API routes
+- **Real-time:** Socket.IO for notifications and live updates
 
-#### 4. Referral Engine
-- **Backend**: `/backend/routes/referral.js`
-- **Model**: `/backend/models/Referral.js`
-- **Frontend**: `/app/dashboard/referrals/page.tsx`
-- **API**: `/app/referral/route.ts`
+---
 
-Employee referral program with bonus tracking and leaderboard.
+## User Roles
 
-**Features:**
-- Create unique referral codes
-- Track referral status (Pending, Signed Up, Applied, Hired, Bonus Paid)
-- Bonus management and approval workflow
-- Referral leaderboard
-- Analytics on referral performance
+| Role | Dashboard path | Description |
+|------|----------------|-------------|
+| `job_seeker` | `/dashboard/job-seeker` | Candidates and students |
+| `recruiter` | `/dashboard/recruiter` | Companies and hiring teams |
+| `college` / `college_admin` | `/dashboard/college` | Placement cells and college admins |
+| `admin` | `/dashboard/admin` | Platform administrators |
 
-#### 5. Multi-Year Student Tracking
-- **Backend**: `/backend/routes/studentTracking.js`
-- **Model**: `/backend/models/StudentTracking.js`
-- **Frontend**: `/app/dashboard/college/student-tracking/page.tsx`
-- **API**: `/app/api/student-tracking/route.ts`
+Authentication uses **JWT** (HttpOnly cookies) with **email OTP** login via the backend.
 
-Comprehensive student tracking system for placement cells to monitor progress from 1st year through placement.
+---
 
-**Features:**
-- Year-wise progress tracking
-- Academic information management (CGPA, attendance, skills)
-- Placement readiness assessment
-- Skill development tracking
-- Alerts and recommendations
-- At-risk student identification
-- Analytics by year, branch, and batch
+## Feature Overview by Role
 
-#### 6. Placement Readiness Analytics
-- **Backend**: `/backend/routes/placementAnalytics.js`
-- **Frontend**: `/app/dashboard/college/placement-analytics/page.tsx`
-- **API**: `/app/api/placement-analytics/route.ts`
+### Job Seeker (`/dashboard/job-seeker`)
 
-Advanced analytics dashboard for placement cells to make data-driven decisions.
+| Feature | Route | Status |
+|---------|-------|--------|
+| Dashboard home | `/dashboard/job-seeker` | ✅ Existing |
+| Profile & profile setup | `profile`, `profile-setup` | ✅ Existing |
+| Resume builder | `resume-builder` | ✅ Existing |
+| Resume chatbot (AI) | `resume-chatbot`, `resume-chatbot-simple` | ✅ Existing |
+| Applications | `applications` | ✅ Existing |
+| Job matches (AI) | `matches` | ✅ Existing |
+| **Skill gap analyzer** | `skill-gap` | ✅ **Enhanced** — role presets, AI analysis, history, export |
+| **Interview coach** | `interview-coach` | ✅ **Enhanced** — STAR, filler detection, session stats |
+| Mock interview | `mock-interview` | ✅ Existing |
+| Coding tests (Monaco) | `tests`, `tests/[id]` | ✅ **Enhanced** — run/submit, Java fix, Judge0 |
+| Assessments | `assessments` | ✅ Existing |
+| Campus drives (apply) | `campus-drives` | ✅ Existing |
+| Video interviews | `video-interviews` | ✅ Existing |
+| Social feed & connections | `social/*` | ✅ Existing |
+| LinkedIn/GitHub import | `social-import` | ✅ Existing |
+| My college | `my-college` | ✅ Existing |
+| Status portal | `status-portal` | ✅ Existing |
+| Skills assessments | `skills` | ✅ Existing |
 
-**Features:**
-- Overall placement readiness overview
-- Skills heatmap showing strong/weak skills
-- Referral leaderboard
-- Placement funnel analytics
-- Company-wise performance tracking
-- Conversion rate analysis
+### Recruiter (`/dashboard/recruiter`)
 
-#### 7. Bulk Student Operations
-- **Backend**: `/backend/routes/bulkOperations.js`
-- **Frontend**: `/app/dashboard/college/bulk-operations/page.tsx`
-- **API**: `/app/api/bulk-operations/route.ts`
+| Feature | Route | Status |
+|---------|-------|--------|
+| Dashboard | `/dashboard/recruiter` | ✅ Existing |
+| Jobs & job descriptions | `jobs`, `job-descriptions` | ✅ Existing |
+| AI job description tailor | `job-description-tailor` | ✅ Existing |
+| Candidates & talent pool | `candidates`, `talent-pool` | ✅ Existing |
+| AI matching & screening | `ai-matching`, `ai-screening` | ✅ Existing |
+| **Coding tests** | `tests` | ✅ **Enhanced** — create, assign by email, preview |
+| **Test analytics** | `tests/[id]/analytics` | ✅ **Enhanced** — KPIs, deduped candidates, leaderboard |
+| **Test assign** | `tests/[id]/assign` | ✅ **Enhanced** — email invite flow |
+| Assessments | `assessments` | ✅ Existing |
+| **Campus Drive Hub** | `campus-drives` | ✅ **New** — browse colleges, send/receive proposals |
+| Video interviews | `video-interviews` | ✅ Existing |
+| AI interview | `ai-interview` | ✅ Existing |
+| Offer letters | `offer-letters` | ✅ Existing |
+| Interview scorecards | `interview-scorecards` | ✅ Existing |
+| Candidate benchmark | `benchmark/[id]` | ✅ Existing |
+| Analytics (basic + advanced) | `analytics`, `analytics/advanced` | ✅ Existing |
+| Background verification | `background-verification` | ✅ Existing |
+| Email templates | `email-templates` | ✅ Existing |
+| Collaboration | `collaboration` | ✅ Existing |
 
-Bulk operations for managing large numbers of students efficiently.
+### College (`/dashboard/college`)
 
-**Features:**
-- CSV import for student data
-- Bulk eligibility filtering
-- Bulk invitations for assessments/interviews
-- Bulk student record updates
-- Export student data to CSV
-- Bulk delete operations
+| Feature | Route | Status |
+|---------|-------|--------|
+| Dashboard | `/dashboard/college` | ✅ Existing |
+| Students & onboarding | `students`, `onboard-student` | ✅ Existing |
+| **Campus drives** | `campus-drives`, `create`, `[id]` | ✅ Existing |
+| **Partnerships & invites** | `partnerships` | ✅ **Enhanced** — browse companies, bidirectional invites |
+| Placements | `placements` | ✅ Existing |
+| Placement analytics | `placement-analytics` | ✅ Existing |
+| Student tracking (multi-year) | `student-tracking` | ✅ Existing |
+| Bulk operations | `bulk-operations` | ✅ Existing |
+| Assign tests | `assign-tests` | ✅ Existing |
+| Leaderboard | `leaderboard` | ✅ Existing |
+| Interviews | `interviews` | ✅ Existing |
+| Support requests | `support-requests` | ✅ Existing |
+| Analytics & reports | `analytics`, `reports` | ✅ Existing |
 
-#### 8. Real-Time Notifications System
-- **Backend**: `/backend/routes/realtimeNotifications.js`
-- **Model**: `/backend/models/Notification.js` (existing)
-- **Frontend**: `/app/api/notifications/route.ts` (existing)
+### Shared / All roles
 
-Real-time notification system for keeping users updated on important events.
+| Feature | Route | Status |
+|---------|-------|--------|
+| **Notification Center** | `/dashboard/notifications` | ✅ **Enhanced** — filters, bulk actions, deep links |
+| Messages | `/dashboard/messages` | ✅ Existing |
+| Calendar | `/dashboard/calendar` | ✅ Existing |
+| Referrals | `/dashboard/referrals` | ✅ Existing |
+| Export reports | `/dashboard/export` | ✅ Existing |
+| Settings | `/dashboard/settings` | ✅ Existing |
+| Global search | `/dashboard/search` | ✅ Existing |
 
-**Features:**
-- Create notifications for various events
-- Mark notifications as read/unread
-- Bulk notification support
-- Notification categories (new_match, application_status_update, interview_scheduled, etc.)
-- Unread count tracking
+### Admin (`/dashboard/admin`)
 
-#### 9. Advanced Analytics Dashboard
-- **Backend**: `/backend/routes/advancedAnalytics.js`
-- **Frontend**: `/app/dashboard/recruiter/analytics/advanced/page.tsx`
-- **API**: `/app/api/analytics/advanced/route.ts`
+| Feature | Route | Status |
+|---------|-------|--------|
+| Overview & stats | `admin`, `stats` | ✅ Existing |
+| Jobs management | `jobs` | ✅ Existing |
+| Users | `users` | ✅ Existing |
+| Security & moderation | `security` | ✅ Existing |
+| Email templates | `email-templates` | ✅ Existing |
 
-Comprehensive analytics dashboard for recruiters with hiring funnel insights.
+---
 
-**Features:**
-- Hiring funnel visualization
-- Conversion rate analysis
-- Time-to-hire metrics
-- Job performance comparison
-- Candidate quality analytics
-- Skill demand analysis
-- Time-series trends
+## Core Platform Features (Existing)
 
-#### 10. Calendar Integration
-- **Backend**: `/backend/routes/calendar.js`
-- **Frontend**: `/app/dashboard/calendar/page.tsx`
-- **API**: `/app/api/calendar/route.ts`
+These were part of the original HireAI scope and remain available:
 
-Integration with external calendar providers (Google Calendar, Microsoft Outlook).
+1. **AI job description tailoring** — analyze and optimize JDs  
+2. **Candidate benchmark vs job** — skill/experience matching  
+3. **Offer letter workflow** — create, send, track, PDF  
+4. **Referral engine** — codes, bonuses, leaderboard  
+5. **Multi-year student tracking** — placement readiness by year/branch  
+6. **Placement readiness analytics** — heatmaps, funnel, company performance  
+7. **Bulk student operations** — CSV import/export, bulk invite  
+8. **Real-time notifications** — SSE, categories, unread counts  
+9. **Advanced recruiter analytics** — funnel, time-to-hire, skill demand  
+10. **Calendar integration** — Google/Outlook sync (routes exist)  
+11. **Background verification** — multi-provider placeholders  
+12. **Security middleware** — rate limiting, XSS/SQL detection  
+13. **LinkedIn/GitHub profile import**  
+14. **Email template system**  
+15. **Export reports (CSV/PDF)**  
+16. **Interview scorecards**  
+17. **Proctoring** — violations, screen recording, environment scan  
+18. **Video interviews** — rooms, feedback  
+19. **Social network** — posts, connections, endorsements  
+20. **Billing / Stripe** — subscription hooks (where configured)
 
-**Features:**
-- Sync with Google Calendar
-- Sync with Microsoft Outlook
-- Create calendar events for interviews
-- Update existing events
-- Check availability for scheduling
-- Delete calendar events
+---
 
-#### 11. Background Verification Integration
-- **Backend**: `/backend/routes/backgroundVerification.js`
-- **Model**: `/backend/models/BackgroundVerification.js`
-- **Frontend**: `/app/dashboard/recruiter/background-verification/page.tsx`
-- **API**: `/app/api/background-verification/route.ts`
+## Recently Added & Enhanced
 
-Integration with background verification providers for comprehensive candidate screening.
+Work completed in recent development cycles:
 
-**Features:**
-- Initiate background verification
-- Multiple provider support (Checkr, Hireright, Sterling, GoodHire)
-- Component-wise verification (identity, education, employment, criminal, drug, reference)
-- Status tracking (Pending, In Progress, Completed, Failed)
-- Overall risk assessment
-- Report generation
+### Campus Drive Hub (Recruiter ↔ College)
 
-#### 12. Advanced Security Features
-- **Backend**: `/backend/middleware/security.js`
-- **Model**: `/backend/models/SecurityEvent.js`
-- **Middleware**: `/backend/middleware/rateLimiter.js` (existing)
+- **Bidirectional proposals:** recruiter → college OR college → recruiter (specific company)
+- **Recruiter:** `/dashboard/recruiter/campus-drives` — browse colleges, send proposals, received invitations, sent proposals, partnerships, pipeline guide, activity feed
+- **College:** `/dashboard/college/partnerships` — browse companies, send invites, accept/decline company proposals
+- **Auto-publish:** accepting a proposal creates a live campus drive for students + notifies eligible students
+- **Direction tracking:** `createdByRole`, `createdByUserId`, notification-based backfill for legacy rows
 
-Enhanced security features to protect the platform and user data.
+### Notification Center
 
-**Features:**
-- SQL injection detection and prevention
-- XSS attack detection
-- CSRF protection
-- IP blocking capability
-- Session validation
-- Input sanitization
-- Security event logging
-- Rate limiting (API, auth, upload, billing)
+- Full redesign at `/dashboard/notifications`
+- Categories, filters, stats, bulk mark read/delete, deep links per role
+- Bell component + SSE hooks
 
-#### 13. LinkedIn/GitHub Profile Import
-- **Backend**: `/backend/routes/socialImport.js`
-- **Frontend**: `/app/dashboard/job-seeker/social-import/page.tsx`
-- **API**: `/app/api/social-import/route.ts`
+### Interview Coach (Job Seeker)
 
-Import professional profiles from LinkedIn and GitHub to auto-fill candidate information.
+- `/dashboard/job-seeker/interview-coach`
+- Presets, STAR framework, filler-word detection, session history, AI questions (with fallback)
 
-**Features:**
-- LinkedIn profile import with OAuth
-- GitHub profile import with OAuth
-- Public GitHub profile fetching (no auth required)
-- Profile data mapping to user profile
-- Repository and contribution tracking
+### Skill Gap Analyzer (Job Seeker)
 
-#### 14. Email Template System
-- **Backend**: `/backend/routes/emailTemplates.js`
-- **Model**: `/backend/models/EmailTemplate.js`
-- **Frontend**: `/app/dashboard/admin/email-templates/page.tsx`
-- **API**: `/app/api/email-templates/route.ts` (existing)
+- `/dashboard/job-seeker/skill-gap`
+- Role presets, match score, learning path, radar charts, analysis history, export
 
-Custom email template management for automated communications.
+### Coding Tests & Analytics
 
-**Features:**
-- Create custom email templates
-- Template categories (recruiting, placement, notifications, marketing, system)
-- Variable substitution for dynamic content
-- Preview templates with sample data
-- Default templates included
-- Template versioning
+- **Judge0 CE** default for code execution (`JUDGE0_URL=https://ce.judge0.com`)
+- Java `Solution` → `Main` auto-rename for Judge0 compatibility
+- **Assign by email** — `/api/tests/[id]/invite` actually assigns tests
+- **Analytics deduplication** — one row per candidate (fixes duplicate leaderboard entries)
+- Recruiter analytics: Candidates, Leaderboard, Security tabs populated correctly
 
-#### 15. Export Reports CSV/PDF
-- **Backend**: `/backend/routes/exportReports.js`
-- **Frontend**: `/app/dashboard/export/page.tsx`
-- **API**: `/app/api/export/route.ts`
+### Auth & Session
 
-Export data in CSV or PDF format for reporting and analysis.
+- OTP login via backend (`/api/auth/login` → `/api/auth/verify-otp`)
+- HttpOnly `auth-token` cookie + refresh token
+- Normalized `userId` in session for consistent MongoDB queries
 
-**Features:**
-- Export applications data
-- Export student tracking data
-- Export analytics reports
-- CSV and PDF format support
-- Time period filtering for analytics
-- Customizable export options
+---
 
-#### 16. Interview Scorecards
-- **Backend**: `/backend/routes/interviewScorecards.js`
-- **Model**: `/backend/models/InterviewScorecard.js`
-- **Frontend**: `/app/dashboard/recruiter/interview-scorecards/page.tsx`
-- **API**: `/app/api/interview-scorecards/route.ts`
+## Campus Drive Pipeline
 
-Structured interview evaluation system with scoring categories.
+End-to-end flow:
 
-**Features:**
-- Multiple scoring categories (technical, communication, problem-solving, culture-fit, leadership)
-- Question and answer tracking
-- Strengths and weaknesses assessment
-- Overall recommendation (Strong Hire, Hire, Maybe, No Hire, Strong No Hire)
-- Draft, Submitted, and Reviewed status
-- Per-interviewer evaluations
+```
+1. Discover    → Browse colleges (recruiter) or companies (college)
+2. Propose     → Send drive proposal (title, date, roles, package)
+3. Confirm     → Other party accepts or declines
+4. Publish     → Campus drive goes live; students can apply
+```
+
+| Who sends | Recruiter sees | College sees | Who accepts |
+|-----------|----------------|--------------|-------------|
+| Recruiter → College | **Sent proposals** (waiting) | **Proposals from companies** | College admin |
+| College → Recruiter | **Received** (Accept/Decline) | **Invitations you sent** | Recruiter |
+
+**Key APIs:**
+
+- `GET/POST /api/recruiter/campus-drives` — recruiter dashboard + send proposal  
+- `GET /api/recruiter/colleges` — college directory  
+- `GET/POST /api/college/campus-drive-invites` — college send + list  
+- `GET /api/college/recruiters` — company directory  
+- `GET /api/college/campus-partners` — college invite stats + activity  
+- `PATCH/DELETE /api/college/campus-drive-invites/[id]` — accept, decline, cancel  
+
+**Models:** `CampusDriveInvite`, `CampusDrive`, `CollegePartnership`
+
+---
 
 ## Technology Stack
 
-### Backend
-- **Framework**: Express.js
-- **Database**: MongoDB with Mongoose ODM
-- **Authentication**: JWT
-- **File Processing**: CSV (csv-parser, json2csv), PDF (pdfkit)
-- **External APIs**: LinkedIn, GitHub, Google Calendar, Microsoft Graph
+| Layer | Technologies |
+|-------|----------------|
+| Frontend | Next.js 14, React 18, TypeScript, Tailwind CSS, shadcn/ui, Radix UI |
+| Editor | Monaco Editor (coding tests) |
+| Charts | Recharts |
+| 3D (login) | Three.js, React Three Fiber |
+| Backend | Express.js, Node.js |
+| Database | MongoDB, Mongoose |
+| Cache | Redis (ioredis) |
+| Auth | JWT, bcrypt, OTP email |
+| Code execution | Judge0 CE (default), Piston fallback |
+| AI | Groq, OpenAI (via `@ai-sdk/groq`, `ai` package) |
+| Real-time | Socket.IO |
+| Email | Nodemailer |
+| Files | Cloudinary, AWS S3 (optional) |
+| Testing | Jest + Supertest (backend) |
 
-### Frontend
-- **Framework**: Next.js 14 (App Router)
-- **UI Components**: shadcn/ui (Radix UI + Tailwind CSS)
-- **Icons**: Lucide React
-- **Styling**: Tailwind CSS
-- **TypeScript**: Full type safety
+---
 
-### Testing
-- **Backend Testing**: Jest + Supertest
-- Test files created for all major features:
-  - `jobDescriptionTailoring.test.js`
-  - `referral.test.js`
-  - `offerLetter.test.js`
-  - `studentTracking.test.js`
-  - `bulkOperations.test.js`
-  - `interviewScorecards.test.js`
-  - `backgroundVerification.test.js`
-  - `emailTemplates.test.js`
-  - `exportReports.test.js`
-  - `socialImport.test.js`
-
-## Installation
+## Getting Started
 
 ### Prerequisites
-- Node.js (v18 or higher)
-- MongoDB
-- npm or yarn
 
-### Backend Setup
+- Node.js 18+
+- MongoDB (local or Atlas)
+- Redis (optional, for caching)
+- SMTP credentials (for OTP email)
+
+### 1. Clone and install
+
+```bash
+git clone <repository-url>
+cd HireAi
+npm install
+cd backend && npm install && cd ..
+```
+
+### 2. Environment
+
+```bash
+cp .env.example .env.local
+# Edit .env.local — set MONGODB_URI, JWT_SECRET, SMTP_*, NEXT_PUBLIC_BACKEND_URL
+```
+
+### 3. Run development servers
+
+**Terminal 1 — Next.js (frontend + API routes):**
+
+```bash
+npm run dev
+# http://localhost:3000
+```
+
+**Terminal 2 — Express backend:**
 
 ```bash
 cd backend
-npm install
-cp .env.example .env
-# Configure your environment variables
 npm run dev
+# http://localhost:5001 (default)
 ```
 
-### Frontend Setup
+Or use the project’s `server.js` if configured for combined startup.
 
-```bash
-cd app
-npm install
-cp .env.example .env
-# Configure your environment variables
-npm run dev
+### 4. First login
+
+1. Open `http://localhost:3000/login`
+2. Register or use existing account
+3. Complete OTP verification (check console in dev for OTP if email not configured)
+
+---
+
+## Environment Variables
+
+See `.env.example` for the full list. Critical variables:
+
+| Variable | Purpose |
+|----------|---------|
+| `MONGODB_URI` | MongoDB connection string |
+| `JWT_SECRET` | Token signing (must match backend) |
+| `NEXT_PUBLIC_BACKEND_URL` | Express API URL (e.g. `http://localhost:5001`) |
+| `NEXT_PUBLIC_APP_URL` | App URL (e.g. `http://localhost:3000`) |
+| `JUDGE0_URL` | Code execution (default: `https://ce.judge0.com`) |
+| `SMTP_*` | Email for OTP and notifications |
+| `OPENAI_API_KEY` / Groq | AI features (skill gap, interview coach, JD tailor) |
+| `REDIS_URL` | Optional caching |
+
+---
+
+## Project Structure
+
+```
+HireAi/
+├── app/
+│   ├── api/                    # Next.js API routes (256+ endpoints)
+│   ├── dashboard/              # Role-based dashboards
+│   │   ├── job-seeker/         # Candidate features
+│   │   ├── recruiter/          # Hiring features
+│   │   ├── college/            # Placement cell features
+│   │   └── admin/              # Admin panel
+│   ├── login/                  # Auth pages
+│   └── layout.tsx
+├── backend/
+│   ├── routes/                 # Express routes
+│   ├── models/                 # Backend Mongoose models
+│   ├── services/               # authService, etc.
+│   ├── middleware/             # auth, security, rate limit
+│   └── tests/                  # Jest tests
+├── components/                 # React UI components
+├── hooks/                      # useSession, useNotifications, etc.
+├── lib/                        # auth, mongodb, code-runner, utils
+├── models/                     # Shared Mongoose models (Next.js)
+├── public/
+├── server.js                   # Optional custom server (Socket.IO)
+├── .env.example
+└── README.md
 ```
 
-### Environment Variables
+---
 
-**Backend (.env)**
-```
-MONGODB_URI=mongodb://localhost:27017/hireai
-JWT_SECRET=your-jwt-secret
-PORT=5000
-NODE_ENV=development
-ML_SERVICE_URL=http://localhost:8000
-FRONTEND_URL=http://localhost:3000
-```
+## API Overview
 
-**Frontend (.env)**
-```
-NEXT_PUBLIC_BACKEND_URL=http://localhost:5000
-NEXTAUTH_SECRET=your-nextauth-secret
-NEXTAUTH_URL=http://localhost:3000
-```
+### Authentication
 
-## Running Tests
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/auth/login` | Initiate OTP login (proxies to backend) |
+| POST | `/api/auth/verify-otp` | Verify OTP, set cookies |
+| POST | `/api/auth/refresh` | Refresh access token |
+| GET | `/api/auth/me` | Current user profile |
+
+### Campus drives
+
+| Method | Endpoint | Role |
+|--------|----------|------|
+| GET/POST | `/api/recruiter/campus-drives` | Recruiter |
+| GET | `/api/recruiter/colleges` | Recruiter |
+| GET/POST | `/api/college/campus-drive-invites` | College / Recruiter |
+| PATCH/DELETE | `/api/college/campus-drive-invites/[id]` | Accept / decline / cancel |
+| GET | `/api/college/campus-partners` | College |
+| GET/POST | `/api/college/campus-drives` | College (student-facing drives) |
+
+### Tests & code
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET/POST | `/api/tests` | List/create tests |
+| POST | `/api/tests/[id]/invite` | Assign test to candidates |
+| GET | `/api/tests/[id]/analytics` | Test analytics |
+| GET | `/api/tests/[id]/submissions` | Submissions (deduped) |
+| POST | `/api/code/execute` | Run code (Judge0) |
+
+### Job seeker tools
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET/POST | `/api/skill-gap` | Skill gap analysis |
+| GET/POST/DELETE | `/api/interview-coach` | Interview practice sessions |
+| GET/POST | `/api/notifications` | Notification center |
+
+### Legacy backend (Express)
+
+Many features also expose routes under `backend/routes/` — job tailoring, referrals, offer letters, bulk ops, analytics, calendar, etc. Next.js API routes often proxy or duplicate this logic.
+
+---
+
+## Documentation & Guides
+
+| Document | Description |
+|----------|-------------|
+| `DRAG_DROP_USER_GUIDE.md` | Drag-and-drop UI usage |
+| `.env.example` | Environment variable reference |
+| `public/models/README.md` | 3D model assets for login page |
+
+---
+
+## Testing
 
 ```bash
 cd backend
 npm test
 ```
 
-## API Documentation
+Backend tests cover: job description tailoring, referrals, offer letters, student tracking, bulk operations, interview scorecards, background verification, email templates, export, social import.
 
-### Authentication
-All protected endpoints require a valid JWT token in the Authorization header:
-```
-Authorization: Bearer <token>
-```
-
-### Key Endpoints
-
-#### Job Description Tailoring
-- `POST /api/job-description-tailoring/analyze` - Analyze job description
-- `POST /api/job-description-tailoring/optimize` - Optimize job description
-
-#### Candidate Benchmark
-- `POST /api/benchmark/candidate` - Generate candidate benchmark
-
-#### Offer Letters
-- `POST /api/offer-letter/create` - Create offer letter
-- `PUT /api/offer-letter/:id/send` - Send offer letter
-- `PUT /api/offer-letter/:id/accept` - Accept offer
-- `PUT /api/offer-letter/:id/reject` - Reject offer
-- `GET /api/offer-letter/:id` - Get offer letter
-- `DELETE /api/offer-letter/:id` - Delete offer letter
-
-#### Referrals
-- `POST /api/referral/create` - Create referral
-- `GET /api/referral/code/:code` - Get referral by code
-- `POST /api/referral/apply` - Apply referral code
-- `GET /api/referral/my-referrals` - Get my referrals
-- `GET /api/referral/leaderboard` - Get referral leaderboard
-
-#### Student Tracking
-- `POST /api/student-tracking/create` - Create/update student tracking
-- `GET /api/student-tracking/student/:studentId` - Get student tracking
-- `GET /api/student-tracking/college/:collegeId` - Get college tracking
-- `PUT /api/student-tracking/:id/update-progress` - Update yearly progress
-- `GET /api/student-tracking/analytics/:collegeId` - Get analytics
-
-#### Bulk Operations
-- `POST /api/bulk/import-students` - Import students from CSV
-- `POST /api/bulk/eligibility-filter` - Filter by eligibility
-- `POST /api/bulk/bulk-invite` - Send bulk invitations
-- `POST /api/bulk/bulk-update` - Bulk update records
-- `GET /api/bulk/export-students` - Export students
-
-#### Analytics
-- `GET /api/analytics/recruiter-dashboard` - Recruiter dashboard analytics
-- `GET /api/analytics/timeseries` - Time-series data
-- `GET /api/analytics/skill-demand` - Skill demand analysis
-- `GET /api/analytics/candidate-quality` - Candidate quality metrics
-
-#### Calendar
-- `POST /api/calendar/sync` - Sync calendar
-- `POST /api/calendar/event` - Create calendar event
-- `PUT /api/calendar/event/:id` - Update event
-- `DELETE /api/calendar/event/:id` - Delete event
-- `GET /api/calendar/availability` - Check availability
-
-#### Background Verification
-- `POST /api/background-verification/initiate` - Initiate verification
-- `GET /api/background-verification/:id` - Get verification
-- `PUT /api/background-verification/:id/update-component` - Update component
-- `PUT /api/background-verification/:id/finalize` - Finalize verification
-
-#### Social Import
-- `POST /api/social-import/linkedin` - Import LinkedIn profile
-- `POST /api/social-import/github` - Import GitHub profile
-- `GET /api/social-import/github/:username` - Get public GitHub profile
-
-#### Email Templates
-- `POST /api/email-templates/create` - Create template
-- `GET /api/email-templates` - Get all templates
-- `PUT /api/email-templates/:id` - Update template
-- `DELETE /api/email-templates/:id` - Delete template
-- `POST /api/email-templates/preview` - Preview template
-
-#### Export
-- `POST /api/export/applications` - Export applications
-- `POST /api/export/students` - Export students
-- `POST /api/export/analytics` - Export analytics
-
-#### Interview Scorecards
-- `POST /api/interview-scorecards/create` - Create scorecard
-- `GET /api/interview-scorecards/:id` - Get scorecard
-- `PUT /api/interview-scorecards/:id` - Update scorecard
-- `PUT /api/interview-scorecards/:id/submit` - Submit scorecard
-- `PUT /api/interview-scorecards/:id/review` - Review scorecard
-
-## User Roles
-
-- **job_seeker**: Can apply to jobs, view applications, import profiles
-- **recruiter**: Can manage job descriptions, review applications, send offers, access analytics
-- **college_admin**: Can manage student tracking, placement analytics, bulk operations
-- **admin**: Full system access
-
-## Project Structure
-
-```
-hireaiproject copy/
-├── backend/
-│   ├── models/              # Mongoose models
-│   ├── routes/              # Express API routes
-│   ├── middleware/          # Custom middleware
-│   └── tests/               # Backend tests
-├── app/
-│   ├── api/                  # Next.js API routes
-│   ├── dashboard/           # Dashboard pages
-│   │   ├── recruiter/       # Recruiter-specific pages
-│   │   ├── college/         # College admin pages
-│   │   └── job-seeker/      # Job seeker pages
-│   ├── lib/                  # Utility functions
-│   └── models/               # Next.js models
-└── README.md
-```
+---
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Open a Pull Request
+1. Fork the repository  
+2. Create a feature branch (`git checkout -b feature/your-feature`)  
+3. Commit changes  
+4. Push and open a Pull Request  
+
+---
 
 ## License
 
 MIT License
 
+---
+
 ## Support
 
-For support and questions, please open an issue on the repository.
+For bugs and feature requests, open an issue on the repository.
+
+---
+
+*Last updated: reflects campus drive hub, notification center, interview coach, skill gap, test analytics, and Judge0 integration enhancements.*

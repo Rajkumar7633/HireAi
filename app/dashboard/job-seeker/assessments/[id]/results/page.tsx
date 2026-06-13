@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
+import { SkillBar, ScoreRing } from "@/components/ui/charts";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Trophy,
@@ -168,7 +168,7 @@ export default function AssessmentResultsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-6">
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="w-full space-y-6">
         {/* Results Header */}
         <Card className="border-2 border-blue-200">
           <CardHeader
@@ -262,29 +262,9 @@ export default function AssessmentResultsPage() {
                   <CardTitle>Performance Summary</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div>
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm font-medium">Overall Score</span>
-                      <span className="text-sm text-muted-foreground">
-                        {results.percentage}%
-                      </span>
-                    </div>
-                    <Progress value={results.percentage} className="h-3" />
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm font-medium">
-                        Passing Threshold
-                      </span>
-                      <span className="text-sm text-muted-foreground">
-                        {results.passingScore}%
-                      </span>
-                    </div>
-                    <Progress
-                      value={results.passingScore}
-                      className="h-2 opacity-50"
-                    />
+                  <div className="flex gap-6 items-center justify-center py-2">
+                    <ScoreRing value={results.percentage} size={100} stroke={9} label="Your Score" />
+                    <ScoreRing value={results.passingScore} size={72} stroke={6} color="#94a3b8" label="Pass Mark" />
                   </div>
 
                   <div className="pt-4 border-t">
@@ -319,21 +299,14 @@ export default function AssessmentResultsPage() {
 
                       if (totalCount === 0) return null;
 
+                      const pct = Math.round((correctCount / totalCount) * 100);
                       return (
-                        <div key={difficulty}>
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="text-sm font-medium">
-                              {difficulty}
-                            </span>
-                            <span className="text-sm text-muted-foreground">
-                              {correctCount}/{totalCount}
-                            </span>
-                          </div>
-                          <Progress
-                            value={(correctCount / totalCount) * 100}
-                            className="h-2"
-                          />
-                        </div>
+                        <SkillBar
+                          key={difficulty}
+                          label={`${difficulty}: ${correctCount}/${totalCount}`}
+                          value={pct}
+                          color={pct >= 70 ? "#16a34a" : pct >= 50 ? "#f59e0b" : "#ef4444"}
+                        />
                       );
                     })}
                   </div>
@@ -606,13 +579,13 @@ export default function AssessmentResultsPage() {
                   </div>
                   <div className="text-center p-4 bg-blue-50 rounded-lg">
                     <div className="text-3xl font-bold text-blue-600">
-                      {results.proctoringReport.violations.alerts}
+                      {results.proctoringReport?.violations?.alerts ?? 0}
                     </div>
                     <div className="text-sm text-blue-700">Total Alerts</div>
                   </div>
                   <div className="text-center p-4 bg-orange-50 rounded-lg">
                     <div className="text-3xl font-bold text-orange-600">
-                      {results.proctoringReport.violations.tabSwitches}
+                      {results.proctoringReport?.violations?.tabSwitches ?? 0}
                     </div>
                     <div className="text-sm text-orange-700">Tab Switches</div>
                   </div>
@@ -621,7 +594,7 @@ export default function AssessmentResultsPage() {
                 <div>
                   <h4 className="font-medium mb-3">Proctoring Timeline</h4>
                   <div className="space-y-2">
-                    {results.proctoringReport.timeline.map(
+                    {(results.proctoringReport?.timeline || []).map(
                       (event: any, index: number) => (
                         <div
                           key={index}
@@ -661,12 +634,14 @@ export default function AssessmentResultsPage() {
                   </div>
                 </div>
 
-                <div className="p-4 bg-muted rounded-lg">
-                  <h4 className="font-medium mb-2">Overall Assessment</h4>
-                  <p className="text-sm text-muted-foreground">
-                    {results.proctoringReport.recommendation}
-                  </p>
-                </div>
+                {results.proctoringReport?.recommendation && (
+                  <div className="p-4 bg-muted rounded-lg">
+                    <h4 className="font-medium mb-2">Overall Assessment</h4>
+                    <p className="text-sm text-muted-foreground">
+                      {results.proctoringReport.recommendation}
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -685,39 +660,9 @@ export default function AssessmentResultsPage() {
                   <div>
                     <h4 className="font-medium mb-3">Score Comparison</h4>
                     <div className="space-y-3">
-                      <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-sm">Your Score</span>
-                          <span className="text-sm font-medium">
-                            {results.percentage}%
-                          </span>
-                        </div>
-                        <Progress value={results.percentage} className="h-3" />
-                      </div>
-                      <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-sm">Average Score</span>
-                          <span className="text-sm font-medium">
-                            {results.benchmarkData.averageScore}%
-                          </span>
-                        </div>
-                        <Progress
-                          value={results.benchmarkData.averageScore}
-                          className="h-2 opacity-50"
-                        />
-                      </div>
-                      <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-sm">Industry Average</span>
-                          <span className="text-sm font-medium">
-                            {results.benchmarkData.industryAverage}%
-                          </span>
-                        </div>
-                        <Progress
-                          value={results.benchmarkData.industryAverage}
-                          className="h-2 opacity-50"
-                        />
-                      </div>
+                      <SkillBar label={`Your Score: ${results.percentage}%`} value={results.percentage} color={results.percentage >= 70 ? "#16a34a" : results.percentage >= 50 ? "#f59e0b" : "#ef4444"} />
+                      <SkillBar label={`Average Score: ${results.benchmarkData.averageScore}%`} value={results.benchmarkData.averageScore} color="#94a3b8" />
+                      <SkillBar label={`Industry Average: ${results.benchmarkData.industryAverage}%`} value={results.benchmarkData.industryAverage} color="#7c3aed" />
                     </div>
                   </div>
 

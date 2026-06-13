@@ -5,7 +5,7 @@ export interface Session {
   userId: string
   email: string
   name: string
-  role: "job_seeker" | "recruiter" | "admin"
+  role: "job_seeker" | "recruiter" | "admin" | "college" | "college_admin"
 }
 
 const JWT_SECRET = process.env.JWT_SECRET as string

@@ -9,7 +9,7 @@ const { invalidateCache } = require("../middleware/cache");
 // POST /api/college/placements - Create placement record
 router.post("/placements", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -94,7 +94,7 @@ router.post("/placements", auth, async (req, res) => {
 // GET /api/college/placements - Get all placements
 router.get("/placements", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -143,7 +143,7 @@ router.get("/placements", auth, async (req, res) => {
 // GET /api/college/placements/:id - Get placement details
 router.get("/placements/:id", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -172,7 +172,7 @@ router.get("/placements/:id", auth, async (req, res) => {
 // PUT /api/college/placements/:id - Update placement
 router.put("/placements/:id", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -214,7 +214,7 @@ router.put("/placements/:id", auth, async (req, res) => {
 // POST /api/college/placements/:id/interview-rounds - Add interview round
 router.post("/placements/:id/interview-rounds", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -252,7 +252,7 @@ router.post("/placements/:id/interview-rounds", auth, async (req, res) => {
 // POST /api/college/placements/:id/documents - Add document
 router.post("/placements/:id/documents", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -283,7 +283,7 @@ router.post("/placements/:id/documents", auth, async (req, res) => {
 // GET /api/college/placements/analytics - Get placement analytics
 router.get("/placements/analytics", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 

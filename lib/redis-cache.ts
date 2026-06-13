@@ -1,17 +1,14 @@
-// Lightweight Redis cache helper with safe fallbacks
-// Requires: set ANALYTICS_CACHE=1 and provide REDIS_URL to enable.
-// If ioredis is not installed or env is missing, functions become no-ops.
+// Lightweight Redis cache helper with safe fallbacks.
+// Enabled when REDIS_URL is set. Falls back to no-op if Redis is unavailable.
 
 let cached: any = (globalThis as any).__redisClient || null
+let _initStarted = false
 
 async function getClient() {
   if (cached !== null) return cached
+  if (_initStarted) return null // prevent concurrent init
+  _initStarted = true
   try {
-    if (process.env.ANALYTICS_CACHE !== '1') {
-      cached = null
-      ;(globalThis as any).__redisClient = cached
-      return cached
-    }
     const url = process.env.REDIS_URL || process.env.REDIS_TLS_URL || ''
     if (!url) {
       cached = null
@@ -68,7 +65,7 @@ export async function cacheSet(key: string, value: string, ttlSeconds = 60): Pro
   try { await client.set(key, value, 'EX', ttlSeconds) } catch {}
 }
 
-export function cacheKey(parts: Record<string, any>): string {
+export function cacheKey(prefix: string, parts: Record<string, any>): string {
   const sorted = Object.keys(parts).sort().reduce((acc, k) => { acc[k] = parts[k]; return acc }, {} as any)
-  return 'analytics:' + Buffer.from(JSON.stringify(sorted)).toString('base64')
+  return `${prefix}:` + Buffer.from(JSON.stringify(sorted)).toString('base64url')
 }

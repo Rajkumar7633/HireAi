@@ -2,7 +2,7 @@
 
 import type React from "react";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useSession } from "@/hooks/use-session";
@@ -19,6 +19,9 @@ import {
 } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Mail, Lock, Shield, Eye, EyeOff } from "lucide-react";
+import { persistAuthToken } from "@/lib/client-auth"
+
+const Hero3D = dynamic(() => import("@/components/Hero3DPure"), { ssr: false });
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -38,10 +41,12 @@ export default function LoginPage() {
   const redirectParam = (searchParams?.get("redirect") || "").toString();
   const redirectPath = redirectParam ? decodeURIComponent(redirectParam) : "";
   const { refreshSession, user } = useSession() as any;
-  const brandColor = (user?.recruiter?.brandColor as string) || process.env.NEXT_PUBLIC_BRAND_COLOR || "#6d28d9";
+  const brandColor = useMemo(
+    () => (user?.recruiter?.brandColor as string) || process.env.NEXT_PUBLIC_BRAND_COLOR || "#6d28d9",
+    [user?.recruiter?.brandColor],
+  );
   const accentColor = (user?.recruiter?.accentColor as string) || process.env.NEXT_PUBLIC_ACCENT_COLOR || "#eef2ff";
   const companyName = (user?.recruiter?.companyName as string) || process.env.NEXT_PUBLIC_COMPANY_NAME || "HireAI";
-  const Hero3D = dynamic(() => import("@/components/Hero3DPure"), { ssr: false });
   // Force the classic chain background: disable GLB and coder illustrators without requiring env restart
   const modelUrl = "";
   const modelScale = 1.2;
@@ -50,6 +55,20 @@ export default function LoginPage() {
   const useCoder = false;
   const modelUrlFinal = '';
   const useStudents = (process.env.NEXT_PUBLIC_LOGIN_3D_USE_STUDENTS === '1' || process.env.NEXT_PUBLIC_LOGIN_3D_USE_STUDENTS === 'true');
+
+  const hero3DProps = useMemo(
+    () => ({
+      brandColor,
+      offsetX: -1.05,
+      modelUrl: modelUrlFinal,
+      modelScale,
+      modelRotationY,
+      modelY,
+      useCoder,
+      useStudents,
+    }),
+    [brandColor, useStudents],
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,6 +96,10 @@ export default function LoginPage() {
         setOtpPhase(true)
         setLoading(false)
         return
+      }
+      if (response.ok) {
+        const token = data.token || data.accessToken || data.jwt || data.access_token
+        persistAuthToken(token)
       }
       if (!response.ok) {
         if (response.status === 404) {
@@ -108,6 +131,7 @@ export default function LoginPage() {
         setOtpError(data?.msg || data?.message || "Invalid code")
         return
       }
+      persistAuthToken(data.accessToken || data.token)
       // Redirect immediately without waiting for session refresh
       if (redirectPath && redirectPath.startsWith("/")) {
         router.push(redirectPath)
@@ -147,7 +171,7 @@ export default function LoginPage() {
       <div className="pointer-events-none fixed inset-0 z-0">
         {/* Fullscreen 3D hero (nudged further left) */}
         <div className="absolute inset-0 opacity-95">
-          <Hero3D brandColor={brandColor} offsetX={-1.05} modelUrl={modelUrlFinal} modelScale={modelScale} modelRotationY={modelRotationY} modelY={modelY} useCoder={useCoder} useStudents={useStudents} />
+          <Hero3D {...hero3DProps} />
         </div>
         {/* Fullscreen particles */}
         <div className="absolute inset-0">

@@ -19,6 +19,12 @@ export interface IAssessment extends Document {
   updatedAt: Date
   candidatesAssigned: number
   candidatesCompleted: number
+  // New access control fields
+  maxAttempts: number
+  availableFrom?: Date
+  availableTo?: Date
+  questionPoolSize?: number
+  gracePeriodMinutes: number
   assignedCandidates: Array<{
     candidateId: mongoose.Types.ObjectId;
     candidateEmail: string;
@@ -54,6 +60,19 @@ export interface IAssessmentSettings {
   autoSubmit: boolean
   preventCopyPaste: boolean
   fullScreenMode: boolean
+  // New security settings
+  requireFullscreen: boolean
+  blockRightClick: boolean
+  eyeGazeTracking: boolean
+  periodicSnapshots: boolean
+  watermarkOverlay: boolean
+  deviceFingerprint: boolean
+  vpnDetection: boolean
+  vmDetection: boolean
+  preventBackNavigation: boolean
+  plagiarismCheck: boolean
+  ipLock: boolean
+  requireIdVerification: boolean
 }
 
 const QuestionSchema = new Schema<IQuestion>({
@@ -98,6 +117,18 @@ const AssessmentSettingsSchema = new Schema<IAssessmentSettings>({
   autoSubmit: { type: Boolean, default: true },
   preventCopyPaste: { type: Boolean, default: true },
   fullScreenMode: { type: Boolean, default: true },
+  requireFullscreen: { type: Boolean, default: true },
+  blockRightClick: { type: Boolean, default: true },
+  eyeGazeTracking: { type: Boolean, default: false },
+  periodicSnapshots: { type: Boolean, default: false },
+  watermarkOverlay: { type: Boolean, default: true },
+  deviceFingerprint: { type: Boolean, default: false },
+  vpnDetection: { type: Boolean, default: false },
+  vmDetection: { type: Boolean, default: false },
+  preventBackNavigation: { type: Boolean, default: false },
+  plagiarismCheck: { type: Boolean, default: false },
+  ipLock: { type: Boolean, default: false },
+  requireIdVerification: { type: Boolean, default: false },
 })
 
 const AssessmentSchema = new Schema<IAssessment>(
@@ -125,6 +156,11 @@ const AssessmentSchema = new Schema<IAssessment>(
     createdBy: { type: String, required: true },
     candidatesAssigned: { type: Number, default: 0 },
     candidatesCompleted: { type: Number, default: 0 },
+    maxAttempts: { type: Number, default: 1, min: 1, max: 10 },
+    availableFrom: { type: Date },
+    availableTo: { type: Date },
+    questionPoolSize: { type: Number, min: 1 },
+    gracePeriodMinutes: { type: Number, default: 0, min: 0, max: 30 },
     assignedCandidates: [{
       candidateId: { type: Schema.Types.ObjectId, ref: "User" },
       candidateEmail: { type: String, required: true, trim: true },

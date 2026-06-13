@@ -1,5 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Keep pdf-parse and mammoth as native Node.js requires — do NOT bundle them.
+  // pdf-parse reads its own test files on load which breaks when bundled.
+  experimental: {
+    serverComponentsExternalPackages: ["pdf-parse", "mammoth", "pdfjs-dist"],
+  },
+
   // Enable React Strict Mode
   reactStrictMode: true,
 
@@ -43,6 +49,10 @@ const nextConfig = {
         os: false,
       };
     }
+    config.module.rules.push({
+      test: /monaco-editor[\\/].*\.ttf$/,
+      type: "asset/resource",
+    });
     return config;
   },
 
@@ -51,13 +61,18 @@ const nextConfig = {
 
   // Security headers (merged from next.config.mjs)
   async headers() {
+    const jitsiDomain = process.env.NEXT_PUBLIC_JITSI_DOMAIN || "meet.jit.si";
     const csp = [
       "default-src 'self'",
-      "img-src 'self' data: blob: https://res.cloudinary.com",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-      "style-src 'self' 'unsafe-inline'",
-      "connect-src 'self' *",
-    ].join('; ');
+      "img-src 'self' data: blob: https://res.cloudinary.com https://*.jit.si",
+      `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://${jitsiDomain} https://*.jit.si`,
+      "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://*.jit.si",
+      "font-src 'self' data: https://cdn.jsdelivr.net https://*.jit.si",
+      "worker-src 'self' blob:",
+      "connect-src 'self' * wss://* https://* https://*.livekit.cloud wss://*.livekit.cloud",
+      `frame-src 'self' https://${jitsiDomain} https://*.jit.si https://*.livekit.cloud`,
+      "media-src 'self' blob: data: mediastream: https://*.jit.si",
+    ].join("; ");
 
     return [
       {

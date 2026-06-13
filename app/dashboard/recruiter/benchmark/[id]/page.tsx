@@ -5,7 +5,7 @@ import { useParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
+import { SkillBar, ScoreRing } from "@/components/ui/charts"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, TrendingUp, CheckCircle, AlertCircle, User, Briefcase, GraduationCap } from "lucide-react"
@@ -117,8 +117,8 @@ export default function CandidateBenchmarkPage() {
             </Badge>
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <Progress value={benchmark.overallMatch} className="h-3" />
+        <CardContent className="flex items-center justify-center py-4">
+          <ScoreRing value={benchmark.overallMatch} size={100} stroke={9} label="Overall" sublabel="Match" />
         </CardContent>
       </Card>
 
@@ -310,7 +310,7 @@ export default function CandidateBenchmarkPage() {
                       {benchmark.softSkills.score}%
                     </span>
                   </div>
-                  <Progress value={benchmark.softSkills.score} />
+                  <SkillBar label="" value={benchmark.softSkills.score} color={benchmark.softSkills.score >= 70 ? "#16a34a" : benchmark.softSkills.score >= 50 ? "#f59e0b" : "#ef4444"} />
                 </div>
                 <div>
                   <p className="text-sm font-medium mb-2">Found:</p>
@@ -340,13 +340,7 @@ export default function CandidateBenchmarkPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {benchmark.visualData.progressBars.map((bar, idx) => (
-                <div key={idx}>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span>{bar.label}</span>
-                    <span className="font-semibold">{bar.value}%</span>
-                  </div>
-                  <Progress value={bar.value} className="h-2" />
-                </div>
+                <SkillBar key={idx} label={`${bar.label}: ${bar.value}%`} value={bar.value} color={bar.value >= 70 ? "#16a34a" : bar.value >= 50 ? "#f59e0b" : "#ef4444"} />
               ))}
             </CardContent>
           </Card>
@@ -358,13 +352,7 @@ export default function CandidateBenchmarkPage() {
             <CardContent>
               <div className="space-y-3">
                 {benchmark.visualData.barChart.map((item, idx) => (
-                  <div key={idx}>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span>{item.label}</span>
-                      <span className="font-semibold">{item.value}</span>
-                    </div>
-                    <Progress value={(item.value / 10) * 100} className="h-2" />
-                  </div>
+                  <SkillBar key={idx} label={`${item.label}: ${item.value}/10`} value={(item.value / 10) * 100} color={(item.value / 10) * 100 >= 70 ? "#16a34a" : (item.value / 10) * 100 >= 50 ? "#f59e0b" : "#ef4444"} />
                 ))}
               </div>
             </CardContent>

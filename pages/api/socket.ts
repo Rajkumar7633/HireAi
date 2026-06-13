@@ -22,9 +22,43 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     setIO(io);
 
     io.on("connection", (socket) => {
-      // Namespace for social events
-      socket.on("disconnect", () => {});
-    });
+      socket.on("meeting:join", ({ roomId, name, userId }: { roomId?: string; name?: string; userId?: string }) => {
+        if (!roomId) return
+        socket.join(`meeting:${roomId}`)
+        socket.data.meetingRoom = roomId
+        socket.data.meetingName = name || "Guest"
+        socket.data.meetingUserId = userId || socket.id
+        const room = io.sockets.adapter.rooms.get(`meeting:${roomId}`)
+        const count = room?.size ?? 0
+        io.to(`meeting:${roomId}`).emit("meeting:participants", { roomId, count })
+      })
+
+      socket.on("meeting:leave", ({ roomId }: { roomId?: string }) => {
+        const rid = roomId || socket.data.meetingRoom
+        if (!rid) return
+        socket.leave(`meeting:${rid}`)
+        socket.data.meetingRoom = undefined
+        const room = io.sockets.adapter.rooms.get(`meeting:${rid}`)
+        const count = room?.size ?? 0
+        io.to(`meeting:${rid}`).emit("meeting:participants", { roomId: rid, count })
+      })
+
+      socket.on(
+        "meeting:signal",
+        ({ roomId, signal }: { roomId?: string; signal?: Record<string, unknown> }) => {
+          if (!roomId || !signal?.type) return
+          socket.broadcast.to(`meeting:${roomId}`).emit("meeting:signal", { roomId, signal })
+        },
+      )
+
+      socket.on("disconnect", () => {
+        const rid = socket.data.meetingRoom as string | undefined
+        if (!rid) return
+        const room = io.sockets.adapter.rooms.get(`meeting:${rid}`)
+        const count = room?.size ?? 0
+        io.to(`meeting:${rid}`).emit("meeting:participants", { roomId: rid, count })
+      })
+    })
   }
   res.end();
 }

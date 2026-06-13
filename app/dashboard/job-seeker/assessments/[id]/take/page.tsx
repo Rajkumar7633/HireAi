@@ -1,23 +1,5 @@
 "use client";
 
-  // Wait until the HTMLVideoElement has non-zero dimensions or timeout
-  async function ensureVideoReady(v: HTMLVideoElement, timeoutMs = 4000): Promise<boolean> {
-    const start = Date.now();
-    // quick check
-    if (v.videoWidth > 0 && v.videoHeight > 0) return true;
-    return new Promise<boolean>((resolve) => {
-      const iv = setInterval(() => {
-        if (v.videoWidth > 0 && v.videoHeight > 0) {
-          clearInterval(iv);
-          resolve(true);
-        } else if (Date.now() - start > timeoutMs) {
-          clearInterval(iv);
-          resolve(false);
-        }
-      }, 100);
-    });
-  }
-
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -35,14 +17,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { CodeEditor } from "@/components/assessment/CodeEditor";
-import { QuestionDisplay } from "@/components/assessment/QuestionDisplay";
 import {
   AlertTriangle,
   Camera,
-  Mic,
   Monitor,
   Shield,
-  Clock,
   Eye,
   EyeOff,
   Volume2,
@@ -51,8 +30,25 @@ import {
   XCircle,
   Brain,
   Scan,
+  Sparkles,
 } from "lucide-react";
 import { securityManager } from "@/lib/security-utils";
+
+async function ensureVideoReady(v: HTMLVideoElement, timeoutMs = 4000): Promise<boolean> {
+  const start = Date.now();
+  if (v.videoWidth > 0 && v.videoHeight > 0) return true;
+  return new Promise<boolean>((resolve) => {
+    const iv = setInterval(() => {
+      if (v.videoWidth > 0 && v.videoHeight > 0) {
+        clearInterval(iv);
+        resolve(true);
+      } else if (Date.now() - start > timeoutMs) {
+        clearInterval(iv);
+        resolve(false);
+      }
+    }, 100);
+  });
+}
 
 interface ProctoringAlert {
   id: string;
@@ -78,7 +74,6 @@ interface Question {
   questionText: string;
   type: "multiple_choice" | "short_answer" | "code_snippet" | "video_response";
   options?: string[];
-  correctAnswer: string;
   points: number;
   difficulty?: "Easy" | "Medium" | "Hard";
   timeLimit?: number;
@@ -94,9 +89,7 @@ export default function TakeSecureAssessmentPage() {
   const assessmentId = params?.id as string;
   const { toast } = useToast();
 
-  // Testing bypass controls
-  const [testMode, setTestMode] = useState(false);
-  const [bypassSecurity, setBypassSecurity] = useState(false);
+  const [bypassSecurity] = useState(false);
 
   // Assessment state
   const [assessment, setAssessment] = useState<any>(null);
@@ -108,6 +101,8 @@ export default function TakeSecureAssessmentPage() {
   const [canStart, setCanStart] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState<string>("javascript");
+  const [markedForReview, setMarkedForReview] = useState<string[]>([]);
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
 
   // Proctoring state
   const [proctoringActive, setProctoringActive] = useState(false);
@@ -170,14 +165,27 @@ export default function TakeSecureAssessmentPage() {
       return true;
     }
     const featureKeysMap: { [key: string]: string[] } = {
-      face_recognition: ["face recognition", "face_recognition", "camera", "face"],
-      multi_face_detection: ["multi-face", "multi_face"],
-      audio_monitoring: ["audio", "mic"],
-      screen_recording: ["screen recording", "screen_recording"],
-      tab_detection: ["tab switch", "tab_detection", "tab"],
-      clipboard_block: ["copy/paste", "clipboard", "copy-paste", "block"],
-      keystroke_analysis: ["keystroke"],
-      environment_scan: ["environment scan", "environment_scan"]
+      face_recognition:        ["ai face recognition", "face recognition", "face_recognition", "camera", "face"],
+      multi_face_detection:    ["multi-face detection", "multi_face_detection", "multi-face", "multi face"],
+      audio_monitoring:        ["audio monitoring", "audio_monitoring", "audio", "mic"],
+      screen_recording:        ["screen recording", "screen_recording"],
+      tab_detection:           ["tab switch detection", "tab_detection", "tab switch", "tab"],
+      clipboard_block:         ["copy / paste block", "copy/paste block", "clipboard", "copy-paste", "block"],
+      keystroke_analysis:      ["keystroke pattern analysis", "keystroke_analysis", "keystroke"],
+      environment_scan:        ["360° environment scan", "environment scan", "environment_scan"],
+      // New features
+      fullscreen_lock:         ["full-screen lock", "fullscreen lock", "fullscreen_lock"],
+      right_click_block:       ["right-click & devtools block", "right_click_block", "right-click", "devtools"],
+      eye_gaze_tracking:       ["eye gaze tracking", "eye_gaze_tracking", "eye gaze"],
+      periodic_snapshots:      ["periodic identity snapshots", "periodic_snapshots", "periodic"],
+      watermark_overlay:       ["watermark overlay", "watermark_overlay", "watermark"],
+      device_fingerprint:      ["device fingerprinting", "device_fingerprint", "fingerprint"],
+      vpn_detection:           ["vpn / proxy detection", "vpn_detection", "vpn", "proxy"],
+      vm_detection:            ["virtual machine detection", "vm_detection", "virtual machine"],
+      prevent_back_nav:        ["prevent back navigation", "prevent_back_nav", "prevent back"],
+      plagiarism_check:        ["code plagiarism detection", "plagiarism_check", "plagiarism"],
+      ip_lock:                 ["ip address lock", "ip_lock", "ip lock"],
+      require_id_verification: ["identity verification", "require_id_verification", "id verification"],
     };
     const keys = featureKeysMap[featureId] || [featureId];
     return assessment.securityFeatures.some((f: string) => 
@@ -191,8 +199,9 @@ export default function TakeSecureAssessmentPage() {
     const needsMic = isFeatureEnabled("audio_monitoring");
     const needsScreen = isFeatureEnabled("screen_recording");
 
+    const needsFullscreen = isFeatureEnabled("fullscreen_lock")
     const checks = [
-      fullscreenReady,
+      ...(needsFullscreen ? [fullscreenReady] : []),
       ...(needsCamera ? [cameraReady] : []),
       ...(needsMic ? [microphoneReady] : []),
       ...(needsScreen ? [screenRecording || screenCaptureAvailable] : []),
@@ -206,6 +215,7 @@ export default function TakeSecureAssessmentPage() {
 
 
   // Refs
+  const isSubmittingRef = useRef(false); // double-submit guard
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -214,6 +224,7 @@ export default function TakeSecureAssessmentPage() {
   const screenshotIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const screenRecorderRef = useRef<MediaRecorder | null>(null);
   const lastKeystrokeRef = useRef<number>(0);
+  const timerWarningsRef = useRef<Set<number>>(new Set());
 
   // Retry camera initializer scoped to component
   const retryCamera = useCallback(async () => {
@@ -273,20 +284,25 @@ export default function TakeSecureAssessmentPage() {
         analyser.getByteTimeDomainData(dataArray);
         let sum = 0;
         for (let i = 0; i < dataArray.length; i++) {
-          const v = (dataArray[i] - 128) / 128; // -1..1
+          const v = (dataArray[i] - 128) / 128;
           sum += v * v;
         }
         const rms = Math.sqrt(sum / dataArray.length);
         setPreflightMicLevel(Math.min(100, Math.round(rms * 300)));
         preflightRafRef.current = requestAnimationFrame(tick);
       };
+      tick();
+    } catch (e) {
+      console.warn('Preflight mic test failed', e);
+      toast({ title: 'Microphone Test Failed', description: 'Please allow microphone access and try again.', variant: 'destructive' });
+    }
+  }
 
   // Map FaceProctor widget violations into this page's alert system
   const handleFaceProctorViolation = (payload: { type: string; message: string }) => {
     const { type, message } = payload;
     switch (type) {
       case "no_face":
-        // Treat as high severity face missing
         addAlert("face_not_detected", message || "No face detected.", "high");
         setFaceDetected(false);
         setNoFaceSeconds((prev) => Math.min(prev + 5, 30));
@@ -311,17 +327,10 @@ export default function TakeSecureAssessmentPage() {
         }
         break;
       default:
-        // Fallback: log as generic environment violation
         addAlert("environment_violation", message || "Proctoring violation detected.", "low");
         break;
     }
   };
-      tick();
-    } catch (e) {
-      console.warn('Preflight mic test failed', e);
-      toast({ title: 'Microphone Test Failed', description: 'Please allow microphone access and try again.', variant: 'destructive' });
-    }
-  }
 
   function stopPreflightMicTest() {
     if (preflightRafRef.current) {
@@ -409,8 +418,8 @@ export default function TakeSecureAssessmentPage() {
   }
 
   async function startSecureMode() {
-    // Ensure minimal requirements met
-    if (!document.fullscreenElement) {
+    // Only enforce fullscreen if that feature is enabled
+    if (isFeatureEnabled("fullscreen_lock") && !document.fullscreenElement) {
       await requestFullscreen();
       if (!document.fullscreenElement) return;
     }
@@ -520,7 +529,7 @@ export default function TakeSecureAssessmentPage() {
   useEffect(() => {
     if (timeLeft > 0) {
       // Pause countdown when security is not satisfied
-      const canTick = isFullscreen && (!isFeatureEnabled("screen_recording") || screenRecording) && !blockActions;
+      const canTick = (!isFeatureEnabled("fullscreen_lock") || isFullscreen) && (!isFeatureEnabled("screen_recording") || screenRecording) && !blockActions;
       const timer = setTimeout(() => {
         if (canTick) setTimeLeft((t) => t - 1);
       }, 1000);
@@ -530,6 +539,28 @@ export default function TakeSecureAssessmentPage() {
     }
   }, [timeLeft, assessment, isFullscreen, screenRecording, blockActions, isFeatureEnabled]);
 
+
+  // Timer warnings at 10min / 5min / 1min
+  useEffect(() => {
+    if (!assessment || !secureReady) return;
+    const milestones: Array<[number, string, string, boolean]> = [
+      [600, "10 Minutes Left", "You have 10 minutes remaining.", false],
+      [300, "5 Minutes Left!", "Only 5 minutes left. Please hurry.", false],
+      [60,  "1 Minute Left!", "Final minute — submit now!", true],
+    ];
+    for (const [t, title, description, isWarn] of milestones) {
+      if (timeLeft === t && !timerWarningsRef.current.has(t)) {
+        timerWarningsRef.current.add(t);
+        toast({ title, description, variant: isWarn ? "destructive" : "default" });
+      }
+    }
+  }, [timeLeft, assessment, secureReady, toast]);
+
+  // Auto-save answers to localStorage
+  useEffect(() => {
+    if (!assessmentId || !secureReady) return;
+    try { localStorage.setItem(`hireai_answers_${assessmentId}`, JSON.stringify(answers)); } catch {}
+  }, [answers, assessmentId, secureReady]);
 
   const fetchAssessment = async () => {
     try {
@@ -756,11 +787,11 @@ export default function TakeSecureAssessmentPage() {
       // rollback: no aggregate accumulation
     }, 1000); // More frequent monitoring
 
-    // Screenshot capture - only if face proctoring is active
-    if (isFeatureEnabled("face_recognition") || isFeatureEnabled("multi_face_detection")) {
+    // Screenshot capture - face proctoring OR periodic snapshots feature
+    if (isFeatureEnabled("face_recognition") || isFeatureEnabled("multi_face_detection") || isFeatureEnabled("periodic_snapshots")) {
       screenshotIntervalRef.current = setInterval(() => {
         captureScreenshot();
-      }, 15000); // Every 15 seconds for better monitoring
+      }, isFeatureEnabled("periodic_snapshots") && !isFeatureEnabled("face_recognition") ? 30000 : 15000);
     }
   };
 
@@ -1096,7 +1127,7 @@ export default function TakeSecureAssessmentPage() {
       const isFs = !!document.fullscreenElement;
       setIsFullscreen(isFs);
 
-      if (!isFs && proctoringActive) {
+      if (isFeatureEnabled("fullscreen_lock") && !isFs && proctoringActive) {
         addAlert(
           "tab_switch",
           "Fullscreen mode exited. Please return to fullscreen.",
@@ -1167,7 +1198,7 @@ export default function TakeSecureAssessmentPage() {
   // Disable right-click and basic copy shortcuts while secure
   useEffect(() => {
     const preventContext = (e: MouseEvent) => {
-      if (secureReady && isFeatureEnabled("clipboard_block")) {
+      if (secureReady && (isFeatureEnabled("right_click_block") || isFeatureEnabled("clipboard_block"))) {
         e.preventDefault();
       }
     };
@@ -1182,9 +1213,21 @@ export default function TakeSecureAssessmentPage() {
           }
         }
       }
-      // F11 or Escape exits fullscreen – discourage
-      if (e.key === "F11" || e.key === "Escape") {
-        e.preventDefault();
+      if (isFeatureEnabled("right_click_block")) {
+        if (e.key === "F12") {
+          e.preventDefault();
+          addAlert("dev_tools_attempt", "Developer tools access blocked.", "medium");
+        }
+        if ((e.ctrlKey || e.metaKey) && e.shiftKey && ["i", "j", "c"].includes(e.key.toLowerCase())) {
+          e.preventDefault();
+          addAlert("dev_tools_attempt", "Developer tools access blocked.", "medium");
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "u") {
+          e.preventDefault();
+        }
+      }
+      if (isFeatureEnabled("fullscreen_lock") || isFeatureEnabled("tab_detection")) {
+        if (e.key === "F11" || e.key === "Escape") e.preventDefault();
       }
     };
     window.addEventListener("contextmenu", preventContext);
@@ -1207,16 +1250,18 @@ export default function TakeSecureAssessmentPage() {
   };
 
   const handlePreviousQuestion = () => {
+    if (isFeatureEnabled("prevent_back_nav")) return;
     if (currentQuestionIndex > 0) {
       setCurrentQuestionIndex(currentQuestionIndex - 1);
     }
   };
 
   const handleSubmitAssessment = async (timedOut = false, forcedEnd = false) => {
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
     setSubmitting(true);
 
     try {
-      console.log("[UI] Submitting assessment", { assessmentId, timedOut, answersCount: Object.keys(answers || {}).length });
       const response = await fetch(`/api/assessments/${assessmentId}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1247,33 +1292,36 @@ export default function TakeSecureAssessmentPage() {
 
       if (response.ok) {
         const data = await response.json();
+        try { cleanup(); } catch {}
         toast({
           title: timedOut ? "Time's Up!" : "Assessment Submitted",
-          description: `Your assessment has been submitted. Score: ${data.score}%`,
+          description: data.alreadyCompleted
+            ? "Assessment was already submitted."
+            : `Your assessment has been submitted. Score: ${data.score}%`,
         });
-        // Ensure we stop proctoring and release resources before navigation
-        try {
-          cleanup();
-        } catch {}
-        // Use replace to avoid returning to the test page, and refresh to bust caches
+        // Navigate to results; fall back to assessments list after a delay
         router.replace(`/dashboard/job-seeker/assessments/${assessmentId}/results`);
         router.refresh();
+        // Safety redirect: if results page can't load the user lands on the list page
+        setTimeout(() => {
+          router.replace("/dashboard/job-seeker/assessments");
+        }, 8000);
       } else {
-        const text = await response.text();
-        console.error("[UI] Submit failed", response.status, text);
+        const text = await response.text().catch(() => "");
         toast({
           title: "Submission Failed",
-          description: text || `Status ${response.status}`,
+          description: text || `Server error (${response.status}). Please try again.`,
           variant: "destructive",
         });
+        isSubmittingRef.current = false;
       }
     } catch (error) {
-      console.error("[UI] Submit threw error", error);
       toast({
-        title: "Submission Failed",
-        description: "Please try again.",
+        title: "Network Error",
+        description: "Could not submit. Please check your connection and try again.",
         variant: "destructive",
       });
+      isSubmittingRef.current = false;
     } finally {
       setSubmitting(false);
     }
@@ -1334,7 +1382,7 @@ export default function TakeSecureAssessmentPage() {
   };
 
   // Derived flag: timer is paused whenever security prerequisites are not met
-  const timerPaused = !isFullscreen || (isFeatureEnabled("screen_recording") && !screenRecording) || blockActions;
+  const timerPaused = (isFeatureEnabled("fullscreen_lock") && !isFullscreen) || (isFeatureEnabled("screen_recording") && !screenRecording) || blockActions;
 
   // Quick action to resume monitoring prerequisites
   async function resumeSecurity() {
@@ -1376,590 +1424,632 @@ export default function TakeSecureAssessmentPage() {
   }
 
   const currentQuestion = questions[currentQuestionIndex];
+  const currentQId = currentQuestion?.questionId || currentQuestion?._id || "";
+  const answeredCount = questions.filter(q => {
+    const qId = q.questionId || q._id || "";
+    return !!(answers[qId] && answers[qId].trim());
+  }).length;
+  const timerColor = timeLeft <= 60
+    ? "text-red-400 bg-red-900/40 animate-pulse"
+    : timeLeft <= 300
+    ? "text-yellow-400 bg-yellow-900/40"
+    : "text-green-400 bg-green-900/40";
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
-        <p className="ml-2">Loading secure assessment...</p>
-      </div>
-    );
-  }
+  const toggleMarkForReview = (qId: string) => {
+    setMarkedForReview(prev => prev.includes(qId) ? prev.filter(id => id !== qId) : [...prev, qId]);
+  };
+
+  const clearAnswer = (qId: string) => {
+    setAnswers(prev => { const next = { ...prev }; delete next[qId]; return next; });
+  };
 
   return (
-    <div className="min-h-screen bg-black text-white p-4">
-      {/* Room Scan Overlay (before test proceeds) */}
+    <div className="min-h-screen bg-gray-950 text-white">
+      {/* ── Room Scan Overlay ── */}
       {proctoringActive && environmentScanActive && !roomScanDone && (
-        <div className="fixed inset-0 z-[65] bg-black/85 backdrop-blur-sm flex items-center justify-center">
-          <Card className="w-full max-w-2xl bg-gray-900 border border-gray-700">
+        <div className="fixed inset-0 z-[65] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
+          <Card className="w-full max-w-2xl bg-gray-900 border-gray-700">
             <CardHeader>
-              <CardTitle>360° Environment Scan</CardTitle>
-              <CardDescription>Follow the prompt and click “Capture & Next” at each step.</CardDescription>
+              <CardTitle className="text-white">360° Environment Scan</CardTitle>
+              <CardDescription>Follow each prompt and click "Capture & Next".</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-5">
-              <div className="rounded-lg overflow-hidden bg-black/40 border border-gray-700">
+            <CardContent className="space-y-4">
+              <div className="rounded-lg overflow-hidden bg-black border border-gray-700">
                 <video ref={videoRef} autoPlay playsInline muted className="w-full aspect-video object-cover" />
               </div>
-              {!videoReady && (
-                <div className="text-xs text-yellow-400">Camera is starting... If it does not appear within a few seconds, click Retry Camera.</div>
-              )}
-              {/* Thumbnails preview for verification */}
+              {!videoReady && <p className="text-xs text-yellow-400">Camera initializing... please wait.</p>}
               <div>
-                <div className="text-sm text-gray-300 mb-2">Captured Angles: {roomScanFrames.length}/{roomScanPrompts.length}</div>
+                <p className="text-sm text-gray-300 mb-2">Captured: {roomScanFrames.length}/{roomScanPrompts.length}</p>
                 <div className="grid grid-cols-5 gap-2">
                   {roomScanPrompts.map((label, idx) => (
-                    <div key={idx} className={`relative border rounded bg-black/30 ${idx < roomScanFrames.length ? 'border-green-500' : 'border-gray-700'}`}>
-                      {roomScanFrames[idx] ? (
-                        <>
-                          <img src={roomScanFrames[idx]} alt={`Room scan ${idx+1}`} className="w-full h-16 object-cover rounded-t" />
-                          <div className="absolute top-1 right-1 bg-black/60 rounded-full p-0.5">
-                            <CheckCircle className="h-4 w-4 text-green-500" />
-                          </div>
-                        </>
-                      ) : (
-                        <div className="w-full h-16 flex items-center justify-center text-xs text-gray-500">Pending</div>
-                      )}
-                      <div className="p-1 text-[10px] text-center text-gray-300 border-t border-gray-700">{label}</div>
+                    <div key={idx} className={`border rounded bg-black/30 ${idx < roomScanFrames.length ? "border-green-500" : "border-gray-700"}`}>
+                      {roomScanFrames[idx]
+                        ? <img src={roomScanFrames[idx]} alt={label} className="w-full h-14 object-cover rounded-t" />
+                        : <div className="w-full h-14 flex items-center justify-center text-xs text-gray-500">Pending</div>}
+                      <div className="p-1 text-[10px] text-center text-gray-300">{label}</div>
                     </div>
                   ))}
                 </div>
               </div>
-              <div className="text-lg font-medium text-white">{roomScanPrompts[roomScanStep]}</div>
-              <div className="flex justify-between items-center gap-3">
-                <Button variant="outline" className="border-gray-600" onClick={retryCamera} disabled={submitting}>
-                  Retry Camera
-                </Button>
-                <Button variant="outline" className="border-gray-600" onClick={handleRoomScanNext} disabled={!videoReady}>
-                  Capture & Next
-                </Button>
-                <Button variant="secondary" className="bg-gray-800 border-gray-600" onClick={retakeRoomScanFrame} disabled={!videoReady}>
-                  Retake Current
-                </Button>
-              </div>
+              <p className="text-base font-medium text-white">{roomScanPrompts[roomScanStep]}</p>
               <div className="h-1.5 bg-gray-800 rounded">
-                <div className="h-full bg-green-500 rounded" style={{ width: `${((roomScanStep+1)/roomScanPrompts.length)*100}%` }} />
+                <div className="h-full bg-green-500 rounded transition-all" style={{ width: `${((roomScanStep + 1) / roomScanPrompts.length) * 100}%` }} />
+              </div>
+              <div className="flex gap-3">
+                <Button variant="outline" className="border-gray-600" onClick={retryCamera}>Retry Camera</Button>
+                <Button onClick={handleRoomScanNext} disabled={!videoReady} className="bg-blue-600 hover:bg-blue-700">Capture & Next</Button>
+                <Button variant="secondary" className="bg-gray-800" onClick={retakeRoomScanFrame} disabled={!videoReady}>Retake</Button>
               </div>
             </CardContent>
           </Card>
         </div>
       )}
-      {/* Preflight Security Gate */}
+
+      {/* ── Preflight Gate ── */}
       {preflightOpen && (
-        <div className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center">
-          <Card className="w-full max-w-2xl bg-gray-900 border-gray-700">
+        <div className="fixed inset-0 z-[60] bg-black/85 flex items-center justify-center p-4">
+          <Card className="w-full max-w-2xl bg-gray-900 border-gray-700 max-h-[92vh] overflow-y-auto">
             <CardHeader>
-              <CardTitle>Start Secure Assessment</CardTitle>
-              <CardDescription>
-                Complete the following checks before starting your test.
-              </CardDescription>
+              <CardTitle className="text-white flex items-center gap-2">
+                <Shield className="h-5 w-5 text-blue-400" /> Start Secure Assessment
+              </CardTitle>
+              <CardDescription>Complete all checks before you begin.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span>Fullscreen Mode</span>
-                <div className="flex items-center gap-3">
-                  <Badge variant={fullscreenReady ? "default" : "destructive"}>
-                    {fullscreenReady ? "Ready" : "Required"}
-                  </Badge>
-                  <Button onClick={requestFullscreen} className="bg-blue-600 hover:bg-blue-700">
-                    Enter Fullscreen
-                  </Button>
+              {isFeatureEnabled("fullscreen_lock") && (
+                <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                  <span className="text-sm">Full-Screen Lock</span>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={fullscreenReady ? "default" : "destructive"}>{fullscreenReady ? "✓ Ready" : "Required"}</Badge>
+                    <Button size="sm" onClick={requestFullscreen} className="bg-blue-600 hover:bg-blue-700 h-7 text-xs">Enter Fullscreen</Button>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div className="flex items-center justify-between">
-                <span>Camera & Microphone</span>
-                <div className="flex items-center gap-3">
-                  <Badge variant={cameraReady && microphoneReady ? "default" : "destructive"}>
-                    {cameraReady && microphoneReady ? "Granted" : "Allow Access"}
-                  </Badge>
-                  <Button onClick={quickPermissionProbe} variant="outline" className="border-gray-600">
-                    Check Access
-                  </Button>
-                  <Button onClick={preflightTestCameraSnapshot} variant="outline" className="border-gray-600">
-                    Test Camera Snapshot
-                  </Button>
-                  {preflightMicStreamRef.current ? (
-                    <Button onClick={stopPreflightMicTest} variant="outline" className="border-gray-600">
-                      Stop Mic Test
-                    </Button>
-                  ) : (
-                    <Button onClick={startPreflightMicTest} variant="outline" className="border-gray-600">
-                      Start Mic Test
-                    </Button>
+              {(isFeatureEnabled("face_recognition") || isFeatureEnabled("multi_face_detection") || isFeatureEnabled("audio_monitoring")) && (
+                <div className="p-3 bg-gray-800 rounded-lg space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Camera & Microphone</span>
+                    <Badge variant={cameraReady && microphoneReady ? "default" : "destructive"}>
+                      {cameraReady && microphoneReady ? "✓ Granted" : "Allow Access"}
+                    </Badge>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" onClick={quickPermissionProbe} variant="outline" className="border-gray-600 h-7 text-xs">Check Access</Button>
+                    {(isFeatureEnabled("face_recognition") || isFeatureEnabled("multi_face_detection")) && (
+                      <Button size="sm" onClick={preflightTestCameraSnapshot} variant="outline" className="border-gray-600 h-7 text-xs">Test Camera</Button>
+                    )}
+                    {isFeatureEnabled("audio_monitoring") && (
+                      preflightMicStreamRef.current
+                        ? <Button size="sm" onClick={stopPreflightMicTest} variant="outline" className="border-gray-600 h-7 text-xs">Stop Mic</Button>
+                        : <Button size="sm" onClick={startPreflightMicTest} variant="outline" className="border-gray-600 h-7 text-xs">Test Mic</Button>
+                    )}
+                  </div>
+                  {preflightMicLevel > 0 && (
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1">Mic Level</p>
+                      <div className="w-full h-1.5 bg-gray-700 rounded overflow-hidden">
+                        <div className="h-full bg-blue-500 transition-all" style={{ width: `${preflightMicLevel}%` }} />
+                      </div>
+                    </div>
                   )}
-                </div>
-              </div>
-
-              {/* Preflight Readiness */}
-              <div className="mt-4">
-                <div className="flex items-center justify-between text-xs text-gray-300 mb-1">
-                  <span>Readiness Score</span>
-                  <span>{readinessScore}%</span>
-                </div>
-                <div className="w-full h-2 bg-gray-800 rounded">
-                  <div
-                    className="h-full rounded bg-gradient-to-r from-yellow-400 via-green-500 to-emerald-500"
-                    style={{ width: `${readinessScore}%` }}
-                  />
-                </div>
-                <p className="mt-1 text-[11px] text-gray-400">
-                  Complete all checks and confirmations above for a 100% ready environment.
-                </p>
-              </div>
-
-              {/* Mic visualizer */}
-              <div className="mt-2">
-                <div className="text-xs text-gray-400 mb-1">Microphone Level</div>
-                <div className="w-full h-2 bg-gray-800 rounded">
-                  <div className="h-full bg-blue-500 rounded" style={{ width: `${preflightMicLevel}%` }} />
-                </div>
-              </div>
-              {testPreviewImage && (
-                <div className="rounded-lg overflow-hidden bg-black/40 border border-gray-700 p-2">
-                  <div className="text-xs text-gray-300 mb-1">Camera Test Preview</div>
-                  <img src={testPreviewImage} alt="Camera test preview" className="w-full max-h-48 object-contain rounded" />
+                  {testPreviewImage && (
+                    <img src={testPreviewImage} alt="Camera preview" className="w-full max-h-40 object-contain rounded border border-gray-700" />
+                  )}
                 </div>
               )}
 
               {isFeatureEnabled("screen_recording") && (
-                <div className="flex items-center justify-between">
-                  <span>Screen Capture Support</span>
-                  <div className="flex items-center gap-3">
-                    <Badge variant={screenRecording ? "default" : screenCaptureAvailable ? "default" : "destructive"}>
-                      {screenRecording ? "Recording" : screenCaptureAvailable ? "Available" : "Unavailable"}
-                    </Badge>
-                    <Button onClick={startScreenShare} variant="outline" className="border-gray-600">
-                      {screenRecording ? "Restart Screen Share" : "Start Screen Share"}
+                <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                  <span className="text-sm">Screen Recording</span>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={screenRecording ? "default" : "destructive"}>{screenRecording ? "✓ Recording" : "Required"}</Badge>
+                    <Button size="sm" onClick={startScreenShare} variant="outline" className="border-gray-600 h-7 text-xs">
+                      {screenRecording ? "Restart" : "Start Screen Share"}
                     </Button>
                   </div>
                 </div>
               )}
 
-              <div className="pt-2 text-sm text-gray-400">
-                By starting, you agree to remain in fullscreen, keep the assessment tab active,
-                and allow camera, microphone, and screen monitoring for the duration of the test.
+              <div className="p-3 bg-gray-800 rounded-lg">
+                <div className="flex justify-between text-xs text-gray-400 mb-1.5">
+                  <span>Environment Readiness</span><span>{readinessScore}%</span>
+                </div>
+                <div className="w-full h-2 bg-gray-700 rounded overflow-hidden">
+                  <div className="h-full rounded bg-gradient-to-r from-yellow-400 to-green-500 transition-all" style={{ width: `${readinessScore}%` }} />
+                </div>
               </div>
 
-              {/* Instructions */}
-              <div className="mt-3 p-3 rounded-md border border-gray-700 bg-black/20 text-sm text-gray-300 space-y-2">
-                <div className="font-medium text-white">Instructions</div>
-                <ul className="list-disc list-inside space-y-1">
+              <div className="p-3 bg-black/30 border border-gray-700 rounded-lg">
+                <p className="font-medium text-white text-sm mb-2">Active Security: {assessment?.securityFeatures?.length ?? 0} features</p>
+                <ul className="space-y-1 list-disc list-inside text-xs text-gray-300">
                   <li>Ensure you are alone in a quiet, well-lit room.</li>
-                  <li>Do not switch tabs, use other devices, or exit fullscreen.</li>
-                  { (isFeatureEnabled("face_recognition") || isFeatureEnabled("multi_face_detection")) && <li>Keep your face clearly visible to the camera at all times.</li> }
-                  { isFeatureEnabled("screen_recording") && <li>Allow screen recording for the duration of the test.</li> }
-                  <li>Any violations may pause or end your assessment.</li>
+                  {isFeatureEnabled("fullscreen_lock") && <li>Stay in full-screen throughout the test.</li>}
+                  {isFeatureEnabled("tab_detection") && <li>Do not switch tabs — violations will end your test.</li>}
+                  {(isFeatureEnabled("face_recognition") || isFeatureEnabled("multi_face_detection")) && <li>Keep your face clearly visible at all times.</li>}
+                  {isFeatureEnabled("audio_monitoring") && <li>Maintain a quiet environment — audio is monitored.</li>}
+                  {isFeatureEnabled("clipboard_block") && <li>Copy/paste is disabled.</li>}
+                  {isFeatureEnabled("right_click_block") && <li>Right-click and developer tools are blocked.</li>}
+                  {isFeatureEnabled("prevent_back_nav") && <li>You cannot return to previous questions.</li>}
+                  {isFeatureEnabled("watermark_overlay") && <li>Your identity is watermarked on all content.</li>}
+                  {isFeatureEnabled("periodic_snapshots") && <li>Random identity snapshots will be taken.</li>}
+                  <li>Any violations may pause or end your assessment immediately.</li>
                 </ul>
               </div>
 
-              {/* Explicit confirmations */}
-              <div className="mt-2 space-y-2 text-sm">
-                <label className="flex items-start gap-2">
-                  <input
-                    type="checkbox"
-                    className="mt-1 h-4 w-4"
-                    checked={agreeToProctoring}
-                    onChange={(e) => setAgreeToProctoring(e.target.checked)}
-                  />
-                  <span>I consent to AI proctoring features for this assessment.</span>
-                </label>
-                <label className="flex items-start gap-2">
-                  <input
-                    type="checkbox"
-                    className="mt-1 h-4 w-4"
-                    checked={quietEnvironmentConfirmed}
-                    onChange={(e) => setQuietEnvironmentConfirmed(e.target.checked)}
-                  />
-                  <span>I confirm I am in a quiet environment and will not switch tabs or exit fullscreen during the test.</span>
-                </label>
-                <label className="flex items-start gap-2">
-                  <input
-                    type="checkbox"
-                    className="mt-1 h-4 w-4"
-                    checked={readInstructionsConfirmed}
-                    onChange={(e) => setReadInstructionsConfirmed(e.target.checked)}
-                  />
-                  <span>I have read and understand the instructions above.</span>
-                </label>
+              <div className="space-y-2">
+                {[
+                  { state: agreeToProctoring, setter: setAgreeToProctoring, label: "I consent to AI proctoring for this assessment." },
+                  { state: quietEnvironmentConfirmed, setter: setQuietEnvironmentConfirmed, label: "I am in a quiet environment and will not switch tabs or exit fullscreen." },
+                  { state: readInstructionsConfirmed, setter: setReadInstructionsConfirmed, label: "I have read and understood the instructions above." },
+                ].map(({ state, setter, label }) => (
+                  <label key={label} className="flex items-start gap-2 cursor-pointer">
+                    <input type="checkbox" checked={state} onChange={e => setter(e.target.checked)} className="mt-0.5 h-4 w-4 rounded" />
+                    <span className="text-sm text-gray-300">{label}</span>
+                  </label>
+                ))}
               </div>
 
-              <div className="flex justify-end gap-3 pt-2">
-                <Button variant="outline" className="border-gray-600" onClick={detectCapabilities}>
-                  Re-check
-                </Button>
+              <div className="flex justify-end gap-3 pt-1">
+                <Button variant="outline" className="border-gray-600" onClick={detectCapabilities}>Re-check</Button>
                 <Button
                   onClick={startSecureMode}
                   disabled={!(
-                    fullscreenReady &&
+                    (!isFeatureEnabled("fullscreen_lock") || fullscreenReady) &&
                     (!(isFeatureEnabled("face_recognition") || isFeatureEnabled("multi_face_detection")) || cameraReady) &&
                     (!isFeatureEnabled("audio_monitoring") || microphoneReady) &&
                     (!isFeatureEnabled("screen_recording") || screenRecording) &&
-                    agreeToProctoring &&
-                    quietEnvironmentConfirmed &&
-                    readInstructionsConfirmed &&
-                    readinessScore >= 80
+                    agreeToProctoring && quietEnvironmentConfirmed && readInstructionsConfirmed
                   )}
                   className="bg-green-600 hover:bg-green-700"
                 >
                   Start Secure Test
                 </Button>
               </div>
-
             </CardContent>
           </Card>
         </div>
       )}
-      {/* Proctoring Header */}
-      {!canStart && (
-        <Card className="bg-yellow-50 border-yellow-200">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-yellow-800">Assessment Ready</h3>
-              <Badge className="bg-green-100 text-green-800">System Check Complete</Badge>
-            </div>
 
-            {/* Testing Controls */}
-            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <h4 className="font-medium text-blue-800 mb-3 flex items-center gap-2">
-                <Settings className="h-4 w-4" />
-                Testing Controls
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="test-mode"
-                    checked={testMode}
-                    onCheckedChange={setTestMode}
-                  />
-                  <Label htmlFor="test-mode" className="text-sm">
-                    Test Mode (Show Security Info)
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="bypass-security"
-                    checked={bypassSecurity}
-                    onCheckedChange={setBypassSecurity}
-                  />
-                  <Label htmlFor="bypass-security" className="text-sm text-orange-600">
-                    Bypass Security (Testing Only)
-                  </Label>
-                </div>
+      {/* ── Submit Confirmation Modal ── */}
+      {showSubmitModal && (
+        <div className="fixed inset-0 z-[70] bg-black/80 flex items-center justify-center p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-md space-y-4">
+            <h2 className="text-lg font-bold text-white">Submit Assessment?</h2>
+            <p className="text-sm text-gray-400">Once submitted, you cannot change your answers.</p>
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div className="bg-green-900/40 border border-green-700/40 rounded-xl p-3">
+                <div className="text-2xl font-bold text-green-400">{answeredCount}</div>
+                <div className="text-xs text-gray-400 mt-0.5">Answered</div>
+              </div>
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-3">
+                <div className="text-2xl font-bold text-gray-300">{questions.length - answeredCount}</div>
+                <div className="text-xs text-gray-400 mt-0.5">Unanswered</div>
+              </div>
+              <div className="bg-orange-900/40 border border-orange-700/40 rounded-xl p-3">
+                <div className="text-2xl font-bold text-orange-400">{markedForReview.length}</div>
+                <div className="text-xs text-gray-400 mt-0.5">For Review</div>
               </div>
             </div>
-
-            <div className="flex justify-center">
+            {(questions.length - answeredCount) > 0 && (
+              <div className="flex items-start gap-2 p-3 bg-yellow-900/20 border border-yellow-700/40 rounded-lg text-sm text-yellow-300">
+                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                <span>{questions.length - answeredCount} question(s) unanswered. Submit anyway?</span>
+              </div>
+            )}
+            <div className="flex gap-3 pt-1">
+              <Button variant="outline" className="flex-1 border-gray-600 text-white hover:bg-gray-800" onClick={() => setShowSubmitModal(false)}>
+                Continue Test
+              </Button>
               <Button
-                onClick={startAssessment}
-                className="bg-green-600 hover:bg-green-700"
-                disabled={!cameraReady || !microphoneReady}
+                className="flex-1 bg-green-600 hover:bg-green-700"
+                onClick={() => { setShowSubmitModal(false); handleSubmitAssessment(); }}
+                disabled={submitting}
               >
-                <Sparkles className="mr-2 h-4 w-4" />
-                Start Secure Test
+                {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Confirm Submit
               </Button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
-      <div className="pt-16 max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Proctoring Panel */}
-        <div className="lg:col-span-1 space-y-4">
-          {/* Hidden canvas - always in DOM for screenshot capture */}
-          <canvas ref={canvasRef} className="hidden" />
+      {/* ── Fixed Header (only during test) ── */}
+      {secureReady && (
+        <header className="fixed top-0 left-0 right-0 z-40 h-14 bg-gray-900 border-b border-gray-700 flex items-center px-4 gap-3 shadow-lg">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <Shield className="h-4 w-4 text-green-500 shrink-0" />
+            <span className="font-semibold text-sm truncate">{assessment?.title}</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-gray-400 shrink-0">
+            <span className="text-green-400 font-semibold">{answeredCount}</span>
+            <span>/</span>
+            <span>{questions.length}</span>
+            <span className="text-gray-600 ml-1">answered</span>
+          </div>
+          {timerPaused && <Badge variant="destructive" className="text-xs shrink-0">⏸ Paused</Badge>}
+          <div className={`font-mono text-base font-bold px-3 py-1 rounded-lg shrink-0 ${timerColor}`}>
+            {formatTime(timeLeft)}
+          </div>
+          <Button
+            size="sm"
+            onClick={() => setShowSubmitModal(true)}
+            disabled={submitting}
+            className="bg-green-600 hover:bg-green-700 shrink-0 h-8 text-xs gap-1.5"
+          >
+            {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5" />}
+            Submit Test
+          </Button>
+        </header>
+      )}
 
-          {/* Camera Feed - only shown if camera features enabled */}
-          {(isFeatureEnabled("face_recognition") || isFeatureEnabled("multi_face_detection")) && (
-            <Card className="bg-gray-900 border-gray-700">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Shield className="h-4 w-4 text-green-500" />
-                  AI Monitoring ({assessment?.securityFeatures?.length ?? 0}/{assessment?.securityFeatures?.length ?? 0} Active)
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="relative">
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    muted
-                    className="w-full h-32 bg-gray-800 rounded-lg object-cover"
-                  />
-                  <div className="absolute top-2 right-2">
-                    {faceDetected ? (
-                      <CheckCircle className="h-5 w-5 text-green-500" />
-                    ) : (
-                      <XCircle className="h-5 w-5 text-red-500" />
-                    )}
-                  </div>
-                  {isFeatureEnabled("screen_recording") && (
-                    <div className="absolute bottom-2 left-2 text-xs bg-black/50 px-2 py-1 rounded">
-                      {screenRecording ? "● Recording" : "○ Not Recording"}
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+      {/* ── Body: Sidebar + Main ── */}
+      <div className={`flex ${secureReady ? "pt-14" : ""} min-h-screen`}>
 
+        {/* Left Sidebar */}
+        {secureReady && (
+          <aside className="fixed left-0 top-14 bottom-0 w-60 bg-gray-900 border-r border-gray-700 overflow-y-auto flex flex-col z-30">
 
-          {/* Security Status - dynamically lists only enabled features */}
-          <Card className="bg-gray-900 border-gray-700">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm flex items-center gap-2">
-                Security Status
-                <Badge className={`ml-2 ${getSecurityScoreColor(securityScore)}`}>
-                  {securityScore}%
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2 text-xs">
-                {(() => {
-                  const allFeatures = [
-                    {
-                      id: "face_recognition",
-                      label: "Face Recognition",
-                      active: faceDetected,
-                    },
-                    {
-                      id: "multi_face_detection",
-                      label: "Multi-Face Detection",
-                      active: proctoringActive,
-                    },
-                    {
-                      id: "audio_monitoring",
-                      label: "Audio Monitor",
-                      active: proctoringActive,
-                    },
-                    {
-                      id: "screen_recording",
-                      label: "Screen Recording",
-                      active: screenRecording,
-                    },
-                    {
-                      id: "tab_detection",
-                      label: "Tab Detection",
-                      active: proctoringActive,
-                    },
-                    {
-                      id: "clipboard_block",
-                      label: "Copy/Paste Block",
-                      active: secureReady,
-                    },
-                    {
-                      id: "keystroke_analysis",
-                      label: "Keystroke Analysis",
-                      active: proctoringActive,
-                    },
-                    {
-                      id: "environment_scan",
-                      label: "Environment Scan",
-                      active: environmentScanActive || roomScanDone,
-                    },
-                  ];
-                  const enabledFeatures = allFeatures.filter(f => isFeatureEnabled(f.id));
-                  if (enabledFeatures.length === 0) {
-                    return <div className="text-gray-500">No security features configured.</div>;
-                  }
-                  return enabledFeatures.map((f, i) => (
-                    <div key={f.id} className="flex justify-between">
-                      <span>{i + 1}. {f.label}:</span>
-                      <span className={f.active ? "text-green-400" : "text-yellow-400"}>
-                        {f.active ? "✓ Active" : "○ Ready"}
-                      </span>
-                    </div>
-                  ));
-                })()}
+            {/* Question Palette */}
+            <div className="p-3 border-b border-gray-700">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-500 mb-2">Question Palette</p>
+              <div className="grid grid-cols-5 gap-1.5">
+                {questions.map((q, idx) => {
+                  const qId = q.questionId || q._id || "";
+                  const isAnswered = !!(answers[qId] && answers[qId].trim());
+                  const isMarked = markedForReview.includes(qId);
+                  const isCurrent = idx === currentQuestionIndex;
+                  return (
+                    <button
+                      key={idx}
+                      title={`Q${idx + 1}${isAnswered ? " ✓" : ""}${isMarked ? " 🔖" : ""}`}
+                      onClick={() => {
+                        if (isFeatureEnabled("prevent_back_nav") && idx < currentQuestionIndex) return;
+                        setCurrentQuestionIndex(idx);
+                      }}
+                      className={`w-full aspect-square text-xs font-bold rounded transition-all border ${
+                        isCurrent
+                          ? "border-blue-500 bg-blue-600 text-white shadow shadow-blue-500/30"
+                          : isMarked
+                          ? "border-orange-500 bg-orange-600 text-white"
+                          : isAnswered
+                          ? "border-green-600 bg-green-700 text-white"
+                          : "border-gray-600 bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white"
+                      }`}
+                    >
+                      {idx + 1}
+                    </button>
+                  );
+                })}
               </div>
-            </CardContent>
-          </Card>
+            </div>
 
-          {/* Recent Alerts */}
-          <Card className="bg-gray-900 border-gray-700">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">
-                Recent Alerts ({alerts.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2 max-h-40 overflow-y-auto">
-                {alerts.slice(-5).map((alert) => (
-                  <div
-                    key={alert.id}
-                    className={`p-2 rounded-lg border text-xs ${getAlertColor(
-                      alert.severity
-                    )}`}
-                  >
-                    <div className="flex items-center gap-2">
-                      {getAlertIcon(alert.type)}
-                      <span className="font-medium">{alert.message}</span>
-                    </div>
-                    <div className="text-xs opacity-75 mt-1">
-                      {alert.timestamp.toLocaleTimeString()}
-                    </div>
+            {/* Legend */}
+            <div className="px-3 py-2 border-b border-gray-700">
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                {[
+                  { color: "bg-blue-600", label: "Current" },
+                  { color: "bg-green-700", label: "Answered" },
+                  { color: "bg-orange-600", label: "For Review" },
+                  { color: "bg-gray-800 border border-gray-600", label: "Not Visited" },
+                ].map(l => (
+                  <div key={l.label} className="flex items-center gap-1.5 text-[10px] text-gray-400">
+                    <div className={`w-2.5 h-2.5 rounded shrink-0 ${l.color}`} />
+                    {l.label}
                   </div>
                 ))}
-                {alerts.length === 0 && (
-                  <p className="text-gray-400 text-xs">
-                    No alerts - All systems normal
-                  </p>
-                )}
               </div>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
 
-        {/* Assessment Content */}
-        <div className="lg:col-span-3">
-          {/* Question Display */}
-          {currentQuestion && (
-            <QuestionDisplay
-              question={{
-                ...currentQuestion,
-                difficulty: currentQuestion.difficulty || "Medium",
-                tags: currentQuestion.tags || [],
-                hint: currentQuestion.hint || "",
-                examples: currentQuestion.examples || [],
-                testCases: currentQuestion.testCases || []
-              }}
-              questionNumber={currentQuestionIndex + 1}
-              totalQuestions={questions.length}
-              showMetadata={true}
-            />
+            {/* Stats */}
+            <div className="grid grid-cols-2 gap-2 p-3 border-b border-gray-700">
+              {[
+                { val: answeredCount, label: "Answered", cls: "text-green-400" },
+                { val: questions.length - answeredCount, label: "Remaining", cls: "text-gray-300" },
+                { val: markedForReview.length, label: "For Review", cls: "text-orange-400" },
+                { val: questions.length, label: "Total", cls: "text-blue-400" },
+              ].map(s => (
+                <div key={s.label} className="bg-gray-800 rounded-lg p-2 text-center">
+                  <div className={`text-lg font-bold ${s.cls}`}>{s.val}</div>
+                  <div className="text-[10px] text-gray-500">{s.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Camera Feed */}
+            {(!environmentScanActive || roomScanDone) && (isFeatureEnabled("face_recognition") || isFeatureEnabled("multi_face_detection")) && (
+              <div className="p-2 border-b border-gray-700">
+                <div className="relative rounded overflow-hidden bg-black aspect-video">
+                  <video ref={videoRef} autoPlay muted className="w-full h-full object-cover" />
+                  <div className="absolute top-1.5 right-1.5">
+                    {faceDetected
+                      ? <CheckCircle className="h-4 w-4 text-green-500 drop-shadow" />
+                      : <XCircle className="h-4 w-4 text-red-500 drop-shadow" />}
+                  </div>
+                  <div className="absolute bottom-1 left-1 text-[9px] bg-black/60 px-1.5 py-0.5 rounded text-gray-300">
+                    {proctoringActive ? "● Live" : "○ Off"}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Security Score */}
+            <div className="p-3 border-b border-gray-700">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[11px] text-gray-400 font-medium">Security Score</span>
+                <span className={`text-xs font-bold ${getSecurityScoreColor(securityScore)}`}>{securityScore}%</span>
+              </div>
+              <div className="w-full h-1.5 bg-gray-800 rounded overflow-hidden">
+                <div
+                  className={`h-full rounded transition-all ${securityScore >= 80 ? "bg-green-500" : securityScore >= 60 ? "bg-yellow-500" : "bg-red-500"}`}
+                  style={{ width: `${securityScore}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Alerts */}
+            <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+              <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-widest px-1">Alerts ({alerts.length})</p>
+              {alerts.slice(-6).map(alert => (
+                <div key={alert.id} className={`p-2 rounded border text-xs ${getAlertColor(alert.severity)}`}>
+                  <div className="flex items-center gap-1.5">
+                    {getAlertIcon(alert.type)}
+                    <span className="line-clamp-2">{alert.message}</span>
+                  </div>
+                </div>
+              ))}
+              {alerts.length === 0 && <p className="text-xs text-gray-600 text-center py-2">All systems normal</p>}
+            </div>
+          </aside>
+        )}
+
+        {/* Main Content */}
+        <main className={`flex-1 ${secureReady ? "ml-60" : ""} p-5 min-h-screen`}>
+          {/* Hidden canvas for proctoring */}
+          <canvas ref={canvasRef} className="hidden" />
+
+          {/* Security blocked overlay */}
+          {blockActions && (
+            <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center">
+              <div className="bg-gray-900 border border-red-700 rounded-xl p-8 text-center max-w-sm space-y-4">
+                <AlertTriangle className="h-12 w-12 text-red-500 mx-auto" />
+                <h2 className="text-lg font-bold text-red-400">Assessment Paused</h2>
+                <p className="text-sm text-gray-400">Security requirement not met. Please restore fullscreen / screen share to continue.</p>
+                <Button onClick={resumeSecurity} className="bg-blue-600 hover:bg-blue-700">Resume</Button>
+              </div>
+            </div>
           )}
 
-          {/* Answer Input */}
-          <Card className="bg-gray-900 border-gray-700 mt-4">
-            <CardContent className="space-y-6">
-              {currentQuestion && (
-                <div className="space-y-4">
-                  {currentQuestion.type === "multiple_choice" &&
-                    currentQuestion.options && (
-                      <RadioGroup
-                        value={answers[currentQuestion.questionId || currentQuestion._id || ""] || ""}
-                        onValueChange={(value) =>
-                          handleAnswerChange(currentQuestion.questionId || currentQuestion._id || "", value)
-                        }
-                      >
-                        {currentQuestion.options.map((option, index) => (
-                          <div
-                            key={index}
-                            className="flex items-center space-x-2"
-                          >
-                            <RadioGroupItem
-                              value={option}
-                              id={`option-${index}`}
-                            />
-                            <Label
-                              htmlFor={`option-${index}`}
-                              className="text-white cursor-pointer hover:text-gray-200"
-                            >
-                              {option}
-                            </Label>
-                          </div>
-                        ))}
-                      </RadioGroup>
-                    )}
-
-                  {currentQuestion.type === "short_answer" && (
-                    <Textarea
-                      value={answers[currentQuestion.questionId || currentQuestion._id || ""] || ""}
-                      onChange={(e) => handleAnswerChange(currentQuestion.questionId || currentQuestion._id || "", e.target.value)}
-                      placeholder="Type your answer here..."
-                      className="bg-gray-800 border-gray-600 text-white placeholder-gray-400"
-                      rows={4}
-                    />
-                  )}
-
-                  {currentQuestion.type === "code_snippet" && (
-                    <CodeEditor
-                      value={answers[currentQuestion.questionId || currentQuestion._id || ""] || ""}
-                      onChange={(value) => handleAnswerChange(currentQuestion.questionId || currentQuestion._id || "", value)}
-                      language={selectedLanguage}
-                      height="400px"
-                      testCases={currentQuestion.testCases || []}
-                      onRunCode={runCode}
-                      readOnly={false}
-                      showTestCases={true}
-                      theme="vs-dark"
-                    />
-                  )}
-
-                  {currentQuestion.type === "video_response" && (
-                    <div className="bg-gray-800 border border-gray-600 rounded-lg p-4">
-                      <p className="text-gray-400 mb-4">
-                        Record your video response (max 3 minutes)
-                      </p>
-                      <Button className="bg-red-600 hover:bg-red-700">
-                        <Camera className="h-4 w-4 mr-2" />
-                        Start Recording
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Navigation */}
-              <div className="flex justify-between items-center pt-6 border-t border-gray-700">
-                <Button
-                  variant="outline"
-                  onClick={handlePreviousQuestion}
-                  disabled={currentQuestionIndex === 0}
-                  className="border-gray-600 text-white hover:bg-gray-800 bg-transparent"
-                >
-                  Previous
-                </Button>
-
-                <div className="text-sm text-gray-400 flex items-center gap-2">
-                  <span>
-                    {currentQuestionIndex + 1} / {questions.length}
-                  </span>
-                  {!isFullscreen || !screenRecording || blockActions ? (
-                    <Badge variant="destructive">Timer Paused</Badge>
-                  ) : null}
-                </div>
-
-                {currentQuestionIndex === questions.length - 1 ? (
-                  <Button
-                    onClick={() => handleSubmitAssessment()}
-                    disabled={submitting || blockActions || !isFullscreen || !screenRecording}
-                    className="bg-green-600 hover:bg-green-700"
-                  >
-                    {submitting && (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    )}
-                    Submit Assessment
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={handleNextQuestion}
-                    disabled={blockActions || !isFullscreen || !screenRecording}
-                    className="bg-blue-600 hover:bg-blue-700"
-                  >
-                    Next
-                  </Button>
-                )}
+          {/* Progress bar */}
+          {secureReady && questions.length > 0 && (
+            <div className="mb-5">
+              <div className="flex justify-between text-xs text-gray-400 mb-1">
+                <span>Progress</span>
+                <span>{Math.round((answeredCount / questions.length) * 100)}%</span>
               </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-      {/* Floating FaceProctor widget */}
-      <FaceProctor
-        assessmentId={assessmentId}
-        candidateId={"candidate"}
-        minFaceSizeRatio={0.18}
-        maxFaces={1}
-        movementThreshold={24}
-        checkIntervalMs={1000}
-        evidence
-        enableAudioMonitoring
-        blockClipboard
-        maxWarningsBeforePause={3}
-      />
+              <div className="w-full h-1.5 bg-gray-800 rounded overflow-hidden">
+                <div
+                  className="h-full bg-blue-500 rounded transition-all"
+                  style={{ width: `${(answeredCount / Math.max(1, questions.length)) * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
 
-      {/* rollback: no watermark overlay */}
-  </div>
+          {/* Question Card */}
+          {currentQuestion && (
+            <div className="bg-gray-900 border border-gray-700 rounded-xl overflow-hidden">
+
+              {/* Question Header */}
+              <div className="flex items-center justify-between px-5 py-3 border-b border-gray-700 bg-gray-800/60">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-sm font-bold text-white shrink-0">
+                    {currentQuestionIndex + 1}
+                  </div>
+                  <span className="text-xs text-gray-400">of {questions.length}</span>
+                  {currentQuestion.difficulty && (
+                    <Badge className={
+                      currentQuestion.difficulty === "Easy" ? "bg-green-800 text-green-200 text-xs" :
+                      currentQuestion.difficulty === "Hard" ? "bg-red-800 text-red-200 text-xs" :
+                      "bg-yellow-800 text-yellow-200 text-xs"
+                    }>
+                      {currentQuestion.difficulty}
+                    </Badge>
+                  )}
+                  <Badge variant="outline" className="border-gray-600 text-gray-400 text-xs capitalize">
+                    {currentQuestion.type.replace(/_/g, " ")}
+                  </Badge>
+                  <span className="text-xs text-gray-500">{currentQuestion.points} pts</span>
+                </div>
+                <button
+                  onClick={() => toggleMarkForReview(currentQId)}
+                  className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border transition-all shrink-0 ${
+                    markedForReview.includes(currentQId)
+                      ? "bg-orange-600 border-orange-500 text-white"
+                      : "border-gray-600 text-gray-400 hover:border-orange-500 hover:text-orange-300"
+                  }`}
+                >
+                  🔖 {markedForReview.includes(currentQId) ? "Marked" : "Mark for Review"}
+                </button>
+              </div>
+
+              <div className="p-5 space-y-5">
+                {/* Question Text */}
+                <div className="text-white text-base leading-relaxed whitespace-pre-wrap">
+                  {currentQuestion.questionText}
+                </div>
+
+                {/* Examples */}
+                {currentQuestion.examples && currentQuestion.examples.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-500">Examples</p>
+                    {currentQuestion.examples.map((ex, i) => (
+                      <div key={i} className="bg-gray-800 rounded-lg p-3 text-sm font-mono space-y-1">
+                        <div><span className="text-gray-500">Input: </span><span className="text-green-300">{ex.input}</span></div>
+                        <div><span className="text-gray-500">Output: </span><span className="text-blue-300">{ex.output}</span></div>
+                        {ex.explanation && <div className="text-gray-400 text-xs">{ex.explanation}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* MCQ - large clickable cards */}
+                {currentQuestion.type === "multiple_choice" && currentQuestion.options && (
+                  <div className="space-y-2">
+                    {currentQuestion.options.map((option, index) => {
+                      const isSelected = answers[currentQId] === option;
+                      return (
+                        <button
+                          key={index}
+                          onClick={() => handleAnswerChange(currentQId, option)}
+                          className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all ${
+                            isSelected
+                              ? "border-blue-500 bg-blue-900/25 text-white"
+                              : "border-gray-700 bg-gray-800/40 text-gray-300 hover:border-gray-500 hover:bg-gray-800"
+                          }`}
+                        >
+                          <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-bold shrink-0 transition-all ${
+                            isSelected ? "border-blue-500 bg-blue-500 text-white" : "border-gray-500 text-gray-400"
+                          }`}>
+                            {String.fromCharCode(65 + index)}
+                          </div>
+                          <span className="text-sm flex-1">{option}</span>
+                          {isSelected && <CheckCircle className="h-4 w-4 text-blue-400 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Short Answer */}
+                {currentQuestion.type === "short_answer" && (
+                  <Textarea
+                    value={answers[currentQId] || ""}
+                    onChange={e => handleAnswerChange(currentQId, e.target.value)}
+                    placeholder="Type your answer here..."
+                    className="bg-gray-800 border-gray-600 text-white placeholder-gray-500 min-h-[130px] resize-y"
+                    rows={5}
+                  />
+                )}
+
+                {/* Code */}
+                {currentQuestion.type === "code_snippet" && (
+                  <CodeEditor
+                    value={answers[currentQId] || ""}
+                    onChange={value => handleAnswerChange(currentQId, value)}
+                    language={selectedLanguage}
+                    height="420px"
+                    testCases={currentQuestion.testCases || []}
+                    onRunCode={runCode}
+                    readOnly={false}
+                    showTestCases={true}
+                    theme="vs-dark"
+                  />
+                )}
+
+                {/* Video */}
+                {currentQuestion.type === "video_response" && (
+                  <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
+                    <p className="text-gray-400 mb-3">Record your video response (max 3 minutes)</p>
+                    <Button className="bg-red-600 hover:bg-red-700">
+                      <Camera className="h-4 w-4 mr-2" />Start Recording
+                    </Button>
+                  </div>
+                )}
+
+                {/* Hint */}
+                {currentQuestion.hint && (
+                  <details>
+                    <summary className="text-xs text-yellow-400/80 cursor-pointer flex items-center gap-1.5 select-none list-none hover:text-yellow-300 transition-colors w-fit">
+                      <span>💡</span> Show Hint
+                    </summary>
+                    <div className="mt-2 p-3 bg-yellow-900/15 border border-yellow-700/30 rounded-lg text-xs text-yellow-200/90 leading-relaxed">
+                      {currentQuestion.hint}
+                    </div>
+                  </details>
+                )}
+
+                {/* Navigation */}
+                <div className="flex items-center justify-between pt-4 border-t border-gray-700">
+                  {!isFeatureEnabled("prevent_back_nav") ? (
+                    <Button
+                      variant="outline"
+                      onClick={handlePreviousQuestion}
+                      disabled={currentQuestionIndex === 0}
+                      className="border-gray-600 text-white hover:bg-gray-800 bg-transparent"
+                    >
+                      ← Previous
+                    </Button>
+                  ) : <div />}
+
+                  <Button
+                    variant="ghost"
+                    onClick={() => clearAnswer(currentQId)}
+                    disabled={!answers[currentQId]}
+                    className="text-gray-500 hover:text-gray-300 text-xs"
+                  >
+                    Clear Response
+                  </Button>
+
+                  {currentQuestionIndex === questions.length - 1 ? (
+                    <Button
+                      onClick={() => setShowSubmitModal(true)}
+                      disabled={submitting || (isFeatureEnabled("fullscreen_lock") && !isFullscreen) || (isFeatureEnabled("screen_recording") && !screenRecording)}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      Submit Test
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={handleNextQuestion}
+                      disabled={(isFeatureEnabled("fullscreen_lock") && !isFullscreen) || (isFeatureEnabled("screen_recording") && !screenRecording)}
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      Next →
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* FaceProctor widget */}
+      {(isFeatureEnabled("face_recognition") || isFeatureEnabled("multi_face_detection")) && (
+        <FaceProctor
+          assessmentId={assessmentId}
+          candidateId={"candidate"}
+          minFaceSizeRatio={0.18}
+          maxFaces={1}
+          movementThreshold={24}
+          checkIntervalMs={1000}
+          evidence={isFeatureEnabled("face_recognition")}
+          enableAudioMonitoring={isFeatureEnabled("audio_monitoring")}
+          blockClipboard={isFeatureEnabled("clipboard_block")}
+          maxWarningsBeforePause={3}
+        />
+      )}
+
+      {/* Watermark overlay */}
+      {secureReady && isFeatureEnabled("watermark_overlay") && assessment && (
+        <div className="fixed inset-0 z-[5] pointer-events-none select-none overflow-hidden">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <div
+              key={i}
+              className="absolute font-medium rotate-[-30deg] whitespace-nowrap"
+              style={{
+                top: `${(i * 11) % 100}%`,
+                left: `${i % 2 === 0 ? -5 : 35}%`,
+                fontSize: "0.65rem",
+                color: "rgba(255,255,255,0.07)",
+              }}
+            >
+              {assessment.title} • CONFIDENTIAL • HireAI
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

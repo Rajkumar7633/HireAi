@@ -4,7 +4,7 @@ export interface IUser extends Document {
   name: string
   email: string
   passwordHash: string
-  role: "job_seeker" | "recruiter" | "admin"
+  role: "job_seeker" | "recruiter" | "admin" | "college" | "college_admin"
   phone?: string
   address?: string
   profileImage?: string
@@ -18,7 +18,6 @@ export interface IUser extends Document {
   businessLocation?: string
   isProfileComplete?: boolean
   lastManualUpdate?: string
-  // Talent Pool scoring fields
   // Candidate profile fields
   skills?: string[]
   yearsOfExperience?: number
@@ -53,6 +52,48 @@ export interface IUser extends Document {
     firstJob?: boolean
     inviteTeam?: boolean
   }
+  // Billing
+  stripeCustomerId?: string
+  subscription?: {
+    productId?: string
+    priceId?: string
+    status?: string
+    currentPeriodEnd?: Date
+  }
+  features?: Record<string, boolean>
+  limits?: Record<string, number>
+  // College-specific
+  collegeName?: string
+  collegeLocation?: string
+  collegeWebsite?: string
+  collegeCode?: string
+  city?: string
+  state?: string
+  country?: string
+  zipCode?: string
+  description?: string
+  establishedYear?: string
+  accreditation?: string
+  collegeType?: string
+  studentCapacity?: string
+  placementCellHead?: string
+  placementCellEmail?: string
+  placementCellPhone?: string
+  departments?: Array<{ name: string; branches: string[] }>
+  totalStudents?: number
+  placementRate?: number
+  // Student-specific (set when onboarded by a college)
+  onboardedByCollege?: string
+  department?: string
+  batch?: string
+  cgpa?: number
+  placementStatus?: "unplaced" | "placed" | "offer_received"
+  placedAt?: Date
+  companyPlacedAt?: string
+  packageLPA?: number
+  marks10th?: number
+  marks12th?: number
+  backlogs?: number
 }
 
 const UserSchema = new Schema<IUser>(
@@ -75,7 +116,7 @@ const UserSchema = new Schema<IUser>(
     },
     role: {
       type: String,
-      enum: ["job_seeker", "recruiter", "admin"],
+      enum: ["job_seeker", "recruiter", "admin", "college", "college_admin"],
       required: true,
     },
     phone: String,
@@ -140,6 +181,59 @@ const UserSchema = new Schema<IUser>(
       firstJob: { type: Boolean, default: false },
       inviteTeam: { type: Boolean, default: false },
     },
+    // Billing
+    stripeCustomerId: { type: String, index: true, sparse: true },
+    subscription: {
+      productId: String,
+      priceId: String,
+      status: String,
+      currentPeriodEnd: Date,
+    },
+    features: { type: Map, of: Boolean, default: {} },
+    limits: { type: Map, of: Number, default: {} },
+    // College-specific
+    collegeName: String,
+    collegeLocation: String,
+    collegeWebsite: String,
+    collegeCode: String,
+    city: String,
+    state: String,
+    country: String,
+    zipCode: String,
+    description: String,
+    establishedYear: String,
+    accreditation: String,
+    collegeType: { type: String, default: "Engineering" },
+    studentCapacity: String,
+    placementCellHead: String,
+    placementCellEmail: String,
+    placementCellPhone: String,
+    departments: {
+      type: [
+        new Schema(
+          {
+            name: { type: String, required: true },
+            branches: { type: [String], default: [] },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
+    totalStudents: { type: Number, default: 0 },
+    placementRate: { type: Number, default: 0 },
+    // Student placement fields
+    onboardedByCollege: { type: Schema.Types.ObjectId, ref: "User", index: true, sparse: true },
+    department: String,
+    batch: String,
+    cgpa: Number,
+    placementStatus: { type: String, enum: ["unplaced", "placed", "offer_received"], default: "unplaced" },
+    placedAt: Date,
+    companyPlacedAt: String,
+    packageLPA: Number,
+    marks10th: Number,
+    marks12th: Number,
+    backlogs: { type: Number, default: 0 },
   },
   {
     timestamps: true,

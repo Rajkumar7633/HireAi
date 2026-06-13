@@ -2,7 +2,7 @@
 import React, { useEffect, useRef } from "react";
 import * as THREE from "three";
 
-export default function Hero3DPure({ brandColor, offsetX = -0.6, modelUrl, modelScale = 1.2, modelRotationY = 0, modelY = 0, useCoder = false, useStudents = false }: { brandColor?: string; offsetX?: number; modelUrl?: string; modelScale?: number; modelRotationY?: number; modelY?: number; useCoder?: boolean; useStudents?: boolean }) {
+function Hero3DPure({ brandColor, offsetX = -0.6, modelUrl, modelScale = 1.2, modelRotationY = 0, modelY = 0, useCoder = false, useStudents = false }: { brandColor?: string; offsetX?: number; modelUrl?: string; modelScale?: number; modelRotationY?: number; modelY?: number; useCoder?: boolean; useStudents?: boolean }) {
   const mountRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -319,3 +319,5 @@ export default function Hero3DPure({ brandColor, offsetX = -0.6, modelUrl, model
 
   return <div ref={mountRef} className="w-full h-full" />;
 }
+
+export default React.memo(Hero3DPure);

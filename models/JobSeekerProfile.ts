@@ -61,6 +61,11 @@ export interface IJobSeekerProfile extends Document {
   skillsVerified: number
   lastUpdated: Date
 
+  // Social Features
+  openToWork?: boolean
+  skillEndorsements?: Array<{ skill: string; endorsedBy: string[] }>
+  featuredPostId?: string
+
   // ATS persistence
   lastAtsAnalysis?: any
   lastResumeFileName?: string
@@ -239,6 +244,14 @@ const JobSeekerProfileSchema = new Schema<IJobSeekerProfile>(
       type: Date,
       default: Date.now,
     },
+    // Social Features
+    openToWork: { type: Boolean, default: false },
+    skillEndorsements: {
+      type: [new Schema({ skill: { type: String, trim: true }, endorsedBy: { type: [String], default: [] } }, { _id: false })],
+      default: [],
+    },
+    featuredPostId: { type: String, default: "" },
+
     // ATS persistence
     lastAtsAnalysis: { type: Schema.Types.Mixed, default: undefined },
     lastResumeFileName: { type: String, trim: true },

@@ -14,6 +14,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Loader2, Eye, EyeOff, Mail, Lock, User as UserIcon, CheckCircle2, XCircle, Info } from "lucide-react"
 
+const Hero3D = dynamic(() => import("@/components/Hero3DPure"), { ssr: false })
+
 export default function SignupPage() {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
@@ -33,8 +35,6 @@ export default function SignupPage() {
   // Brand color for background accents
   const brandColor = process.env.NEXT_PUBLIC_BRAND_COLOR || "#6d28d9"
 
-  // 3D background (students avatars) + particles
-  const Hero3D = dynamic(() => import("@/components/Hero3DPure"), { ssr: false })
   const useStudents = (process.env.NEXT_PUBLIC_SIGNUP_3D_USE_STUDENTS === '1' || process.env.NEXT_PUBLIC_SIGNUP_3D_USE_STUDENTS === 'true' || true)
 
   useEffect(() => {

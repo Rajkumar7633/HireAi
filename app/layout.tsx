@@ -8,8 +8,22 @@ import { Toaster } from "../components/ui/toaster";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "HireAI - AI-Powered Recruitment Platform",
-  description: "Connect job seekers with recruiters using AI-powered matching",
+  title: "HireAI — AI Recruitment & Campus Placement Platform",
+  description:
+    "Connect job seekers, recruiters, and colleges with AI matching, coding tests, campus drives, interview coaching, and placement analytics.",
+  keywords: [
+    "AI recruitment",
+    "campus placement",
+    "coding assessments",
+    "hire talent",
+    "job matching",
+    "college placement cell",
+  ],
+  openGraph: {
+    title: "HireAI — AI Recruitment & Campus Placement",
+    description: "One platform for hiring, assessments, and campus drives.",
+    type: "website",
+  },
 };
 
 export default function RootLayout({

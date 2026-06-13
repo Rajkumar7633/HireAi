@@ -4,6 +4,29 @@ const auth = require("../middleware/auth")
 const BackgroundVerification = require("../models/BackgroundVerification")
 const JobApplication = require("../models/JobApplication")
 
+// @route   GET /api/background-verification
+// @desc    List all background verifications for the authenticated recruiter / candidate
+// @access  Private
+router.get("/", auth, async (req, res) => {
+  try {
+    const query =
+      req.user.role === "recruiter" || req.user.role === "admin"
+        ? { recruiterId: req.user.id }
+        : { candidateId: req.user.id }
+
+    const verifications = await BackgroundVerification.find(query)
+      .populate("candidateId", "name email")
+      .populate("applicationId", "jobTitle")
+      .sort({ createdAt: -1 })
+      .limit(50)
+
+    res.json({ success: true, verifications })
+  } catch (error) {
+    console.error("List verifications error:", error)
+    res.status(500).json({ msg: "Server error", error: error.message })
+  }
+})
+
 // @route   POST /api/background-verification/initiate
 // @desc    Initiate background verification for a candidate
 // @access  Private (Recruiter)

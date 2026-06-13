@@ -17,5 +17,12 @@ import "./Test"
 import "./User"
 import "./VideoInterview"
 import "./VideoRoom"
+import "./CampusDrive"
+import "./CampusDriveApplication"
+import "./SupportRequest"
+import "./CollegePlacement"
+import "./CollegePartnership"
+import "./CollegeInterview"
+import "./CampusDriveInvite"
 
 // No exports; presence of this module ensures side-effect imports register models with mongoose.

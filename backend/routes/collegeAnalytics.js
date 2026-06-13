@@ -9,7 +9,7 @@ const { cacheMiddleware } = require("../middleware/cache");
 // GET /api/college/analytics - Get comprehensive placement analytics
 router.get("/analytics", auth, cacheMiddleware('college:analytics', 300), async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -174,7 +174,7 @@ router.get("/analytics", auth, cacheMiddleware('college:analytics', 300), async 
 // GET /api/college/analytics/export - Export analytics report
 router.get("/analytics/export", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 

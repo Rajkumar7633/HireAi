@@ -8,12 +8,15 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2, Building2, MapPin, Phone, Mail, Globe, Save, CheckCircle, Plus, X, GraduationCap } from "lucide-react"
+import { Loader2, Building2, Save, CheckCircle, Plus, X, GraduationCap, AlertCircle } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 
 export default function CollegeProfilePage() {
+  const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [error, setError] = useState("")
   const [profile, setProfile] = useState({
     name: "",
     code: "",
@@ -74,34 +77,99 @@ export default function CollegeProfilePage() {
 
   const fetchProfile = async () => {
     setLoading(true)
+    setError("")
     try {
-      const response = await fetch("/api/college/profile")
+      const response = await fetch("/api/college/profile", { credentials: "include", cache: "no-store" })
       const data = await response.json()
-      if (data.profile) {
-        setProfile(data.profile)
+      if (!response.ok) {
+        setError(data.error || "Failed to load profile")
+        return
       }
-    } catch (error) {
-      console.error("Failed to fetch profile:", error)
+      if (data.profile) {
+        setProfile({
+          name: data.profile.name || "",
+          code: data.profile.code || "",
+          address: data.profile.address || "",
+          city: data.profile.city || "",
+          state: data.profile.state || "",
+          country: data.profile.country || "",
+          zipCode: data.profile.zipCode || "",
+          phone: data.profile.phone || "",
+          email: data.profile.email || "",
+          website: data.profile.website || "",
+          description: data.profile.description || "",
+          establishedYear: data.profile.establishedYear || "",
+          accreditation: data.profile.accreditation || "",
+          type: data.profile.type || "Engineering",
+          studentCapacity: data.profile.studentCapacity || "",
+          placementCellHead: data.profile.placementCellHead || "",
+          placementCellEmail: data.profile.placementCellEmail || "",
+          placementCellPhone: data.profile.placementCellPhone || "",
+          departments: data.profile.departments || [],
+        })
+      }
+    } catch (err) {
+      console.error("Failed to fetch profile:", err)
+      setError("Failed to load profile. Please refresh and try again.")
     } finally {
       setLoading(false)
     }
   }
 
   const handleSave = async () => {
+    if (!profile.name.trim() || !profile.code.trim()) {
+      setError("College name and code are required.")
+      toast({ title: "Missing required fields", description: "Please fill in college name and code.", variant: "destructive" })
+      return
+    }
+
     setSaving(true)
     setSuccess(false)
+    setError("")
     try {
       const response = await fetch("/api/college/profile", {
         method: "PUT",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(profile)
+        body: JSON.stringify(profile),
       })
-      if (response.ok) {
-        setSuccess(true)
-        setTimeout(() => setSuccess(false), 3000)
+      const data = await response.json()
+      if (!response.ok) {
+        const msg = data.error || data.msg || "Failed to save profile"
+        setError(msg)
+        toast({ title: "Save failed", description: msg, variant: "destructive" })
+        return
       }
-    } catch (error) {
-      console.error("Failed to save profile:", error)
+      if (data.profile) {
+        setProfile({
+          name: data.profile.name || "",
+          code: data.profile.code || "",
+          address: data.profile.address || "",
+          city: data.profile.city || "",
+          state: data.profile.state || "",
+          country: data.profile.country || "",
+          zipCode: data.profile.zipCode || "",
+          phone: data.profile.phone || "",
+          email: data.profile.email || "",
+          website: data.profile.website || "",
+          description: data.profile.description || "",
+          establishedYear: data.profile.establishedYear || "",
+          accreditation: data.profile.accreditation || "",
+          type: data.profile.type || "Engineering",
+          studentCapacity: data.profile.studentCapacity || "",
+          placementCellHead: data.profile.placementCellHead || "",
+          placementCellEmail: data.profile.placementCellEmail || "",
+          placementCellPhone: data.profile.placementCellPhone || "",
+          departments: data.profile.departments || [],
+        })
+      }
+      setSuccess(true)
+      toast({ title: "Profile saved", description: "Your college profile has been updated successfully." })
+      setTimeout(() => setSuccess(false), 5000)
+    } catch (err) {
+      console.error("Failed to save profile:", err)
+      setError("Network error while saving. Please try again.")
+      toast({ title: "Save failed", description: "Network error. Please try again.", variant: "destructive" })
     } finally {
       setSaving(false)
     }
@@ -143,10 +211,17 @@ export default function CollegeProfilePage() {
           <p className="text-gray-600">Manage your college's information and placement cell details</p>
         </div>
 
+        {error && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
         {success && (
           <Alert className="mb-6 bg-green-50 border-green-200">
             <CheckCircle className="h-4 w-4 text-green-600" />
-            <AlertDescription className="text-green-800">Profile saved successfully!</AlertDescription>
+            <AlertDescription className="text-green-800">Profile saved successfully! Your details are stored and will appear after refresh.</AlertDescription>
           </Alert>
         )}
 

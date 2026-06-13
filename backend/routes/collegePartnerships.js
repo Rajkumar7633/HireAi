@@ -7,7 +7,7 @@ const { invalidateCache } = require("../middleware/cache");
 // POST /api/college/partnerships - Create partnership
 router.post("/partnerships", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -37,7 +37,7 @@ router.post("/partnerships", auth, async (req, res) => {
 // GET /api/college/partnerships - Get all partnerships
 router.get("/partnerships", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -62,7 +62,7 @@ router.get("/partnerships", auth, async (req, res) => {
 // GET /api/college/partnerships/:id - Get partnership details
 router.get("/partnerships/:id", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -88,7 +88,7 @@ router.get("/partnerships/:id", auth, async (req, res) => {
 // PUT /api/college/partnerships/:id - Update partnership
 router.put("/partnerships/:id", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -125,7 +125,7 @@ router.put("/partnerships/:id", auth, async (req, res) => {
 // DELETE /api/college/partnerships/:id - Delete partnership
 router.delete("/partnerships/:id", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -151,7 +151,7 @@ router.delete("/partnerships/:id", auth, async (req, res) => {
 // POST /api/college/partnerships/:id/notes - Add note to partnership
 router.post("/partnerships/:id/notes", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -186,7 +186,7 @@ router.post("/partnerships/:id/notes", auth, async (req, res) => {
 // PUT /api/college/partnerships/:id/stats - Update partnership stats
 router.put("/partnerships/:id/stats", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 

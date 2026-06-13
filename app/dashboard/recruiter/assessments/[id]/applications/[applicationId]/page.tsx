@@ -13,7 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Progress } from "@/components/ui/progress";
+import { SkillBar } from "@/components/ui/charts";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -178,7 +178,7 @@ export default function ApplicationProctoringDetailsPage() {
 
   if (error || !application) {
     return (
-      <div className="p-6 max-w-4xl mx-auto">
+      <div className="p-6 w-full">
         <Card className="border-red-200 bg-red-50 text-center py-12">
           <CardContent>
             <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
@@ -213,7 +213,7 @@ export default function ApplicationProctoringDetailsPage() {
   });
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="p-4 md:p-6 space-y-6 w-full">
       {/* Header breadcrumbs */}
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
@@ -388,7 +388,7 @@ export default function ApplicationProctoringDetailsPage() {
                 <span>ENVIRONMENT INTEGRITY SCORE</span>
                 <span>{integrityScore}%</span>
               </div>
-              <Progress value={integrityScore} className="h-3" />
+              <SkillBar label="" value={integrityScore} color={integrityScore >= 70 ? "#16a34a" : integrityScore >= 50 ? "#f59e0b" : "#ef4444"} />
             </div>
 
             {application.proctoringData?.report?.recommendation && (

@@ -1,16 +1,17 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Textarea } from "@/components/ui/textarea"
+import { useState, useEffect, useRef, useCallback } from "react"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
-import { Loader2, Send, Bot, User, FileText, MessageCircle, Plus } from "lucide-react"
+import {
+  Loader2, Send, Bot, User, FileText, MessageCircle,
+  Plus, Sparkles, ChevronDown, Copy, Check,
+  Zap, Brain, Target, TrendingUp,
+} from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useSession } from "@/hooks/use-session"
-import { format } from "date-fns"
+import { format, formatDistanceToNow } from "date-fns"
 import Link from "next/link"
 
 interface Conversation {
@@ -28,6 +29,7 @@ interface Message {
   senderRole: string
   content: string
   timestamp: string
+  streaming?: boolean
 }
 
 interface Resume {
@@ -36,14 +38,63 @@ interface Resume {
   parsedText: string
 }
 
-const quickPrompts = [
-  "Review my resume overall and provide feedback",
-  "How can I make my resume more ATS-friendly?",
-  "What skills should I highlight for tech roles?",
-  "How can I better quantify my achievements?",
-  "Is my resume format professional enough?",
-  "What keywords should I include for my industry?",
+const QUICK_PROMPTS = [
+  { icon: Target, label: "Overall review", prompt: "Review my resume overall and give me actionable feedback." },
+  { icon: Zap, label: "ATS tips", prompt: "How can I make my resume more ATS-friendly?" },
+  { icon: Brain, label: "Skills to add", prompt: "What skills should I highlight or add for tech roles?" },
+  { icon: TrendingUp, label: "Quantify impact", prompt: "Help me quantify my achievements with better metrics." },
 ]
+
+// Render AI message with basic markdown-like formatting
+function AiMessageContent({ content }: { content: string }) {
+  if (!content) {
+    return (
+      <span className="flex gap-1 items-center h-4">
+        <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+        <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+        <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+      </span>
+    )
+  }
+
+  const lines = content.split("\n")
+  return (
+    <div className="text-sm leading-relaxed space-y-1">
+      {lines.map((line, i) => {
+        if (!line.trim()) return <div key={i} className="h-2" />
+        // bold **text**
+        const parts = line.split(/(\*\*[^*]+\*\*)/)
+        return (
+          <p key={i}>
+            {parts.map((part, j) =>
+              part.startsWith("**") && part.endsWith("**")
+                ? <strong key={j} className="font-semibold text-gray-900">{part.slice(2, -2)}</strong>
+                : <span key={j}>{part}</span>
+            )}
+          </p>
+        )
+      })}
+    </div>
+  )
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  const copy = () => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1800)
+    })
+  }
+  return (
+    <button
+      onClick={copy}
+      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600"
+    >
+      {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+    </button>
+  )
+}
 
 export default function ResumeChatbotPage() {
   const { session, isLoading: sessionLoading } = useSession()
@@ -55,17 +106,22 @@ export default function ResumeChatbotPage() {
   const [newMessage, setNewMessage] = useState("")
   const [loadingConversations, setLoadingConversations] = useState(true)
   const [loadingMessages, setLoadingMessages] = useState(false)
-  const [sendingMessage, setSendingMessage] = useState(false)
+  const [sending, setSending] = useState(false)
   const [resumes, setResumes] = useState<Resume[]>([])
   const [selectedResume, setSelectedResume] = useState<Resume | null>(null)
   const [loadingResumes, setLoadingResumes] = useState(true)
+  const [resumeOpen, setResumeOpen] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const currentUserId =
-    (session as any)?.userId ||
-    (session as any)?.user?.id ||
-    (session as any)?.email ||
-    ""
+    (session as any)?.userId || (session as any)?.user?.id || (session as any)?.email || ""
+
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [])
+
+  useEffect(() => { scrollToBottom() }, [messages, scrollToBottom])
 
   useEffect(() => {
     if (!sessionLoading && session) {
@@ -75,210 +131,62 @@ export default function ResumeChatbotPage() {
   }, [sessionLoading, session])
 
   useEffect(() => {
-    if (selectedConversation) {
-      fetchMessages(selectedConversation._id)
-    }
+    if (selectedConversation) fetchMessages(selectedConversation._id)
   }, [selectedConversation])
-
-  useEffect(() => {
-    scrollToBottom()
-  }, [messages])
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }
 
   const fetchResumes = async () => {
     setLoadingResumes(true)
     try {
-      const response = await fetch("/api/resume/my-resumes")
-      if (response.ok) {
-        const data = await response.json()
+      const res = await fetch("/api/resume/my-resumes")
+      if (res.ok) {
+        const data = await res.json()
         setResumes(data)
-        if (data.length > 0) {
-          setSelectedResume(data[0])
-        }
-      } else {
-        const errorData = await response.json()
-        toast({
-          title: "Error",
-          description: errorData.message || "Failed to fetch your resumes.",
-          variant: "destructive",
-        })
+        if (data.length > 0) setSelectedResume(data[0])
       }
-    } catch (error) {
-      console.error("Error fetching resumes:", error)
-      toast({
-        title: "Error",
-        description: "Network error. Failed to fetch resumes.",
-        variant: "destructive",
-      })
-    } finally {
-      setLoadingResumes(false)
-    }
+    } catch {}
+    finally { setLoadingResumes(false) }
   }
 
   const fetchConversations = async () => {
     setLoadingConversations(true)
     try {
-      const response = await fetch("/api/chat")
-      if (response.ok) {
-        const data = await response.json()
-        setConversations(data.conversations)
-      } else {
-        const errorData = await response.json()
-        toast({
-          title: "Error",
-          description: errorData.message || "Failed to fetch conversations.",
-          variant: "destructive",
-        })
+      const res = await fetch("/api/chat")
+      if (res.ok) {
+        const data = await res.json()
+        setConversations(data.conversations || [])
       }
-    } catch (error) {
-      console.error("Error fetching conversations:", error)
-      toast({
-        title: "Error",
-        description: "Network error. Failed to fetch conversations.",
-        variant: "destructive",
-      })
-    } finally {
-      setLoadingConversations(false)
-    }
+    } catch {}
+    finally { setLoadingConversations(false) }
   }
 
-  const fetchMessages = async (conversationId: string) => {
+  const fetchMessages = async (id: string) => {
     setLoadingMessages(true)
     try {
-      const response = await fetch(`/api/chat?conversationId=${conversationId}`)
-      if (response.ok) {
-        const data = await response.json()
-        setMessages(data.messages)
-      } else {
-        const errorData = await response.json()
-        toast({
-          title: "Error",
-          description: errorData.message || "Failed to fetch messages.",
-          variant: "destructive",
-        })
+      const res = await fetch(`/api/chat?conversationId=${id}`)
+      if (res.ok) {
+        const data = await res.json()
+        setMessages(data.messages || [])
       }
-    } catch (error) {
-      console.error("Error fetching messages:", error)
-      toast({
-        title: "Error",
-        description: "Network error. Failed to fetch messages.",
-        variant: "destructive",
-      })
-    } finally {
-      setLoadingMessages(false)
-    }
+    } catch {}
+    finally { setLoadingMessages(false) }
   }
 
-  const handleSendMessage = async (messageText: string = newMessage) => {
-    if (!messageText.trim() || !selectedResume || sendingMessage) return
-
-    setSendingMessage(true)
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          conversationId: selectedConversation?._id,
-          messageContent: messageText,
-          resumeText: selectedResume.parsedText,
-        }),
-      })
-
-      if (response.ok) {
-        setNewMessage("")
-        const data = await response.json()
-
-        // Add new messages to state
-        setMessages((prev) => [...prev, data.userMessage, data.aiMessage])
-
-        // Update selected conversation if a new one was created
-        if (!selectedConversation) {
-          const newConversation = {
-            _id: data.conversationId,
-            jobSeekerId: currentUserId,
-            type: "resume_chatbot",
-            createdAt: new Date().toISOString(),
-            lastMessageAt: new Date().toISOString(),
-          }
-          setSelectedConversation(newConversation)
-          setConversations((prev) => [newConversation, ...prev])
-        } else {
-          // Update last message time for existing conversation
-          setConversations((prev) =>
-            prev.map((conv) =>
-              conv._id === selectedConversation._id ? { ...conv, lastMessageAt: new Date().toISOString() } : conv,
-            ),
-          )
-        }
-
-        toast({
-          title: "Message sent",
-          description: "AI has analyzed your resume and provided feedback.",
-        })
-      } else {
-        const errorData = await response.json()
-        toast({
-          title: "Error",
-          description: errorData.message || "Failed to send message.",
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      console.error("Error sending message:", error)
-      toast({
-        title: "Error",
-        description: "Network error. Failed to send message.",
-        variant: "destructive",
-      })
-    } finally {
-      setSendingMessage(false)
-    }
-  }
-
-  const startNewConversation = () => {
-    setSelectedConversation(null)
-    setMessages([])
+  const send = async (text: string = newMessage) => {
+    const msg = text.trim()
+    if (!msg || !selectedResume || sending) return
+    setSending(true)
     setNewMessage("")
-  }
+    if (textareaRef.current) textareaRef.current.style.height = "44px"
 
-  const handleQuickPrompt = (prompt: string) => {
-    setNewMessage(prompt)
-    handleSendMessage(prompt)
-  }
-
-  // Streaming send using /api/chat/stream
-  async function sendStreaming(messageText: string = newMessage) {
-    if (!messageText.trim() || !selectedResume || sendingMessage) return
-    setSendingMessage(true)
-
-    // Add user message immediately
     const now = new Date().toISOString()
-    const convoId = selectedConversation?._id || `conv_${Date.now()}`
-    const userMsg = {
-      _id: `m_user_${Date.now()}`,
-      conversationId: convoId,
-      senderId: currentUserId,
-      senderRole: "user",
-      content: messageText,
-      timestamp: now,
-    }
-    setMessages((prev) => [...prev, userMsg])
-
-    // Pending AI message
+    const convoId = selectedConversation?._id || `conv_${currentUserId}_${Date.now()}`
+    const userMsgId = `m_user_${Date.now()}`
     const aiMsgId = `m_ai_${Date.now()}`
+
     setMessages((prev) => [
       ...prev,
-      {
-        _id: aiMsgId,
-        conversationId: convoId,
-        senderId: "ai",
-        senderRole: "assistant",
-        content: "",
-        timestamp: now,
-      },
+      { _id: userMsgId, conversationId: convoId, senderId: currentUserId, senderRole: "user", content: msg, timestamp: now },
+      { _id: aiMsgId, conversationId: convoId, senderId: "ai", senderRole: "assistant", content: "", timestamp: now, streaming: true },
     ])
 
     try {
@@ -286,305 +194,375 @@ export default function ResumeChatbotPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messageContent: messageText,
+          messageContent: msg,
           resumeText: selectedResume.parsedText || "",
+          conversationId: convoId,
         }),
       })
-      if (!resp.body) throw new Error("No stream body")
+
+      if (!resp.body) throw new Error("no body")
       const reader = resp.body.getReader()
       const decoder = new TextDecoder()
       let aiContent = ""
+
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
-        const chunk = decoder.decode(value)
-        chunk.split("\n\n").forEach((line) => {
+        decoder.decode(value).split("\n\n").forEach((line) => {
           if (line.startsWith("data: ")) {
-            const text = line.slice(6)
-            aiContent += text
-            setMessages((prev) => prev.map((m) => (m._id === aiMsgId ? { ...m, content: aiContent } : m)))
+            aiContent += line.slice(6)
+            setMessages((prev) =>
+              prev.map((m) => m._id === aiMsgId ? { ...m, content: aiContent } : m)
+            )
           }
         })
       }
-      setNewMessage("")
-    } catch (e) {
+
       setMessages((prev) =>
-        prev.map((m) => (m._id === aiMsgId ? { ...m, content: "Sorry, streaming failed. Please try again." } : m)),
+        prev.map((m) => m._id === aiMsgId ? { ...m, streaming: false } : m)
+      )
+
+      if (!selectedConversation) {
+        const newConv: Conversation = {
+          _id: convoId,
+          jobSeekerId: currentUserId,
+          type: "resume_chatbot",
+          createdAt: now,
+          lastMessageAt: now,
+        }
+        setSelectedConversation(newConv)
+        setConversations((prev) => [newConv, ...prev])
+      } else {
+        setConversations((prev) =>
+          prev.map((c) => c._id === selectedConversation._id ? { ...c, lastMessageAt: now } : c)
+        )
+      }
+    } catch {
+      setMessages((prev) =>
+        prev.map((m) => m._id === aiMsgId ? { ...m, content: "Sorry, I couldn't process that. Please try again.", streaming: false } : m)
       )
     } finally {
-      setSendingMessage(false)
+      setSending(false)
     }
+  }
+
+  const startNew = () => {
+    setSelectedConversation(null)
+    setMessages([])
+    setNewMessage("")
+  }
+
+  const handleKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      send()
+    }
+  }
+
+  const autoResize = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setNewMessage(e.target.value)
+    e.target.style.height = "44px"
+    e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"
   }
 
   if (sessionLoading || loadingResumes || loadingConversations) {
     return (
-      <div className="flex items-center justify-center h-full min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
-        <p className="ml-2">Loading resume chatbot...</p>
+      <div className="p-6 flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="relative">
+            <div className="w-12 h-12 rounded-full bg-violet-100 flex items-center justify-center">
+              <Bot className="h-6 w-6 text-violet-600" />
+            </div>
+            <Loader2 className="h-4 w-4 animate-spin text-violet-600 absolute -bottom-1 -right-1" />
+          </div>
+          <p className="text-sm text-gray-500">Loading Resume AI...</p>
+        </div>
       </div>
     )
   }
 
   if (!session || session.role !== "job_seeker") {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Card className="w-full max-w-md text-center p-6">
-          <CardTitle>Access Denied</CardTitle>
-          <CardDescription className="mt-2">Only job seekers can use the resume chatbot.</CardDescription>
-          <Button asChild className="mt-4">
-            <Link href="/dashboard">Go to Dashboard</Link>
-          </Button>
-        </Card>
+      <div className="p-6 flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Bot className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+          <p className="font-semibold text-gray-700">Access Denied</p>
+          <p className="text-sm text-gray-400 mt-1">Only job seekers can use the resume chatbot.</p>
+        </div>
       </div>
     )
   }
 
   if (resumes.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Card className="w-full max-w-md text-center p-6">
-          <FileText className="h-16 w-16 mx-auto mb-4 text-gray-400" />
-          <CardTitle>No Resumes Found</CardTitle>
-          <CardDescription className="mt-2">Please upload a resume first to use the resume chatbot.</CardDescription>
-          <Button asChild className="mt-4">
-            <Link href="/dashboard/job-seeker/upload">Upload Resume</Link>
-          </Button>
-        </Card>
+      <div className="p-6">
+        <div className="rounded-2xl border-2 border-dashed border-violet-200 bg-violet-50 p-12 text-center">
+          <div className="w-16 h-16 rounded-full bg-violet-100 flex items-center justify-center mx-auto mb-4">
+            <FileText className="h-8 w-8 text-violet-500" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-800 mb-2">No Resume Found</h2>
+          <p className="text-gray-500 mb-6">Upload a resume first to start chatting with your AI coach.</p>
+          <Link href="/dashboard/job-seeker/upload">
+            <Button className="bg-violet-600 hover:bg-violet-700 text-white rounded-xl px-6">
+              Upload Resume
+            </Button>
+          </Link>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold flex items-center gap-2 mb-2">
-            <Bot className="h-8 w-8 text-purple-600" />
-            Resume AI Assistant
-          </h1>
-          <p className="text-muted-foreground">Get personalized feedback and optimization tips for your resume</p>
+    <div className="p-6 space-y-0 h-[calc(100vh-80px)] flex flex-col">
+      {/* ── Gradient header ─────────────────────────────────────── */}
+      <div className="rounded-2xl bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 p-5 mb-4 flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur flex items-center justify-center">
+            <Sparkles className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h1 className="text-lg font-bold text-white">Resume AI Coach</h1>
+            <p className="text-white/70 text-xs">Powered by AI · Personalized to your resume</p>
+          </div>
         </div>
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+          <span className="text-white/80 text-xs font-medium">Online</span>
+        </div>
+      </div>
 
-        {/* Resume Selection */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Selected Resume
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-4">
-              <select
-                value={selectedResume?._id || ""}
-                onChange={(e) => {
-                  const resume = resumes.find((r) => r._id === e.target.value)
-                  setSelectedResume(resume || null)
-                }}
-                className="flex-1 p-2 border rounded-md"
-              >
-                {resumes.map((resume) => (
-                  <option key={resume._id} value={resume._id}>
-                    {resume.filename}
-                  </option>
-                ))}
-              </select>
-              <Badge variant="secondary">{selectedResume?.parsedText?.length || 0} characters</Badge>
+      {/* ── Main layout ──────────────────────────────────────────── */}
+      <div className="flex gap-4 flex-1 min-h-0">
+        {/* Sidebar */}
+        <div className="w-72 flex-shrink-0 flex flex-col gap-3">
+          {/* Resume picker */}
+          <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+            <div className="px-3 py-2 border-b border-gray-100 flex items-center gap-2">
+              <FileText className="h-3.5 w-3.5 text-violet-500" />
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Active Resume</span>
             </div>
-          </CardContent>
-        </Card>
+            <div className="relative p-2">
+              <button
+                onClick={() => setResumeOpen(!resumeOpen)}
+                className="w-full flex items-center justify-between gap-2 p-2 rounded-lg hover:bg-gray-50 transition-colors text-left"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-7 h-7 rounded-lg bg-violet-100 flex items-center justify-center flex-shrink-0">
+                    <FileText className="h-3.5 w-3.5 text-violet-600" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-gray-800 truncate">{selectedResume?.filename || "Select resume"}</p>
+                    <p className="text-[10px] text-gray-400">{((selectedResume?.parsedText?.length || 0) / 1000).toFixed(1)}k chars</p>
+                  </div>
+                </div>
+                <ChevronDown className={`h-3.5 w-3.5 text-gray-400 flex-shrink-0 transition-transform ${resumeOpen ? "rotate-180" : ""}`} />
+              </button>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Sidebar - Conversations */}
-          <div className="lg:col-span-1">
-            <Card className="h-[600px] flex flex-col">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <MessageCircle className="h-5 w-5" />
-                  Chat History
-                </CardTitle>
-                <Button size="sm" onClick={startNewConversation}>
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </CardHeader>
-              <CardContent className="flex-1 p-0">
-                <ScrollArea className="h-full">
-                  {conversations.length === 0 ? (
-                    <div className="text-center py-8 px-4">
-                      <MessageCircle className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                      <p className="text-muted-foreground text-sm">No chat history yet</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2 p-4">
-                      {conversations.map((conv) => (
-                        <div
-                          key={conv._id}
-                          className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                            selectedConversation?._id === conv._id
-                              ? "bg-purple-100 border-purple-200"
-                              : "hover:bg-gray-100"
-                          }`}
-                          onClick={() => setSelectedConversation(conv)}
-                        >
-                          <div className="flex items-center gap-2 mb-1">
-                            <Bot className="h-4 w-4 text-purple-600" />
-                            <span className="font-medium text-sm">Resume Chat</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            {format(new Date(conv.lastMessageAt), "MMM dd, hh:mm a")}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </ScrollArea>
-              </CardContent>
-            </Card>
+              {resumeOpen && (
+                <div className="absolute left-2 right-2 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1">
+                  {resumes.map((r) => (
+                    <button
+                      key={r._id}
+                      onClick={() => { setSelectedResume(r); setResumeOpen(false) }}
+                      className={`w-full text-left px-3 py-2 text-xs hover:bg-violet-50 transition-colors flex items-center gap-2 ${selectedResume?._id === r._id ? "text-violet-700 font-semibold" : "text-gray-700"}`}
+                    >
+                      <FileText className="h-3 w-3 flex-shrink-0" />
+                      <span className="truncate">{r.filename}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Main Chat Area */}
-          <div className="lg:col-span-3">
-            <Card className="h-[600px] flex flex-col">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Bot className="h-5 w-5 text-purple-600" />
-                  Resume AI Assistant
-                </CardTitle>
-                <CardDescription>
-                  Analyzing: <span className="font-semibold">{selectedResume?.filename}</span>
-                </CardDescription>
-              </CardHeader>
+          {/* Chat history */}
+          <div className="rounded-xl border border-gray-200 bg-white shadow-sm flex flex-col flex-1 min-h-0 overflow-hidden">
+            <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <MessageCircle className="h-3.5 w-3.5 text-violet-500" />
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Chat History</span>
+              </div>
+              <button
+                onClick={startNew}
+                className="w-6 h-6 rounded-md bg-violet-50 hover:bg-violet-100 flex items-center justify-center transition-colors"
+                title="New chat"
+              >
+                <Plus className="h-3.5 w-3.5 text-violet-600" />
+              </button>
+            </div>
 
-              <CardContent className="flex-1 flex flex-col">
-                {/* Messages */}
-                <ScrollArea className="flex-1 mb-4">
-                  {loadingMessages ? (
-                    <div className="flex items-center justify-center h-full">
-                      <Loader2 className="h-6 w-6 animate-spin text-purple-600" />
-                    </div>
-                  ) : messages.length === 0 ? (
-                    <div className="text-center py-8">
-                      <Bot className="h-16 w-16 mx-auto mb-4 text-gray-400" />
-                      <h3 className="text-lg font-semibold mb-2">Ready to help with your resume!</h3>
-                      <p className="text-muted-foreground mb-6">
-                        Ask me anything about your resume or try one of these suggestions:
-                      </p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl mx-auto">
-                        {quickPrompts.map((prompt, index) => (
-                          <Button
-                            key={index}
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleQuickPrompt(prompt)}
-                            className="text-left h-auto p-3 whitespace-normal"
-                            disabled={sendingMessage}
-                          >
-                            {prompt}
-                          </Button>
-                        ))}
+            <ScrollArea className="flex-1">
+              {conversations.length === 0 ? (
+                <div className="text-center py-8 px-3">
+                  <MessageCircle className="h-8 w-8 mx-auto mb-2 text-gray-200" />
+                  <p className="text-xs text-gray-400">No conversations yet</p>
+                  <p className="text-[10px] text-gray-300 mt-1">Ask your first question below</p>
+                </div>
+              ) : (
+                <div className="p-2 space-y-1">
+                  {conversations.map((conv, i) => (
+                    <button
+                      key={conv._id}
+                      onClick={() => setSelectedConversation(conv)}
+                      className={`w-full text-left p-2.5 rounded-lg transition-colors ${
+                        selectedConversation?._id === conv._id
+                          ? "bg-violet-50 border border-violet-200"
+                          : "hover:bg-gray-50 border border-transparent"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <div className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 ${
+                          selectedConversation?._id === conv._id ? "bg-violet-200" : "bg-gray-100"
+                        }`}>
+                          <Bot className={`h-2.5 w-2.5 ${selectedConversation?._id === conv._id ? "text-violet-700" : "text-gray-500"}`} />
+                        </div>
+                        <span className={`text-xs font-medium truncate ${
+                          selectedConversation?._id === conv._id ? "text-violet-800" : "text-gray-700"
+                        }`}>Chat #{conversations.length - i}</span>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {messages.map((msg) => (
-                        <div
-                          key={msg._id}
-                          className={`flex gap-3 ${msg.senderId === currentUserId ? "justify-end" : "justify-start"}`}
-                        >
-                          {msg.senderId !== currentUserId && (
-                            <Avatar className="w-8 h-8">
-                              <AvatarFallback className="bg-purple-100">
-                                <Bot className="h-4 w-4 text-purple-600" />
-                              </AvatarFallback>
-                            </Avatar>
-                          )}
-                          <div
-                            className={`max-w-[80%] rounded-lg p-3 ${
-                              msg.senderId === currentUserId
-                                ? "bg-purple-600 text-white"
-                                : "bg-gray-100 text-gray-900 border"
-                            }`}
-                          >
-                            <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                            <p className="text-xs opacity-70 mt-1">{format(new Date(msg.timestamp), "hh:mm a")}</p>
-                          </div>
-                          {msg.senderId === currentUserId && (
-                            <Avatar className="w-8 h-8">
-                              <AvatarFallback className="bg-purple-600">
-                                <User className="h-4 w-4 text-white" />
-                              </AvatarFallback>
-                            </Avatar>
-                          )}
-                        </div>
-                      ))}
-
-                      {sendingMessage && (
-                        <div className="flex gap-3 justify-start">
-                          <Avatar className="w-8 h-8">
-                            <AvatarFallback className="bg-purple-100">
-                              <Bot className="h-4 w-4 text-purple-600" />
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="bg-gray-100 border rounded-lg p-3">
-                            <div className="flex items-center gap-1">
-                              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                              <div
-                                className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                                style={{ animationDelay: "0.1s" }}
-                              ></div>
-                              <div
-                                className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                                style={{ animationDelay: "0.2s" }}
-                              ></div>
-                            </div>
-                          </div>
-                        </div>
+                      {(conv as any).preview && (
+                        <p className="text-[10px] text-gray-500 pl-7 truncate mb-0.5">{(conv as any).preview}</p>
                       )}
+                      <p className="text-[10px] text-gray-400 pl-7">
+                        {formatDistanceToNow(new Date(conv.lastMessageAt), { addSuffix: true })}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+          </div>
+        </div>
 
-                      <div ref={messagesEndRef} />
-                    </div>
-                  )}
-                </ScrollArea>
+        {/* Chat panel */}
+        <div className="flex-1 rounded-xl border border-gray-200 bg-white shadow-sm flex flex-col min-h-0 overflow-hidden">
+          {/* Chat panel header */}
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
+                <Bot className="h-4 w-4 text-white" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-800">Resume AI Coach</p>
+                <p className="text-[10px] text-gray-400">
+                  Analyzing: <span className="text-violet-600 font-medium">{selectedResume?.filename}</span>
+                </p>
+              </div>
+            </div>
+            <Badge variant="secondary" className="text-[10px] bg-green-50 text-green-700 border-green-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block mr-1" />
+              Ready
+            </Badge>
+          </div>
 
-                {/* Input Form */}
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault()
-                    handleSendMessage()
-                  }}
-                  className="flex gap-2"
-                >
-                  <Textarea
-                    placeholder="Ask me about your resume..."
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    disabled={sendingMessage || !selectedResume}
-                    className="flex-1 min-h-[60px] max-h-[120px]"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault()
-                        handleSendMessage()
-                      }
-                    }}
-                  />
-                  <Button
-                    type="submit"
-                    disabled={sendingMessage || !selectedResume}
-                  >
-                    {sendingMessage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={sendingMessage || !selectedResume}
-                    onClick={() => sendStreaming(newMessage)}
-                  >
-                    {sendingMessage ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send (stream)"}
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
+          {/* Messages */}
+          <ScrollArea className="flex-1">
+            <div className="p-5">
+              {loadingMessages ? (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
+                </div>
+              ) : messages.length === 0 ? (
+                /* Welcome state */
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center mb-4 shadow-lg shadow-violet-200">
+                    <Sparkles className="h-8 w-8 text-white" />
+                  </div>
+                  <h2 className="text-lg font-bold text-gray-800 mb-1">Hi, I'm your Resume Coach!</h2>
+                  <p className="text-sm text-gray-400 mb-6 max-w-xs">
+                    I've read your resume. Ask me anything — or try one of these:
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 w-full max-w-md">
+                    {QUICK_PROMPTS.map(({ icon: Icon, label, prompt }) => (
+                      <button
+                        key={label}
+                        onClick={() => send(prompt)}
+                        disabled={sending}
+                        className="flex items-center gap-2 p-3 rounded-xl border border-gray-200 hover:border-violet-300 hover:bg-violet-50 transition-all text-left group"
+                      >
+                        <div className="w-7 h-7 rounded-lg bg-violet-100 group-hover:bg-violet-200 flex items-center justify-center flex-shrink-0 transition-colors">
+                          <Icon className="h-3.5 w-3.5 text-violet-600" />
+                        </div>
+                        <span className="text-xs font-medium text-gray-700 group-hover:text-violet-700">{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  {messages.map((msg) => {
+                    const isUser = msg.senderId === currentUserId
+                    return (
+                      <div key={msg._id} className={`flex gap-3 ${isUser ? "justify-end" : "justify-start"}`}>
+                        {!isUser && (
+                          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm">
+                            <Bot className="h-3.5 w-3.5 text-white" />
+                          </div>
+                        )}
+
+                        <div className={`group max-w-[75%] ${isUser ? "items-end" : "items-start"} flex flex-col gap-1`}>
+                          {isUser ? (
+                            <div className="bg-gradient-to-br from-violet-600 to-purple-700 text-white rounded-2xl rounded-tr-sm px-4 py-2.5 shadow-sm">
+                              <p className="text-sm leading-relaxed">{msg.content}</p>
+                            </div>
+                          ) : (
+                            <div className="bg-gray-50 border border-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 relative">
+                              <AiMessageContent content={msg.content} />
+                              {!msg.streaming && msg.content && (
+                                <div className="absolute -bottom-2 right-2">
+                                  <CopyButton text={msg.content} />
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          <span className="text-[10px] text-gray-400 px-1">
+                            {format(new Date(msg.timestamp), "h:mm a")}
+                          </span>
+                        </div>
+
+                        {isUser && (
+                          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-slate-600 to-gray-700 flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm">
+                            <User className="h-3.5 w-3.5 text-white" />
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                  <div ref={messagesEndRef} />
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+
+          {/* Input area */}
+          <div className="p-4 border-t border-gray-100 flex-shrink-0">
+            <div className={`flex items-end gap-2 rounded-xl border bg-gray-50 px-3 py-2 transition-colors ${
+              sending ? "border-gray-200" : "border-gray-200 focus-within:border-violet-400 focus-within:bg-white"
+            }`}>
+              <textarea
+                ref={textareaRef}
+                rows={1}
+                value={newMessage}
+                onChange={autoResize}
+                onKeyDown={handleKey}
+                disabled={sending || !selectedResume}
+                placeholder={selectedResume ? "Ask about your resume... (Enter to send, Shift+Enter for newline)" : "Select a resume first"}
+                className="flex-1 bg-transparent text-sm text-gray-800 placeholder-gray-400 resize-none outline-none py-1 min-h-[44px] max-h-[120px]"
+                style={{ height: "44px" }}
+              />
+              <button
+                onClick={() => send()}
+                disabled={!newMessage.trim() || sending || !selectedResume}
+                className="w-8 h-8 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:bg-gray-200 disabled:cursor-not-allowed flex items-center justify-center flex-shrink-0 transition-colors shadow-sm mb-0.5"
+              >
+                {sending
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin text-white" />
+                  : <Send className="h-3.5 w-3.5 text-white" />}
+              </button>
+            </div>
+            <p className="text-[10px] text-gray-400 text-center mt-2">
+              AI responses are for guidance only · Resume content stays private
+            </p>
           </div>
         </div>
       </div>

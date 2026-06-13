@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
+import { SkillBar } from "@/components/ui/charts";
 import {
   Brain,
   Sparkles,
@@ -296,12 +296,8 @@ export default function AIInterviewPage() {
             </Button>
 
             {generating && (
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Analyzing requirements...</span>
-                  <span>75%</span>
-                </div>
-                <Progress value={75} className="h-2" />
+              <div className="space-y-1">
+                <SkillBar label="Analyzing requirements..." value={75} color="#7c3aed" />
               </div>
             )}
           </CardContent>

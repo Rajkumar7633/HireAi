@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Loader2, Mic, MicOff, Volume2, ArrowRight, Award, Brain, CheckCircle2, MessageCircle } from "lucide-react"
+import { ScoreRing } from "@/components/ui/charts"
 
 interface QuestionReport {
   questionText: string
@@ -212,7 +213,7 @@ export default function MockInterviewPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 p-4">
+    <div className="w-full space-y-8 p-4">
       {/* HEADER SECTION */}
       <div className="space-y-2">
         <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">
@@ -369,9 +370,8 @@ export default function MockInterviewPage() {
                   "{overallFeedback}"
                 </p>
               </div>
-              <div className="flex flex-col items-center bg-white/10 px-8 py-6 rounded-2xl border border-white/20">
-                <span className="text-5xl font-black">{overallScore}%</span>
-                <span className="text-xs uppercase font-bold tracking-wider opacity-85 mt-1">Overall Rating</span>
+              <div className="flex flex-col items-center bg-white rounded-2xl px-6 py-4 shadow-lg">
+                <ScoreRing value={overallScore} size={110} stroke={9} label="Overall" sublabel="Rating" />
               </div>
             </CardContent>
           </Card>
@@ -390,7 +390,7 @@ export default function MockInterviewPage() {
                       "{q.questionText}"
                     </CardTitle>
                   </div>
-                  <Badge className="font-bold shrink-0">{q.score}% Score</Badge>
+                  <ScoreRing value={q.score} size={56} stroke={5} sublabel="Score" />
                 </CardHeader>
                 <CardContent className="space-y-4 mt-4">
                   <div className="space-y-1 bg-violet-50/30 p-3 rounded-lg border border-violet-100/50">

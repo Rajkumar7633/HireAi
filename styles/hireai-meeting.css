@@ -1,0 +1,124 @@
+/* Teams-inspired LiveKit theme — lock to viewport, no page scroll */
+.hireai-meeting-root {
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  --lk-accent: #6264a7;
+  --lk-accent2: #464775;
+  --lk-accent3: #7b7fc8;
+  --lk-bg: #1b1b1b;
+  --lk-bg2: #252525;
+  --lk-bg3: #2d2d2d;
+  --lk-fg: #ffffff;
+  --lk-fg-secondary: #d1d1d1;
+  --lk-border-color: #3d3d3d;
+  --lk-control-bar-bg: #252525;
+  --lk-control-bar-border: #3d3d3d;
+  --lk-danger: #c4314b;
+  --lk-success: #6bb700;
+}
+
+.hireai-meeting-root .lk-participant-tile {
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #3d3d3d;
+}
+
+.hireai-meeting-root .lk-grid-layout {
+  gap: 10px;
+  padding: 10px;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.hireai-meeting-root .lk-chat {
+  height: 100%;
+  background: transparent;
+  color: #e5e5e5;
+}
+
+.hireai-meeting-root .lk-chat-entry {
+  border-radius: 8px;
+  background: #1b1b1b;
+  border: 1px solid #3d3d3d;
+}
+
+.hireai-meeting-root .lk-chat-form {
+  border-top: 1px solid #3d3d3d;
+  background: #252525;
+}
+
+.hireai-meeting-root .lk-chat-form-input {
+  background: #1b1b1b;
+  border: 1px solid #3d3d3d;
+  color: #fff;
+}
+
+.hireai-meeting-root .lk-button {
+  color: #f3f4f6;
+  background: #3d3d3d;
+  border: 1px solid #5a5a5a;
+}
+
+.hireai-meeting-root .lk-button:hover {
+  background: #6264a7;
+  border-color: #7b7fc8;
+}
+
+.hireai-meeting-root .lk-button[data-lk-muted="true"] {
+  background: #c4314b;
+  border-color: #e35d6a;
+}
+
+.hireai-meeting-root .lk-media-device-menu {
+  background: #252525;
+  border: 1px solid #3d3d3d;
+  color: #fff;
+}
+
+.hireai-meeting-root .lk-media-device-menu button,
+.hireai-meeting-root .lk-device-menu {
+  background: #3d3d3d;
+  color: #fff;
+  border: 1px solid #5a5a5a;
+}
+
+.hireai-meeting-root .lk-participant-name {
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+
+.hireai-meeting-root .lk-connection-quality {
+  opacity: 0.9;
+}
+
+/* Screen share — large main stage */
+.hireai-meeting-root .lk-focus-layout {
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+}
+
+.hireai-meeting-root .lk-focus-layout video {
+  object-fit: contain;
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  background: #000;
+}
+
+.hireai-meeting-carousel.lk-carousel-layout {
+  max-height: 100%;
+}
+
+.hireai-meeting-carousel .lk-participant-tile {
+  min-height: 88px;
+  max-height: 120px;
+}
+
+.hireai-meeting-carousel .lk-participant-tile video {
+  object-fit: cover;
+}

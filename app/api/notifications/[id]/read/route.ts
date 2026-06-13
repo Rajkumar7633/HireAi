@@ -1,22 +1,28 @@
 import { type NextRequest, NextResponse } from "next/server"
-import jwt from "jsonwebtoken"
+import { getSession } from "@/lib/auth"
+import { connectDB } from "@/lib/mongodb"
+import Notification from "@/models/Notification"
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const token = request.headers.get("authorization")?.replace("Bearer ", "")
-
-    if (!token) {
-      return NextResponse.json({ error: "No token provided" }, { status: 401 })
+    const session = await getSession(request)
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any
-    const notificationId = params.id
+    await connectDB()
 
-    // Mock response - in real implementation, update notification in database
-    return NextResponse.json({
-      success: true,
-      message: "Notification marked as read",
-    })
+    const updated = await Notification.findOneAndUpdate(
+      { _id: params.id, userId: session.userId },
+      { $set: { read: true } },
+      { new: true },
+    )
+
+    if (!updated) {
+      return NextResponse.json({ error: "Notification not found" }, { status: 404 })
+    }
+
+    return NextResponse.json({ success: true, message: "Notification marked as read" })
   } catch (error) {
     return NextResponse.json({ error: "Failed to mark notification as read" }, { status: 500 })
   }

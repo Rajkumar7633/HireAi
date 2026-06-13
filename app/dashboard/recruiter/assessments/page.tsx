@@ -1,429 +1,324 @@
-"use client";
+"use client"
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react"
+import { Card, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { useToast } from "@/hooks/use-toast"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { useToast } from "@/hooks/use-toast";
-import {
-  Loader2,
-  Plus,
-  Shield,
-  Users,
-  Clock,
-  FileText,
-  Eye,
-  Edit,
-  BarChart3,
-  Settings,
-} from "lucide-react";
-import Link from "next/link";
+  Loader2, Plus, Shield, Users, Clock, FileText,
+  Eye, Edit, BarChart3, UserPlus, Search, CheckCircle2,
+  Circle, Archive, Zap, TrendingUp,
+} from "lucide-react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
 
 interface Assessment {
-  _id: string;
-  title: string;
-  description: string;
-  durationMinutes: number;
-  totalQuestions: number;
-  totalPoints: number;
-  difficulty: "Easy" | "Medium" | "Hard";
-  status: "Active" | "Draft" | "Archived";
-  requiresProctoring: boolean;
-  securityFeatures: string[];
-  createdAt: string;
-  candidatesAssigned: number;
-  candidatesCompleted: number;
+  _id: string
+  title: string
+  description: string
+  durationMinutes: number
+  totalQuestions: number
+  totalPoints: number
+  difficulty: "Easy" | "Medium" | "Hard"
+  status: "Active" | "Draft" | "Archived"
+  requiresProctoring: boolean
+  securityFeatures: string[]
+  createdAt: string
+  candidatesAssigned: number
+  candidatesCompleted: number
 }
 
-export default function AssessmentsManagementPage() {
-  const [assessments, setAssessments] = useState<Assessment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const { toast } = useToast();
+const STATUS_TABS = ["All", "Active", "Draft", "Archived"] as const
+type StatusTab = typeof STATUS_TABS[number]
+
+const DIFF_COLOR: Record<string, string> = {
+  Easy: "bg-green-100 text-green-700 border-green-200",
+  Medium: "bg-yellow-100 text-yellow-700 border-yellow-200",
+  Hard: "bg-red-100 text-red-700 border-red-200",
+}
+
+const STATUS_COLOR: Record<string, string> = {
+  Active: "bg-green-500",
+  Draft: "bg-amber-500",
+  Archived: "bg-slate-400",
+}
+
+const STATUS_ICON: Record<string, React.ReactNode> = {
+  Active: <CheckCircle2 className="h-3 w-3" />,
+  Draft: <Circle className="h-3 w-3" />,
+  Archived: <Archive className="h-3 w-3" />,
+}
+
+export default function AssessmentsPage() {
+  const router = useRouter()
+  const { toast } = useToast()
+  const [assessments, setAssessments] = useState<Assessment[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState("")
+  const [statusTab, setStatusTab] = useState<StatusTab>("All")
 
   useEffect(() => {
-    fetchAssessments();
-  }, [refreshTrigger]);
+    loadAssessments()
+    const onFocus = () => loadAssessments()
+    window.addEventListener("focus", onFocus)
+    return () => window.removeEventListener("focus", onFocus)
+  }, [])
 
-  const fetchAssessments = async () => {
+  useEffect(() => {
+    if (sessionStorage.getItem("refreshAssessments") === "true") {
+      sessionStorage.removeItem("refreshAssessments")
+      loadAssessments()
+    }
+  }, [])
+
+  const loadAssessments = async () => {
     try {
-      const response = await fetch("/api/assessments");
-      if (response.ok) {
-        const data = await response.json();
-        setAssessments(data.assessments || []);
-      } else {
-        throw new Error("Failed to fetch assessments");
+      const res = await fetch("/api/assessments")
+      if (res.ok) {
+        const data = await res.json()
+        setAssessments(data.assessments || [])
       }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to load assessments. Please try again.",
-        variant: "destructive",
-      });
+    } catch {
+      toast({ title: "Failed to load assessments", variant: "destructive" })
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
-  const refreshAssessments = () => {
-    setRefreshTrigger((prev) => prev + 1);
-  };
-
-  useEffect(() => {
-    const handleFocus = () => {
-      refreshAssessments();
-    };
-
-    window.addEventListener("focus", handleFocus);
-    return () => window.removeEventListener("focus", handleFocus);
-  }, []);
-
-  const getStatusColor = (status: Assessment["status"]) => {
-    switch (status) {
-      case "Active":
-        return "bg-green-500";
-      case "Draft":
-        return "bg-yellow-500";
-      case "Archived":
-        return "bg-gray-500";
-      default:
-        return "bg-gray-500";
+  const filtered = useMemo(() => {
+    let list = assessments
+    if (statusTab !== "All") list = list.filter((a) => a.status === statusTab)
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      list = list.filter(
+        (a) => a.title.toLowerCase().includes(q) || a.description?.toLowerCase().includes(q)
+      )
     }
-  };
+    return list
+  }, [assessments, statusTab, search])
 
-  const getDifficultyColor = (difficulty: Assessment["difficulty"]) => {
-    switch (difficulty) {
-      case "Easy":
-        return "text-green-600 bg-green-50";
-      case "Medium":
-        return "text-yellow-600 bg-yellow-50";
-      case "Hard":
-        return "text-red-600 bg-red-50";
-      default:
-        return "text-gray-600 bg-gray-50";
+  const stats = useMemo(() => {
+    const totalAssigned = assessments.reduce((s, a) => s + (a.candidatesAssigned || 0), 0)
+    const totalCompleted = assessments.reduce((s, a) => s + (a.candidatesCompleted || 0), 0)
+    return {
+      total: assessments.length,
+      active: assessments.filter((a) => a.status === "Active").length,
+      assigned: totalAssigned,
+      completionRate: totalAssigned > 0 ? Math.round((totalCompleted / totalAssigned) * 100) : 0,
     }
-  };
+  }, [assessments])
 
-  const handlePreview = (assessmentId: string) => {
-    window.open(
-      `/dashboard/recruiter/assessments/${assessmentId}/preview`,
-      "_blank"
-    );
-  };
-
-  const handleEdit = (assessmentId: string) => {
-    window.location.href = `/dashboard/recruiter/assessments/${assessmentId}/edit`;
-  };
-
-  const handleAnalytics = (assessmentId: string) => {
-    window.location.href = `/dashboard/recruiter/assessments/${assessmentId}/analytics`;
-  };
-
-  const handleAssign = (assessmentId: string) => {
-    sessionStorage.setItem("refreshAssessments", "true");
-    window.location.href = `/dashboard/recruiter/assessments/${assessmentId}/assign`;
-  };
-
-  useEffect(() => {
-    const shouldRefresh = sessionStorage.getItem("refreshAssessments");
-    if (shouldRefresh === "true") {
-      sessionStorage.removeItem("refreshAssessments");
-      refreshAssessments();
-    }
-  }, []);
+  const tabCount = (tab: StatusTab) =>
+    tab === "All" ? assessments.length : assessments.filter((a) => a.status === tab).length
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="ml-2">Loading assessments...</p>
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-7 w-7 animate-spin text-blue-600" />
+        <span className="ml-3 text-muted-foreground">Loading assessments…</span>
       </div>
-    );
+    )
   }
 
   return (
     <div className="p-6 space-y-6">
+      {/* ── Header ── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Assessment Management</h1>
-          <p className="text-muted-foreground">
-            Create and manage AI-proctored assessments for your candidates
-          </p>
+          <h1 className="text-2xl font-bold">Assessments</h1>
+          <p className="text-sm text-muted-foreground">Create and manage AI-proctored tests for your candidates</p>
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={refreshAssessments}
-            disabled={loading}
-          >
-            {loading ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <BarChart3 className="mr-2 h-4 w-4" />
-            )}
-            Refresh
-          </Button>
-          <Button
-            asChild
-            className="bg-gradient-to-r from-blue-600 to-purple-600"
-          >
-            <Link href="/dashboard/recruiter/assessments/create">
-              <Plus className="mr-2 h-4 w-4" />
-              Create Assessment
-            </Link>
-          </Button>
+        <Button
+          asChild
+          className="bg-gradient-to-r from-blue-600 to-purple-600 text-white gap-2"
+        >
+          <Link href="/dashboard/recruiter/assessments/create">
+            <Plus className="h-4 w-4" />
+            New Assessment
+          </Link>
+        </Button>
+      </div>
+
+      {/* ── Stats row ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: "Total", value: stats.total, icon: <FileText className="h-5 w-5 text-blue-500" />, color: "text-blue-700" },
+          { label: "Active", value: stats.active, icon: <Zap className="h-5 w-5 text-green-500" />, color: "text-green-700" },
+          { label: "Candidates Assigned", value: stats.assigned, icon: <Users className="h-5 w-5 text-purple-500" />, color: "text-purple-700" },
+          { label: "Completion Rate", value: `${stats.completionRate}%`, icon: <TrendingUp className="h-5 w-5 text-orange-500" />, color: "text-orange-700" },
+        ].map((s) => (
+          <Card key={s.label}>
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground font-medium">{s.label}</p>
+                <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+              </div>
+              {s.icon}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* ── Filters ── */}
+      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+        <div className="flex border rounded-lg overflow-hidden">
+          {STATUS_TABS.map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setStatusTab(tab)}
+              className={`px-4 py-2 text-sm font-medium flex items-center gap-1.5 transition-colors ${
+                statusTab === tab
+                  ? "bg-blue-600 text-white"
+                  : "bg-white text-muted-foreground hover:bg-muted/50"
+              }`}
+            >
+              {tab}
+              <span className={`text-xs rounded-full px-1.5 py-0.5 ${
+                statusTab === tab ? "bg-white/20 text-white" : "bg-muted text-muted-foreground"
+              }`}>
+                {tabCount(tab)}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <div className="relative flex-1 sm:max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search assessments…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
         </div>
       </div>
 
-      {/* Stats Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* ── List ── */}
+      {filtered.length === 0 ? (
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
-                  Total Assessments
-                </p>
-                <p className="text-2xl font-bold">{assessments.length}</p>
-              </div>
-              <FileText className="h-8 w-8 text-blue-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
-                  Active Assessments
-                </p>
-                <p className="text-2xl font-bold text-green-600">
-                  {assessments.filter((a) => a.status === "Active").length}
-                </p>
-              </div>
-              <Shield className="h-8 w-8 text-green-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
-                  Total Candidates
-                </p>
-                <p className="text-2xl font-bold text-purple-600">
-                  {assessments.reduce(
-                    (sum, a) => sum + (a.candidatesAssigned || 0),
-                    0
-                  )}
-                </p>
-              </div>
-              <Users className="h-8 w-8 text-purple-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
-                  Completion Rate
-                </p>
-                <p className="text-2xl font-bold text-orange-600">
-                  {(() => {
-                    const totalAssigned = assessments.reduce(
-                      (sum, a) => sum + (a.candidatesAssigned || 0),
-                      0
-                    );
-                    const totalCompleted = assessments.reduce(
-                      (sum, a) => sum + (a.candidatesCompleted || 0),
-                      0
-                    );
-                    return totalAssigned > 0
-                      ? Math.round((totalCompleted / totalAssigned) * 100)
-                      : 0;
-                  })()}
-                  %
-                </p>
-              </div>
-              <BarChart3 className="h-8 w-8 text-orange-600" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {assessments.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <div className="mx-auto w-24 h-24 bg-muted rounded-full flex items-center justify-center mb-4">
-              <FileText className="h-12 w-12 text-muted-foreground" />
-            </div>
-            <h3 className="text-lg font-semibold mb-2">
-              No Assessments Created
-            </h3>
-            <p className="text-muted-foreground mb-4">
-              Create your first AI-proctored assessment to start evaluating
-              candidates.
+          <CardContent className="py-16 text-center">
+            <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-30" />
+            <p className="font-semibold text-lg mb-1">
+              {search || statusTab !== "All" ? "No matching assessments" : "No assessments yet"}
             </p>
-            <Button asChild>
-              <Link href="/dashboard/recruiter/assessments/create">
-                Create Assessment
-              </Link>
-            </Button>
+            <p className="text-sm text-muted-foreground mb-5">
+              {search || statusTab !== "All"
+                ? "Try adjusting your filters"
+                : "Create your first assessment to start evaluating candidates."}
+            </p>
+            {!search && statusTab === "All" && (
+              <Button asChild>
+                <Link href="/dashboard/recruiter/assessments/create">Create Assessment</Link>
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-6">
-          {assessments.map((assessment) => (
-            <Card
-              key={assessment._id}
-              className="hover:shadow-lg transition-shadow"
-            >
-              <CardHeader>
-                <div className="flex justify-between items-start">
-                  <div className="space-y-2">
-                    <CardTitle className="text-xl">
-                      {assessment.title}
-                    </CardTitle>
-                    <CardDescription>{assessment.description}</CardDescription>
-                    <div className="flex items-center gap-2">
-                      <Badge className={getStatusColor(assessment.status)}>
-                        {assessment.status}
-                      </Badge>
-                      <Badge
+        <div className="space-y-3">
+          {filtered.map((a) => {
+            const completionPct =
+              a.candidatesAssigned > 0
+                ? Math.round((a.candidatesCompleted / a.candidatesAssigned) * 100)
+                : 0
+
+            return (
+              <Card key={a._id} className="hover:shadow-md transition-shadow">
+                <CardContent className="p-5">
+                  <div className="flex flex-col md:flex-row md:items-center gap-4">
+                    {/* Left: info */}
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-semibold text-base truncate">{a.title}</h3>
+                        <Badge className={`${STATUS_COLOR[a.status]} text-white text-xs flex items-center gap-1`}>
+                          {STATUS_ICON[a.status]}
+                          {a.status}
+                        </Badge>
+                        <Badge variant="outline" className={`text-xs ${DIFF_COLOR[a.difficulty]}`}>
+                          {a.difficulty}
+                        </Badge>
+                        {a.requiresProctoring && (
+                          <Badge variant="outline" className="text-xs text-blue-600 border-blue-200 bg-blue-50">
+                            <Shield className="h-3 w-3 mr-1" />
+                            Proctored
+                          </Badge>
+                        )}
+                      </div>
+
+                      {a.description && (
+                        <p className="text-sm text-muted-foreground line-clamp-1">{a.description}</p>
+                      )}
+
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3.5 w-3.5" />{a.durationMinutes} min
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <FileText className="h-3.5 w-3.5" />{a.totalQuestions} questions
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <BarChart3 className="h-3.5 w-3.5" />{a.totalPoints} pts
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Users className="h-3.5 w-3.5" />{a.candidatesAssigned || 0} assigned
+                        </span>
+                        {a.candidatesAssigned > 0 && (
+                          <span className="flex items-center gap-1 text-green-600 font-medium">
+                            <CheckCircle2 className="h-3.5 w-3.5" />{completionPct}% done
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Right: actions */}
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                      <Button
                         variant="outline"
-                        className={getDifficultyColor(assessment.difficulty)}
+                        size="sm"
+                        onClick={() => window.open(`/dashboard/recruiter/assessments/${a._id}/preview`, "_blank")}
+                        className="h-8 text-xs"
                       >
-                        {assessment.difficulty}
-                      </Badge>
-                      {assessment.requiresProctoring && (
-                        <Badge
-                          variant="outline"
-                          className="text-blue-600 bg-blue-50"
-                        >
-                          <Shield className="h-3 w-3 mr-1" />
-                          AI Proctored
-                        </Badge>
-                      )}
-                      {assessment.securityFeatures?.length > 0 && (
-                        <Badge
-                          variant="outline"
-                          className="text-purple-600 bg-purple-50 border-purple-200"
-                        >
-                          <Shield className="h-3 w-3 mr-1" />
-                          {assessment.securityFeatures.length} Security Feature{assessment.securityFeatures.length !== 1 ? "s" : ""}
-                        </Badge>
-                      )}
-                    </div>
-
-                  </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-bold text-green-600">
-                      {assessment.candidatesCompleted || 0}/
-                      {assessment.candidatesAssigned || 0}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      Completed
-                    </div>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <span>{assessment.durationMinutes} minutes</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    <span>{assessment.totalQuestions} questions</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <BarChart3 className="h-4 w-4 text-muted-foreground" />
-                    <span>{assessment.totalPoints} points</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4 text-muted-foreground" />
-                    <span>{assessment.candidatesAssigned || 0} assigned</span>
-                  </div>
-                </div>
-
-                {assessment.securityFeatures.length > 0 && (
-                  <div className="bg-muted/50 rounded-lg p-3">
-                    <h4 className="font-medium text-sm mb-2 flex items-center gap-2">
-                      <Shield className="h-4 w-4" />
-                      Security Features
-                    </h4>
-                    <div className="flex flex-wrap gap-2">
-                      {assessment.securityFeatures.map((feature, index) => (
-                        <Badge
-                          key={index}
-                          variant="secondary"
-                          className="text-xs"
-                        >
-                          {feature}
-                        </Badge>
-                      ))}
+                        <Eye className="h-3.5 w-3.5 mr-1" />
+                        Preview
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => router.push(`/dashboard/recruiter/assessments/${a._id}/analytics`)}
+                        className="h-8 text-xs"
+                      >
+                        <BarChart3 className="h-3.5 w-3.5 mr-1" />
+                        Analytics
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => router.push(`/dashboard/recruiter/assessments/${a._id}/edit`)}
+                        className="h-8 text-xs"
+                      >
+                        <Edit className="h-3.5 w-3.5 mr-1" />
+                        Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          sessionStorage.setItem("refreshAssessments", "true")
+                          router.push(`/dashboard/recruiter/assessments/${a._id}/assign`)
+                        }}
+                        className="h-8 text-xs bg-gradient-to-r from-blue-600 to-purple-600 text-white"
+                      >
+                        <UserPlus className="h-3.5 w-3.5 mr-1" />
+                        Assign
+                      </Button>
                     </div>
                   </div>
-                )}
-
-                <div className="flex justify-between items-center pt-4 border-t">
-                  <div className="text-sm text-muted-foreground">
-                    Created on{" "}
-                    {new Date(assessment.createdAt).toLocaleDateString()}
-                  </div>
-
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handlePreview(assessment._id)}
-                    >
-                      <Eye className="h-4 w-4 mr-2" />
-                      Preview
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleAnalytics(assessment._id)}
-                    >
-                      <BarChart3 className="h-4 w-4 mr-2" />
-                      Analytics
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleEdit(assessment._id)}
-                    >
-                      <Edit className="h-4 w-4 mr-2" />
-                      Edit
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleAssign(assessment._id)}
-                    >
-                      <Settings className="h-4 w-4 mr-2" />
-                      Assign
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
       )}
     </div>
-  );
+  )
 }

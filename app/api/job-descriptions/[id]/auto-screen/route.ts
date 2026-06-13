@@ -4,6 +4,7 @@ import { connectDB } from "@/lib/mongodb"
 import Application from "@/models/Application"
 import Resume from "@/models/Resume"
 import JobDescription from "@/models/JobDescription"
+import User from "@/models/User"
 import { aiService } from "@/lib/ai-service"
 
 // POST /api/job-descriptions/[id]/auto-screen
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       shortlistThreshold = 70, // overall AI match score threshold
       minAtsScore = 60, // minimum ATS score
       dryRun = false, // if true, no DB updates; just compute preview
-      targetStatuses = ["Pending", "Under Review"],
+      targetStatuses = ["Pending", "pending", "Under Review", "Reviewed", "reviewed"],
     } = body
 
     // Prefer per-job thresholds over env and request body
@@ -85,6 +86,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         for (const r of resumes) resumeMap.set(String(r._id), r)
       }
 
+      // Fetch candidate names in one go
+      const userIds = apps.map((a: any) => a.applicantId || a.jobSeekerId).filter(Boolean)
+      const nameMap = new Map<string, string>()
+      if (userIds.length > 0) {
+        const users = await User.find({ _id: { $in: userIds } }, { name: 1 }).lean()
+        for (const u of users) nameMap.set(String(u._id), (u as any).name || "Unknown")
+      }
+
       for (const app of apps) {
         const resume = app.resumeId ? resumeMap.get(String(app.resumeId)) : null
         const resumeText = resume?.rawText || ""
@@ -107,7 +116,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             )
           }
           rejected++
-          preview.push({ applicationId: String(app._id), decision: "Rejected", reason: "Missing resume" })
+          preview.push({
+            applicationId: String(app._id),
+            candidateName: nameMap.get(String(app.applicantId || app.jobSeekerId)) || "Unknown",
+            aiMatchScore: 0,
+            atsScore: 0,
+            status: "Rejected",
+            skillsMatched: [],
+          })
           continue
         }
 
@@ -142,9 +158,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
         preview.push({
           applicationId: String(app._id),
+          candidateName: nameMap.get(String(app.applicantId || app.jobSeekerId)) || "Unknown",
           aiMatchScore,
           atsScore,
-          decision: shouldShortlist ? "Shortlisted" : "Rejected",
+          status: shouldShortlist ? "Shortlisted" : "Rejected",
+          skillsMatched: analysis.skillsMatch || [],
         })
       }
 

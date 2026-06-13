@@ -1,95 +1,126 @@
-import { NextRequest, NextResponse } from "next/server";
-import { connectDB } from "@/lib/mongodb";
-import Assessment from "@/models/Assessment";
-import User from "@/models/User";
-import { sendAssessmentEmail } from "@/lib/email-service";
+import { NextRequest, NextResponse } from "next/server"
+import { getSession } from "@/lib/auth"
+import { connectDB } from "@/lib/mongodb"
+import Assessment from "@/models/Assessment"
+import Application from "@/models/Application"
+import Notification from "@/models/Notification"
+import User from "@/models/User"
+import { sendAssessmentEmail } from "@/lib/email-service"
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    await connectDB();
-    const { candidateEmail, candidateName, scheduledDate, testType } = await request.json();
+    const session = await getSession(request)
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+    if (session.role !== "recruiter" && session.role !== "admin") {
+      return NextResponse.json({ error: "Only recruiters can assign assessments" }, { status: 403 })
+    }
 
-    // Get assessment details
-    const assessment = await Assessment.findById(params.id);
+    await connectDB()
+
+    const assessment = await Assessment.findById(params.id)
     if (!assessment) {
-      return NextResponse.json(
-        { error: "Assessment not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Assessment not found" }, { status: 404 })
     }
 
-    // Get candidate user
-    const candidate = await User.findOne({ email: candidateEmail });
+    // Only the creator (or admin) can assign
+    if (session.role === "recruiter" && assessment.createdBy?.toString() !== session.userId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+
+    const body = await request.json()
+    const { candidateEmail, candidateName, scheduledDate } = body
+
+    if (!candidateEmail) {
+      return NextResponse.json({ error: "candidateEmail is required" }, { status: 400 })
+    }
+
+    const candidate = await User.findOne({ email: candidateEmail.toLowerCase().trim() })
     if (!candidate) {
-      return NextResponse.json(
-        { error: "Candidate not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Candidate not found. They must be registered." }, { status: 404 })
     }
 
-    // Create test link
-    const testLink = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/job-seeker/assessments/${params.id}/take`;
+    // Create or update Application record
+    let application = await Application.findOne({
+      jobSeekerId: candidate._id,
+      assessmentId: assessment._id,
+    })
 
-    // Generate unique test token for security
-    const testToken = Buffer.from(`${candidateEmail}-${Date.now()}`).toString('base64');
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
 
-    // Send email with test link
-    const emailData = {
+    if (application) {
+      // Re-assign if previously completed/expired
+      if (!["in_progress", "Assessment Assigned"].includes(application.status)) {
+        await Application.findByIdAndUpdate(application._id, {
+          status: "Assessment Assigned",
+          assignedBy: session.userId,
+          assignedAt: new Date(),
+          expiresAt,
+        })
+      }
+    } else {
+      application = await Application.create({
+        jobSeekerId: candidate._id,
+        applicantId: candidate._id,
+        assessmentId: assessment._id,
+        assignedBy: session.userId,
+        assignedAt: new Date(),
+        expiresAt,
+        status: "Assessment Assigned",
+      })
+    }
+
+    // Send notification to candidate
+    await Notification.create({
+      userId: candidate._id,
+      type: "assessment_assigned",
+      message: `You have been assigned a new assessment: "${assessment.title}". Complete it before ${expiresAt.toDateString()}.`,
+      relatedEntity: { id: assessment._id, type: "assessment" },
+    }).catch(() => {})
+
+    // Send email
+    const testLink = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/dashboard/job-seeker/assessments/${params.id}/take`
+    const emailPayload = {
       to: candidateEmail,
       subject: `Assessment Invitation: ${assessment.title}`,
       template: "assessment-invitation",
       data: {
-        candidateName,
+        candidateName: candidateName || candidate.name || "Candidate",
         assessmentTitle: assessment.title,
         assessmentDescription: assessment.description,
-        testLink: `${testLink}?token=${testToken}`,
+        testLink,
         scheduledDate,
-        testType: testType || "assessment",
         duration: assessment.durationMinutes,
-        company: assessment.company || "HireAI",
-        instructions: assessment.instructions || "Please complete assessment at your scheduled time."
-      }
-    };
-
-    try {
-      await sendAssessmentEmail(emailData);
-      console.log("Email sent successfully to:", candidateEmail);
-    } catch (emailError) {
-      console.error("Failed to send email:", emailError);
-      // Continue with assignment even if email fails
+        company: "HireAI",
+        instructions: "Please complete the assessment before the deadline.",
+      },
     }
+    await sendAssessmentEmail(emailPayload).catch(() => {})
 
-    // Update assessment with assigned candidate
+    // Track in assignedCandidates array on the Assessment
     await Assessment.findByIdAndUpdate(params.id, {
       $push: {
         assignedCandidates: {
           candidateId: candidate._id,
           candidateEmail,
-          candidateName,
+          candidateName: candidateName || candidate.name,
           assignedAt: new Date(),
           scheduledDate: scheduledDate ? new Date(scheduledDate) : null,
-          testToken,
-          status: "assigned"
-        }
-      }
-    });
+          status: "assigned",
+        },
+      },
+    })
 
     return NextResponse.json({
       success: true,
-      message: "Assessment assigned and email sent successfully",
-      testLink: `${testLink}?token=${testToken}`,
-      candidateName,
-      candidateEmail
-    });
-
+      message: "Assessment assigned successfully",
+      testLink,
+      candidateName: candidateName || candidate.name,
+      candidateEmail,
+    })
   } catch (error) {
-    console.error("Error assigning assessment:", error);
-    return NextResponse.json(
-      { error: "Failed to assign assessment" },
-      { status: 500 }
-    );
+    console.error("Error assigning assessment:", error)
+    return NextResponse.json({ error: "Failed to assign assessment" }, { status: 500 })
   }
 }

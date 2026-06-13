@@ -75,6 +75,24 @@ const TestSchema = new mongoose.Schema({
         type: Number,
         required: false,
       },
+      difficulty: {
+        type: String,
+        enum: ["Easy", "Medium", "Hard"],
+        default: "Medium",
+      },
+      tags: [String],
+      constraints: {
+        type: String,
+        required: false,
+      },
+      examples: [
+        {
+          _id: false,
+          input: String,
+          output: String,
+          explanation: String,
+        },
+      ],
     },
   ],
   durationMinutes: {

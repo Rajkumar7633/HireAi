@@ -1,15 +1,49 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
-import { useParams, useSearchParams } from "next/navigation";
-import { VideoConferenceRoom } from "@/components/video-conference-room";
-import { RealTimeChat } from "@/components/real-time-chat";
-import { ScreenShareControls } from "@/components/screen-share-controls";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Video, AlertCircle, Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
+
+const CollegeMeetingRoom = dynamic(
+  () =>
+    import("@/components/college-meeting-room").then((m) => m.CollegeMeetingRoom),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white gap-3">
+        <Loader2 className="h-10 w-10 animate-spin text-purple-500" />
+        <span>Loading meeting room…</span>
+      </div>
+    ),
+  },
+);
+
+const VideoConferenceRoom = dynamic(
+  () =>
+    import("@/components/video-conference-room").then((m) => m.VideoConferenceRoom),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white gap-3">
+        <Loader2 className="h-10 w-10 animate-spin text-blue-500" />
+        <span>Loading video interview…</span>
+      </div>
+    ),
+  },
+);
+
+const RealTimeChat = dynamic(() => import("@/components/real-time-chat").then((m) => m.RealTimeChat), {
+  ssr: false,
+});
+
+const ScreenShareControls = dynamic(
+  () => import("@/components/screen-share-controls").then((m) => m.ScreenShareControls),
+  { ssr: false },
+);
 
 export default function VideoCallPage() {
   const params = useParams();
@@ -17,22 +51,30 @@ export default function VideoCallPage() {
   const router = useRouter();
   const { toast } = useToast();
 
-  const roomId = params.roomId as string;
-  const interviewId = searchParams.get("interviewId") || "";
-  const isHost = searchParams.get("isHost") === "true";
-  const participantName = searchParams.get("name") || "User";
+  const roomId = String(params?.roomId ?? "");
+  const interviewId = searchParams?.get("interviewId") || "";
+  const meetingId = searchParams?.get("meetingId") || "";
+  const meetingKind = searchParams?.get("kind") || "";
+  const isHost = searchParams?.get("isHost") === "true";
+  const participantName = searchParams?.get("name") || "User";
+  const isCollegeMeeting = meetingKind === "college_meeting" || Boolean(meetingId);
+  const isCollegeViewer = isCollegeMeeting && !isHost;
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!isCollegeMeeting);
   const [error, setError] = useState<string | null>(null);
-  const [hasPermissions, setHasPermissions] = useState(false);
+  const [hasPermissions, setHasPermissions] = useState(isCollegeViewer);
   const [showChat, setShowChat] = useState(false);
   const [showScreenControls, setShowScreenControls] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [chatMessageCount, setChatMessageCount] = useState(0);
 
   useEffect(() => {
+    if (isCollegeMeeting) {
+      setIsLoading(false);
+      return;
+    }
     checkPermissions();
-  }, []);
+  }, [isCollegeMeeting]);
 
   const checkPermissions = async () => {
     try {
@@ -41,13 +83,11 @@ export default function VideoCallPage() {
         audio: true,
       });
 
-      // Stop the test stream
       stream.getTracks().forEach((track) => track.stop());
 
       setHasPermissions(true);
       setIsLoading(false);
 
-      // Show success toast
       toast({
         title: "Ready to Join",
         description: "Camera and microphone access granted successfully.",
@@ -55,7 +95,7 @@ export default function VideoCallPage() {
     } catch (error) {
       console.error("Permission error:", error);
       setError(
-        "Camera and microphone access is required for video interviews."
+        "Camera and microphone access is required for video interviews.",
       );
       setIsLoading(false);
     }
@@ -77,7 +117,7 @@ export default function VideoCallPage() {
       });
     } catch (error) {
       setError(
-        "Please allow camera and microphone access to join the interview."
+        "Please allow camera and microphone access to join the interview.",
       );
       toast({
         title: "Permission Denied",
@@ -95,6 +135,17 @@ export default function VideoCallPage() {
   const handleScreenShareEnd = () => {
     setIsScreenSharing(false);
   };
+
+  if (isCollegeMeeting && meetingId) {
+    return (
+      <CollegeMeetingRoom
+        roomId={roomId}
+        meetingId={meetingId}
+        isHost={isHost}
+        participantName={participantName}
+      />
+    );
+  }
 
   if (isLoading) {
     return (
@@ -144,16 +195,15 @@ export default function VideoCallPage() {
 
   return (
     <div className="min-h-screen bg-gray-900 flex">
-      {/* Main Video Conference Area */}
       <div className="flex-1 relative">
         <VideoConferenceRoom
           roomId={roomId}
           interviewId={interviewId}
+          meetingId={meetingId}
           isHost={isHost}
           participantName={participantName}
         />
 
-        {/* Screen Share Controls Overlay */}
         {showScreenControls && (
           <div className="absolute top-20 left-4 z-40">
             <ScreenShareControls
@@ -166,7 +216,6 @@ export default function VideoCallPage() {
         )}
       </div>
 
-      {/* Chat Sidebar */}
       {showChat && (
         <RealTimeChat
           roomId={roomId}
@@ -177,7 +226,6 @@ export default function VideoCallPage() {
         />
       )}
 
-      {/* Floating Action Buttons */}
       <div className="absolute top-4 right-4 z-50 flex flex-col gap-2">
         <Button
           variant="outline"

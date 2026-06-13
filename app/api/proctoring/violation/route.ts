@@ -2,11 +2,10 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import AssessmentResult from "@/models/AssessmentResult"
+import ProctorEvent from "@/models/ProctorEvent"
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("[v0] Proctoring violation reported")
-
     const session = await getSession(request)
     if (!session) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
@@ -16,55 +15,61 @@ export async function POST(request: NextRequest) {
 
     const { assessmentId, violationType, severity, message, data } = await request.json()
 
+    if (!assessmentId || !violationType) {
+      return NextResponse.json({ message: "assessmentId and violationType are required" }, { status: 400 })
+    }
+
+    // Persist to ProctorEvent collection for audit trail
+    await ProctorEvent.create({
+      assessmentId,
+      candidateId: session.userId,
+      type: violationType,
+      message: message || violationType,
+      meta: { severity, data },
+    })
+
+    // Update assessment result's proctoring timeline
     const result = await AssessmentResult.findOneAndUpdate(
-      {
-        assessmentId: assessmentId,
-        candidateId: session.userId,
-        status: "In Progress",
-      },
+      { assessmentId, candidateId: session.userId, status: "In Progress" },
       {
         $push: {
           "proctoringData.timeline": {
             timestamp: new Date(),
             type: violationType,
-            severity: severity,
-            message: message,
-            data: data,
+            severity,
+            message,
+            data,
           },
         },
-        $inc: {
-          [`proctoringData.violations.${violationType}`]: 1,
-        },
+        $inc: { [`proctoringData.violations.${violationType}`]: 1 },
       },
       { new: true },
     )
 
-    if (!result) {
-      return NextResponse.json(
-        {
-          message: "Assessment session not found",
-        },
-        { status: 404 },
-      )
-    }
-
-    console.log("[v0] Proctoring violation recorded:", violationType, severity)
-
-    // TODO: Implement WebSocket notification to recruiter dashboard
-    // This would send real-time alerts to HR/recruiters about violations
+    // Emit socket event to notify recruiter dashboard in real time
+    try {
+      const { getIO } = await import("@/lib/socket-server")
+      const io = getIO()
+      if (io) {
+        io.to(`recruiter:${assessmentId}`).emit("proctor:violation", {
+          assessmentId,
+          candidateId: session.userId,
+          violationType,
+          severity,
+          message,
+          timestamp: new Date().toISOString(),
+        })
+      }
+    } catch {}
 
     return NextResponse.json({
       success: true,
       message: "Violation recorded",
-      severity: severity,
+      severity,
+      sessionFound: !!result,
     })
   } catch (error) {
-    console.error("[v0] Error recording violation:", error)
-    return NextResponse.json(
-      {
-        message: "Failed to record violation",
-      },
-      { status: 500 },
-    )
+    console.error("Error recording violation:", error)
+    return NextResponse.json({ message: "Failed to record violation" }, { status: 500 })
   }
 }

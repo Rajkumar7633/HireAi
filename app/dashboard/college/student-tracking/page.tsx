@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Progress } from "@/components/ui/progress"
+import { SkillBar, ScoreRing } from "@/components/ui/charts"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, Users, TrendingUp, AlertTriangle, CheckCircle, GraduationCap } from "lucide-react"
 
@@ -72,15 +72,14 @@ export default function StudentTrackingPage() {
   const fetchData = async () => {
     setLoading(true)
     try {
-      const collegeId = "your-college-id" // Replace with actual college ID from session
       const params = new URLSearchParams()
       if (selectedYear !== "all") params.append("year", selectedYear)
       if (selectedBranch !== "all") params.append("branch", selectedBranch)
       if (selectedDepartment !== "all") params.append("department", selectedDepartment)
 
       const [studentsRes, analyticsRes] = await Promise.all([
-        fetch(`/api/student-tracking?collegeId=${collegeId}&${params}`),
-        fetch(`/api/student-tracking?collegeId=${collegeId}&analytics=true`)
+        fetch(`/api/student-tracking?${params}`),
+        fetch(`/api/student-tracking?analytics=true`)
       ])
 
       const studentsData = await studentsRes.json()
@@ -257,7 +256,7 @@ export default function StudentTrackingPage() {
                     <span className="font-medium">{year === "1" ? "1st Year" : year === "2" ? "2nd Year" : year === "3" ? "3rd Year" : `${year}th Year`}</span>
                     <span className="text-gray-600">{count} students</span>
                   </div>
-                  <Progress value={(count / analytics.totalStudents) * 100} className="h-2" />
+                  <SkillBar label="" value={(count / analytics.totalStudents) * 100} color="#7c3aed" />
                 </div>
               ))}
             </div>
@@ -336,21 +335,21 @@ export default function StudentTrackingPage() {
                       <span>High Readiness (70%+)</span>
                       <span className="font-semibold">{analytics.readinessDistribution.high}</span>
                     </div>
-                    <Progress value={(analytics.readinessDistribution.high / analytics.totalStudents) * 100} className="h-2" />
+                    <SkillBar label="" value={(analytics.readinessDistribution.high / analytics.totalStudents) * 100} color="#16a34a" />
                   </div>
                   <div>
                     <div className="flex justify-between text-sm mb-1">
                       <span>Medium Readiness (50-70%)</span>
                       <span className="font-semibold">{analytics.readinessDistribution.medium}</span>
                     </div>
-                    <Progress value={(analytics.readinessDistribution.medium / analytics.totalStudents) * 100} className="h-2" />
+                    <SkillBar label="" value={(analytics.readinessDistribution.medium / analytics.totalStudents) * 100} color="#f59e0b" />
                   </div>
                   <div>
                     <div className="flex justify-between text-sm mb-1">
                       <span>Low Readiness (&lt;50%)</span>
                       <span className="font-semibold">{analytics.readinessDistribution.low}</span>
                     </div>
-                    <Progress value={(analytics.readinessDistribution.low / analytics.totalStudents) * 100} className="h-2" />
+                    <SkillBar label="" value={(analytics.readinessDistribution.low / analytics.totalStudents) * 100} color="#dc2626" />
                   </div>
                 </CardContent>
               </Card>

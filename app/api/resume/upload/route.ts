@@ -7,134 +7,202 @@ import { writeFile, mkdir } from "fs/promises"
 import { join } from "path"
 import { existsSync } from "fs"
 
-async function processResumeFile(file: File, userId: string, userEmail: string) {
-  // Simulate processing delay
-  await new Promise((resolve) => setTimeout(resolve, 2000))
+// ─── Text Extraction ──────────────────────────────────────────────────────────
 
-  // Generate realistic mock parsed text based on file name
-  const fileName = file.name.replace(/\.[^/.]+$/, "")
-  const mockParsedText = `${fileName} - Professional Resume
+async function extractText(buffer: Buffer, mimeType: string): Promise<string> {
+  try {
+    if (mimeType === "application/pdf") {
+      // pdfjs-dist is ESM-only; use dynamic import so Next.js doesn't bundle it.
+      const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs" as any)
+      const data = new Uint8Array(buffer)
+      const pdf = await getDocument({ data, useSystemFonts: true }).promise
+      let text = ""
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i)
+        const content = await page.getTextContent()
+        text += content.items.map((item: any) => item.str).join(" ") + "\n"
+      }
+      text = text.trim()
+      console.log(`[pdfjs-dist] extracted ${text.length} chars, ${pdf.numPages} pages`)
+      return text
+    }
 
-CONTACT INFORMATION
-Email: ${userEmail}
-Phone: (555) 123-4567
-Location: San Francisco, CA
-LinkedIn: linkedin.com/in/${fileName.toLowerCase().replace(/\s+/g, "")}
+    if (
+      mimeType === "application/msword" ||
+      mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const mammoth = require("mammoth")
+      const result = await mammoth.extractRawText({ buffer })
+      const text = (result.value || "").trim()
+      console.log(`[mammoth] extracted ${text.length} chars`)
+      return text
+    }
+  } catch (err) {
+    console.error("Text extraction error:", err)
+  }
+  return ""
+}
 
-PROFESSIONAL SUMMARY
-Experienced software engineer with 5+ years of expertise in full-stack development, 
-cloud architecture, and team leadership. Proven track record of building scalable 
-systems serving millions of users and leading cross-functional teams to deliver 
-high-impact products.
+// ─── Real ATS Scoring ─────────────────────────────────────────────────────────
 
-TECHNICAL SKILLS
-• Programming Languages: JavaScript, TypeScript, Python, Java, Go
-• Frontend: React, Next.js, Vue.js, HTML5, CSS3, Tailwind CSS
-• Backend: Node.js, Express.js, Django, Spring Boot, GraphQL
-• Databases: PostgreSQL, MongoDB, Redis, Elasticsearch
-• Cloud & DevOps: AWS, Docker, Kubernetes, CI/CD, Terraform
-• Tools: Git, Linux, Agile/Scrum, System Design
+const ACTION_VERBS = [
+  "led","built","developed","designed","implemented","managed","created","improved",
+  "increased","reduced","launched","delivered","optimized","architected","mentored",
+  "collaborated","established","deployed","automated","streamlined","achieved",
+  "spearheaded","coordinated","analyzed","engineered","integrated","executed",
+  "transformed","drove","generated","negotiated","published","authored",
+]
 
-PROFESSIONAL EXPERIENCE
+const SECTION_KEYWORDS = [
+  "experience","work experience","employment","professional experience",
+  "education","academic","skills","technical skills","core skills",
+  "summary","objective","profile","about","projects","certifications",
+  "achievements","awards","languages",
+]
 
-Senior Software Engineer | Tech Innovations Inc. | 2021 - Present
-• Led development of microservices architecture serving 10M+ daily active users
-• Improved system performance by 40% through database optimization and caching strategies
-• Mentored team of 5 junior engineers, with 3 receiving promotions within 12 months
-• Implemented automated testing pipeline, increasing code coverage from 65% to 95%
-• Collaborated with product and design teams to deliver 15+ major features
+const TECH_KEYWORDS = [
+  "javascript","typescript","python","java","c++","c#","go","rust","swift","kotlin",
+  "react","vue","angular","next.js","node.js","express","django","fastapi","spring",
+  "sql","mysql","postgresql","mongodb","redis","elasticsearch","aws","gcp","azure",
+  "docker","kubernetes","terraform","ci/cd","git","linux","agile","scrum","rest","graphql",
+  "machine learning","ai","data science","tensorflow","pytorch","html","css","tailwind",
+]
 
-Software Engineer | StartupXYZ | 2019 - 2021
-• Built responsive web applications using React and Node.js for 100K+ users
-• Developed RESTful APIs and integrated third-party services (Stripe, SendGrid, AWS S3)
-• Reduced deployment time by 60% through implementation of CI/CD pipelines
-• Participated in agile development processes and code review practices
-• Contributed to open-source projects and technical documentation
+function scoreResume(text: string): {
+  score: number
+  breakdown: Record<string, number>
+  strengths: string[]
+  improvements: string[]
+  skills: string[]
+  wordCount: number
+} {
+  const lower = text.toLowerCase()
+  const words = text.split(/\s+/).filter(Boolean)
+  const wordCount = words.length
+  const breakdown: Record<string, number> = {}
+  const strengths: string[] = []
+  const improvements: string[] = []
 
-EDUCATION
-Bachelor of Science in Computer Science
-University of California, Berkeley | 2014 - 2018
-GPA: 3.7/4.0
+  // 1. Contact info (15 pts)
+  let contactScore = 0
+  const hasEmail = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/.test(text)
+  const hasPhone = /(\+?\d[\d\s\-().]{7,}\d)/.test(text)
+  const hasLinkedIn = /linkedin\.com/i.test(text) || /linkedin/i.test(text)
+  if (hasEmail) contactScore += 5
+  if (hasPhone) contactScore += 5
+  if (hasLinkedIn) contactScore += 5
+  breakdown["Contact Info"] = contactScore
+  if (contactScore >= 10) strengths.push("Contact information is complete")
+  else improvements.push("Add phone number and LinkedIn profile URL")
 
-PROJECTS
-E-commerce Platform | 2023
-• Full-stack web application with user authentication, payment processing, and inventory management
-• Technologies: React, Node.js, PostgreSQL, Stripe API, AWS S3
+  // 2. Section headers (20 pts)
+  const sectionsFound = SECTION_KEYWORDS.filter((s) => lower.includes(s))
+  const sectionScore = Math.min(20, sectionsFound.length * 3)
+  breakdown["Section Headers"] = sectionScore
+  if (sectionScore >= 15) strengths.push("Well-structured resume with clear sections")
+  else improvements.push(`Add standard sections — found only: ${sectionsFound.join(", ") || "none"}`)
 
-CERTIFICATIONS
-• AWS Certified Solutions Architect - Associate (2023)
-• Google Cloud Professional Developer (2022)`
+  // 3. Length / content density (15 pts)
+  let lengthScore = 0
+  if (wordCount >= 150) lengthScore += 5
+  if (wordCount >= 300) lengthScore += 5
+  if (wordCount <= 900) lengthScore += 5  // not too long (2 pages max)
+  breakdown["Content Density"] = lengthScore
+  if (wordCount < 150) improvements.push("Resume is too short — add more detail to experience and skills")
+  else if (wordCount > 900) improvements.push("Resume may be too long — aim for 1-2 pages")
+  else strengths.push(`Good content length (${wordCount} words)`)
 
-  const atsScore = Math.floor(Math.random() * 30) + 70 // Random score between 70-100
-  const skillsFound = ["JavaScript", "React", "Node.js", "Python", "AWS", "Docker", "TypeScript", "MongoDB"]
+  // 4. Quantified achievements (20 pts)
+  const metrics = (text.match(/\d+[\s]?(%|percent|x|×|million|billion|k\b|users|customers|teams?|members?|engineers?|products?|projects?|clients?)/gi) || [])
+  const metricScore = Math.min(20, metrics.length * 4)
+  breakdown["Quantified Achievements"] = metricScore
+  if (metrics.length >= 3) strengths.push(`Strong use of metrics (${metrics.length} quantified achievements)`)
+  else improvements.push("Add more numbers and metrics (e.g., 'improved performance by 40%', 'led team of 5')")
 
-  return {
-    parsedText: mockParsedText,
-    atsScore: atsScore,
-    extractedData: {
-      name: fileName,
-      email: userEmail,
-      phone: "(555) 123-4567",
-      skills: skillsFound,
-      experience: [
-        {
-          title: "Senior Software Engineer",
-          company: "Tech Innovations Inc.",
-          duration: "2021 - Present",
-        },
-        {
-          title: "Software Engineer",
-          company: "StartupXYZ",
-          duration: "2019 - 2021",
-        },
-      ],
-      education: [
-        {
-          degree: "Bachelor of Science in Computer Science",
-          school: "University of California, Berkeley",
-          year: "2014 - 2018",
-        },
-      ],
-    },
-    analysis: {
-      strengths: [
-        "Strong technical skills in modern technologies",
-        "Leadership and mentoring experience",
-        "Quantified achievements with metrics",
-        "Relevant certifications and continuous learning",
-      ],
-      improvements: [
-        "Add more specific project outcomes",
-        "Include soft skills and teamwork examples",
-        "Consider adding volunteer or side projects",
-        "Optimize keywords for target roles",
-      ],
-      keywordDensity: {
-        JavaScript: 3,
-        React: 4,
-        Node_js: 3, // Replace dot with underscore to avoid Mongoose Map error
-        AWS: 2,
-        Python: 2,
-      },
-    },
+  // 5. Action verbs (15 pts)
+  const verbsFound = ACTION_VERBS.filter((v) => new RegExp(`\\b${v}(d|ed|s|ing)?\\b`, "i").test(text))
+  const verbScore = Math.min(15, verbsFound.length * 2)
+  breakdown["Action Verbs"] = verbScore
+  if (verbsFound.length >= 5) strengths.push("Good use of strong action verbs")
+  else improvements.push("Start bullet points with strong action verbs (e.g., Led, Built, Improved, Delivered)")
+
+  // 6. Technical keywords (15 pts)
+  const techFound = TECH_KEYWORDS.filter((k) => lower.includes(k))
+  const techScore = Math.min(15, techFound.length * 2)
+  breakdown["Technical Keywords"] = techScore
+  if (techFound.length >= 5) strengths.push(`Relevant technical keywords detected (${techFound.length} found)`)
+  else improvements.push("Include more technical skills and industry-relevant keywords")
+
+  // Total
+  const raw = contactScore + sectionScore + lengthScore + metricScore + verbScore + techScore
+  // Normalize to 0–100
+  const score = Math.min(100, Math.max(10, Math.round((raw / 100) * 100)))
+
+  // Extract skills from text
+  const skills = TECH_KEYWORDS.filter((k) => lower.includes(k))
+    .map((k) => k.charAt(0).toUpperCase() + k.slice(1))
+    .slice(0, 20)
+
+  return { score, breakdown, strengths, improvements, skills, wordCount }
+}
+
+// ─── Optional: Groq AI enhanced analysis ─────────────────────────────────────
+
+async function groqEnhancedAnalysis(
+  text: string,
+  baseScore: number
+): Promise<{ score: number; strengths: string[]; improvements: string[]; skills: string[] } | null> {
+  const apiKey = process.env.GROQ_API_KEY
+  if (!apiKey) return null
+
+  try {
+    const { createGroq } = await import("@ai-sdk/groq")
+    const { generateText } = await import("ai")
+
+    const groq = createGroq({ apiKey })
+    const truncated = text.slice(0, 4000) // stay within token limits
+
+    const { text: aiText } = await generateText({
+      model: groq(process.env.GROQ_MODEL || "llama-3.3-70b-versatile"),
+      prompt: `You are an expert ATS resume analyzer. Analyze this resume and return ONLY valid JSON with this exact structure:
+{
+  "score": <integer 0-100 representing ATS compatibility>,
+  "strengths": [<up to 4 short strength strings>],
+  "improvements": [<up to 4 short improvement strings>],
+  "skills": [<list of technical skills found, max 15>]
+}
+
+Consider: contact info, section clarity, quantified achievements, keyword density, action verbs, formatting, length.
+Base your score on real ATS criteria. My rule-based score was ${baseScore}.
+
+Resume text:
+${truncated}`,
+      maxTokens: 600,
+    })
+
+    const jsonMatch = aiText.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) return null
+    const parsed = JSON.parse(jsonMatch[0])
+    if (typeof parsed.score !== "number") return null
+    return parsed
+  } catch (err) {
+    console.error("Groq analysis error:", err)
+    return null
   }
 }
+
+// ─── POST handler ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   try {
     const session = await getSession(req)
     if (!session || session.role !== "job_seeker") {
-      console.log("Authentication failed:", { session })
       return NextResponse.json(
-        {
-          message: "Unauthorized. Please log in as a job seeker to upload your resume.",
-          requiresAuth: true,
-        },
-        { status: 401 },
+        { message: "Unauthorized. Please log in as a job seeker.", requiresAuth: true },
+        { status: 401 }
       )
     }
-
-    console.log(`Processing resume upload for user: ${session.userId} (${session.email})`)
 
     const formData = await req.formData()
     const resumeFile = formData.get("resume") as File
@@ -148,96 +216,113 @@ export async function POST(req: NextRequest) {
       "application/msword",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ]
-
     if (!allowedTypes.includes(resumeFile.type)) {
       return NextResponse.json(
-        { message: "Invalid file type. Please upload a PDF, DOC, or DOCX file." },
-        { status: 400 },
+        { message: "Invalid file type. Please upload PDF, DOC, or DOCX." },
+        { status: 400 }
       )
     }
 
-    const maxSize = 5 * 1024 * 1024 // 5MB
+    const maxSize = 5 * 1024 * 1024
     if (resumeFile.size > maxSize) {
-      return NextResponse.json({ message: "File too large. Please upload a file smaller than 5MB." }, { status: 400 })
+      return NextResponse.json({ message: "File too large. Max 5 MB." }, { status: 400 })
     }
 
     await connectDB()
 
+    // Save file to disk
     const uploadsDir = join(process.cwd(), "uploads", "resumes")
-    if (!existsSync(uploadsDir)) {
-      await mkdir(uploadsDir, { recursive: true })
-    }
+    if (!existsSync(uploadsDir)) await mkdir(uploadsDir, { recursive: true })
 
-    const fileName = `${session.userId}_${Date.now()}_${resumeFile.name}`
-    const filePath = join(uploadsDir, fileName)
-
+    const savedName = `${session.userId}_${Date.now()}_${resumeFile.name}`
+    const filePath = join(uploadsDir, savedName)
     const bytes = await resumeFile.arrayBuffer()
     const buffer = Buffer.from(bytes)
     await writeFile(filePath, buffer)
 
-    const processedData = await processResumeFile(resumeFile, session.userId, session.email)
+    // Extract real text from document
+    const parsedText = await extractText(buffer, resumeFile.type)
+    const hasText = parsedText.trim().length >= 30
 
+    // If we got no text, still proceed with a low score rather than failing —
+    // the file itself is valid, it's just a scanned/image-based PDF
+    const textForScoring = hasText
+      ? parsedText
+      : `${resumeFile.name} — could not extract text (possible scanned PDF)`
+
+    // Rule-based real ATS scoring
+    const ruleResult = scoreResume(textForScoring)
+
+    // Optionally enhance with Groq AI (only if we have real text)
+    const aiResult = hasText ? await groqEnhancedAnalysis(textForScoring, ruleResult.score) : null
+
+    const finalScore  = aiResult?.score       ?? ruleResult.score
+    const strengths   = aiResult?.strengths   ?? ruleResult.strengths
+    const improvements = aiResult?.improvements ?? ruleResult.improvements
+    const skills      = aiResult?.skills       ?? ruleResult.skills
+
+    const analysis = {
+      strengths,
+      improvements: hasText
+        ? improvements
+        : ["Could not extract text — file may be a scanned/image PDF. Upload a text-based PDF or DOCX for full analysis.", ...improvements],
+      breakdown: ruleResult.breakdown,
+      wordCount: ruleResult.wordCount,
+      aiEnhanced: !!aiResult,
+      scannedPdf: !hasText,
+    }
+
+    // Persist to Resume collection
     const resume = new Resume({
       userId: session.userId,
       fileName: resumeFile.name,
-      fileUrl: `/api/uploads/resumes/${fileName}`,
-      rawText: processedData.parsedText,
-      parsedSkills: processedData.extractedData.skills,
-      experience: processedData.extractedData.experience
-        .map((exp) => `${exp.title} at ${exp.company} (${exp.duration})`)
-        .join("; "),
-      education: processedData.extractedData.education
-        .map((edu) => `${edu.degree} from ${edu.school} (${edu.year})`)
-        .join("; "),
-      atsScore: processedData.atsScore,
-      analysis: processedData.analysis,
-      extractedData: processedData.extractedData,
+      fileUrl: `/api/uploads/resumes/${savedName}`,
+      rawText: parsedText || resumeFile.name,
+      parsedSkills: skills,
+      atsScore: finalScore,
+      analysis,
+      extractedData: { skills },
       status: "processed",
       size: resumeFile.size,
       mimeType: resumeFile.type,
     })
-
     await resume.save()
 
-    // Persist quick access fields into JobSeekerProfile
+    // Persist quick-access fields to JobSeekerProfile
     try {
       await JobSeekerProfile.findOneAndUpdate(
         { userId: session.userId },
         {
           $set: {
-            atsScore: Number(processedData.atsScore || 0),
-            lastAtsAnalysis: processedData.analysis,
+            atsScore: finalScore,
+            lastAtsAnalysis: analysis,
             lastResumeFileName: resumeFile.name,
             lastUpdated: new Date(),
+            ...(skills.length > 0 && { skills }),
           },
         },
         { upsert: true }
       )
     } catch {}
 
-    return NextResponse.json(
-      {
-        message: "Resume uploaded and analyzed successfully! Your ATS score and detailed analysis are ready.",
-        resume: {
-          id: resume._id.toString(),
-          filename: resume.fileName,
-          originalName: resumeFile.name,
-          size: resumeFile.size,
-          mimeType: resumeFile.type,
-          uploadDate: resume.uploadedAt.toISOString(),
-          userId: session.userId,
-          userEmail: session.email,
-          status: resume.status,
-          atsScore: resume.atsScore,
-          extractedData: resume.extractedData,
-          analysis: resume.analysis,
-        },
-        source: "database",
+    return NextResponse.json({
+      message: "Resume analyzed successfully!",
+      resume: {
+        id: resume._id.toString(),
+        filename: resume.fileName,
+        originalName: resumeFile.name,
+        size: resumeFile.size,
+        mimeType: resumeFile.type,
+        uploadDate: (resume as any).uploadedAt?.toISOString() ?? new Date().toISOString(),
+        userId: session.userId,
+        status: resume.status,
+        atsScore: finalScore,
+        extractedData: { skills },
+        analysis,
       },
-      { status: 200 },
-    )
+    })
   } catch (error) {
-    console.error("Resume upload API error:", error)
+    console.error("Resume upload error:", error)
     return NextResponse.json({ message: "Internal server error. Please try again." }, { status: 500 })
   }
 }
@@ -248,11 +333,8 @@ export async function GET(req: NextRequest) {
     if (!session || session.role !== "job_seeker") {
       return NextResponse.json({ message: "Unauthorized", requiresAuth: true }, { status: 401 })
     }
-
     await connectDB()
-
-    const resumes = await Resume.find({ userId: session.userId }).sort({ uploadedAt: -1 }).select("-rawText") // Exclude large text field for list view
-
+    const resumes = await Resume.find({ userId: session.userId }).sort({ uploadedAt: -1 }).select("-rawText")
     return NextResponse.json(resumes, { status: 200 })
   } catch (error) {
     console.error("Error fetching resumes:", error)

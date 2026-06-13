@@ -12,7 +12,28 @@ export async function POST(req: Request) {
       cache: "no-store",
     })
     const data = await r.json()
-    return NextResponse.json(data, { status: r.status })
+
+    const response = NextResponse.json(data, { status: r.status })
+
+    // If login succeeded, set the JWT as an HttpOnly cookie so
+    // getSession() (which reads "auth-token" cookie) works for all API routes
+    if (r.ok) {
+      const token: string | undefined =
+        data.token || data.accessToken || data.jwt || data.access_token
+
+      if (token) {
+        // 7-day expiry, HttpOnly, SameSite=Lax so it's sent on same-origin requests
+        response.cookies.set("auth-token", token, {
+          httpOnly: true,
+          sameSite: "lax",
+          secure: process.env.NODE_ENV === "production",
+          maxAge: 60 * 60 * 24 * 7, // 7 days
+          path: "/",
+        })
+      }
+    }
+
+    return response
   } catch (err) {
     return NextResponse.json({ message: "Internal server error" }, { status: 500 })
   }

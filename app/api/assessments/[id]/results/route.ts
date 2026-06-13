@@ -6,7 +6,7 @@ import Assessment from "@/models/Assessment"
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const assessmentId = params.id
+    const urlId = params.id          // may be applicationId OR assessmentId
     const session = await getSession(request)
 
     if (!session || session.role !== "job_seeker") {
@@ -15,13 +15,24 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     await connectDB()
 
-    const applicationDoc = await Application.findOne({
+    // Try by applicationId (_id) first — that's what the assessments list page uses
+    let applicationDoc = await Application.findOne({
+      _id: urlId,
       jobSeekerId: session.userId,
-      assessmentId,
-      status: { $in: ["Assessment Completed", "completed", "test_completed"] },
     })
       .populate("assessmentId", "title totalPoints questions durationMinutes")
       .lean()
+
+    // Fallback: try by assessmentId field (legacy links)
+    if (!applicationDoc) {
+      applicationDoc = await Application.findOne({
+        jobSeekerId: session.userId,
+        assessmentId: urlId,
+        status: { $in: ["Assessment Completed", "completed", "test_completed"] },
+      })
+        .populate("assessmentId", "title totalPoints questions durationMinutes")
+        .lean()
+    }
 
     if (!applicationDoc) {
       return NextResponse.json({ success: false, message: "No completed results found" }, { status: 404 })
@@ -29,23 +40,25 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     const application: any = applicationDoc as any
     const assessment: any = application.assessmentId
+    const resolvedAssessmentId = String(assessment?._id || urlId)
     const totalQuestions = assessment?.questions?.length || 0
     const correctAnswers = (application.answers || []).filter((a: any) => a.isCorrect).length
 
-    // Build a lookup for question metadata
+    // Build a lookup for question metadata keyed by questionId (the string field used in answers)
     const questionMeta: Record<string, any> = {}
       ; (assessment?.questions || []).forEach((q: any) => {
-        questionMeta[q._id?.toString?.() || String(q._id)] = q
+        const key = String((q as any).questionId || q._id)
+        questionMeta[key] = q
       })
 
     const results = {
-      assessmentId,
+      assessmentId: resolvedAssessmentId,
       title: assessment?.title || "Assessment",
       score: application.score || 0,
       maxScore: assessment?.totalPoints || 100,
       percentage: application.score || 0,
-      passingScore: 70,
-      passed: (application.score || 0) >= 70,
+      passingScore: assessment?.settings?.passingScore ?? assessment?.passingScore ?? 70,
+      passed: (application.score || 0) >= (assessment?.settings?.passingScore ?? assessment?.passingScore ?? 70),
       completedAt: application.completedAt,
       duration: application.timeSpent || 0,
       totalQuestions,

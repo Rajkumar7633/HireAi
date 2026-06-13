@@ -8,8 +8,8 @@ router.get("/profile", auth, async (req, res) => {
   try {
     const { userId } = req.query;
     
-    // Allow college users to access their own profile
-    if (req.user.role !== "college" && req.user.id !== userId) {
+    const isCollegeRole = req.user.role === "college" || req.user.role === "college_admin"
+    if (!isCollegeRole && req.user.id !== userId) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -53,7 +53,7 @@ router.put("/profile", auth, async (req, res) => {
     const { userId } = req.query;
     
     // Allow college users to update their own profile
-    if (req.user.role !== "college" && req.user.id !== userId) {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin") && req.user.id !== userId) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -117,7 +117,7 @@ router.put("/profile", auth, async (req, res) => {
 // GET /api/college/activities - Get recent activities
 router.get("/activities", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 

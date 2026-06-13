@@ -5,7 +5,7 @@ import { getSession } from "@/lib/auth"
 export async function GET(req: NextRequest) {
   try {
     const session = await getSession(req)
-    if (!session || session.role !== "college") {
+    if (!session || session.role !== "college" && session.role !== "college_admin") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
     if (year) params.append("year", year)
     if (placementStatus) params.append("placementStatus", placementStatus)
 
-    const backendUrl = process.env.BACKEND_URL || "http://localhost:5000"
+    const backendUrl = process.env.BACKEND_URL || "http://localhost:5001"
     const response = await fetch(`${backendUrl}/api/college/students?${params}`)
     const data = await response.json()
 
@@ -40,12 +40,12 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await getSession(req)
-    if (!session || session.role !== "college") {
+    if (!session || session.role !== "college" && session.role !== "college_admin") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const body = await req.json()
-    const backendUrl = process.env.BACKEND_URL || "http://localhost:5000"
+    const backendUrl = process.env.BACKEND_URL || "http://localhost:5001"
     const response = await fetch(`${backendUrl}/api/college/students`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

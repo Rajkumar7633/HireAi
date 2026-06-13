@@ -53,10 +53,10 @@ async function register({ email, password, role, name }) {
 
   const requestedRole = role || "job_seeker"
 
-  // Validate college email for college_admin role
-  if (requestedRole === "college_admin") {
+  // Validate college email for college/college_admin role
+  if (requestedRole === "college_admin" || requestedRole === "college") {
     if (!isValidCollegeEmail(email)) {
-      const err = new Error("College admin must use @mmumullana.org email address")
+      const err = new Error("College accounts must use @mmumullana.org email address")
       err.statusCode = 400
       throw err
     }

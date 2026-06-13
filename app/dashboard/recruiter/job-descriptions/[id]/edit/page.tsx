@@ -83,7 +83,7 @@ export default function EditJobPage() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-6 w-full">
       <JobDescriptionForm initialData={jobData} onSave={handleSave} />
     </div>
   )

@@ -8,7 +8,7 @@ const { invalidateCache } = require("../middleware/cache");
 // POST /api/college/campus-drives - Create campus drive
 router.post("/campus-drives", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -55,7 +55,7 @@ router.post("/campus-drives", auth, async (req, res) => {
 // GET /api/college/campus-drives - Get all campus drives for college
 router.get("/campus-drives", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -80,7 +80,7 @@ router.get("/campus-drives", auth, async (req, res) => {
 // GET /api/college/campus-drives/:id - Get campus drive details
 router.get("/campus-drives/:id", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -110,7 +110,7 @@ router.get("/campus-drives/:id", auth, async (req, res) => {
 // PUT /api/college/campus-drives/:id - Update campus drive
 router.put("/campus-drives/:id", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -147,7 +147,7 @@ router.put("/campus-drives/:id", auth, async (req, res) => {
 // DELETE /api/college/campus-drives/:id - Delete campus drive
 router.delete("/campus-drives/:id", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -173,7 +173,7 @@ router.delete("/campus-drives/:id", auth, async (req, res) => {
 // POST /api/college/campus-drives/:id/register - Register student for drive
 router.post("/campus-drives/:id/register", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -227,7 +227,7 @@ router.post("/campus-drives/:id/register", auth, async (req, res) => {
 // POST /api/college/campus-drives/:id/interview-schedule - Schedule interview
 router.post("/campus-drives/:id/interview-schedule", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -266,7 +266,7 @@ router.post("/campus-drives/:id/interview-schedule", auth, async (req, res) => {
 // PUT /api/college/campus-drives/:id/interview-schedule/:scheduleId - Update interview result
 router.put("/campus-drives/:id/interview-schedule/:scheduleId", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -305,7 +305,7 @@ router.put("/campus-drives/:id/interview-schedule/:scheduleId", auth, async (req
 // POST /api/college/campus-drives/:id/final-results - Add final results
 router.post("/campus-drives/:id/final-results", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 

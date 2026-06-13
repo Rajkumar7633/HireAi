@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Progress } from "@/components/ui/progress"
+import { SkillBar } from "@/components/ui/charts"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, BarChart3, TrendingUp, Users, Clock, Target, Award } from "lucide-react"
 
@@ -143,49 +143,17 @@ export default function AdvancedAnalyticsPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span>Applied</span>
-                        <span className="font-semibold">{analytics.funnel.applied}</span>
-                      </div>
-                      <Progress value={100} className="h-3" />
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span>Shortlisted</span>
-                        <span className="font-semibold">{analytics.funnel.shortlisted}</span>
-                      </div>
-                      <Progress value={(analytics.funnel.shortlisted / analytics.funnel.applied) * 100} className="h-3" />
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span>Test</span>
-                        <span className="font-semibold">{analytics.funnel.test}</span>
-                      </div>
-                      <Progress value={(analytics.funnel.test / analytics.funnel.applied) * 100} className="h-3" />
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span>Interview</span>
-                        <span className="font-semibold">{analytics.funnel.interview}</span>
-                      </div>
-                      <Progress value={(analytics.funnel.interview / analytics.funnel.applied) * 100} className="h-3" />
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span>Offer</span>
-                        <span className="font-semibold">{analytics.funnel.offer}</span>
-                      </div>
-                      <Progress value={(analytics.funnel.offer / analytics.funnel.applied) * 100} className="h-3" />
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span>Hired</span>
-                        <span className="font-semibold text-green-600">{analytics.funnel.hired}</span>
-                      </div>
-                      <Progress value={(analytics.funnel.hired / analytics.funnel.applied) * 100} className="h-3" />
-                    </div>
+                  <div className="space-y-3">
+                    {[
+                      { label: "Applied", value: analytics.funnel.applied, pct: 100, color: "#7c3aed" },
+                      { label: "Shortlisted", value: analytics.funnel.shortlisted, pct: (analytics.funnel.shortlisted / analytics.funnel.applied) * 100, color: "#2563eb" },
+                      { label: "Test", value: analytics.funnel.test, pct: (analytics.funnel.test / analytics.funnel.applied) * 100, color: "#0891b2" },
+                      { label: "Interview", value: analytics.funnel.interview, pct: (analytics.funnel.interview / analytics.funnel.applied) * 100, color: "#f59e0b" },
+                      { label: "Offer", value: analytics.funnel.offer, pct: (analytics.funnel.offer / analytics.funnel.applied) * 100, color: "#10b981" },
+                      { label: "Hired", value: analytics.funnel.hired, pct: (analytics.funnel.hired / analytics.funnel.applied) * 100, color: "#16a34a" },
+                    ].map((s) => (
+                      <SkillBar key={s.label} label={`${s.label}: ${s.value}`} value={isNaN(s.pct) ? 0 : s.pct} color={s.color} />
+                    ))}
                   </div>
                 </CardContent>
               </Card>

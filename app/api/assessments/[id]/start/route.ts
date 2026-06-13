@@ -14,27 +14,40 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const assessmentId = params.id
 
-    // Find the application for this assessment and user
+    // Accept already in_progress too (handles page refresh after start)
     const application = await Application.findOne({
       jobSeekerId: session.userId,
-      assessmentId: assessmentId,
-      status: { $in: ["assigned", "Assessment Assigned", "test_assigned", "Test Assigned"] },
+      assessmentId,
+      status: {
+        $in: [
+          "assigned", "Assessment Assigned", "test_assigned", "Test Assigned",
+          "in_progress",
+        ],
+      },
     })
 
     if (!application) {
-      return NextResponse.json({ message: "Assessment not found or already started" }, { status: 404 })
+      // Check if already completed — return success so the take page can redirect cleanly
+      const completed = await Application.findOne({
+        jobSeekerId: session.userId,
+        assessmentId,
+        status: { $in: ["Assessment Completed", "completed", "test_completed"] },
+      })
+      if (completed) {
+        return NextResponse.json({ success: true, message: "Already completed", alreadyCompleted: true })
+      }
+      return NextResponse.json({ message: "Assessment not found or not assigned" }, { status: 404 })
     }
 
-    // Update application status to in_progress and record start time
-    await Application.findByIdAndUpdate(application._id, {
-      status: "in_progress",
-      startedAt: new Date(),
-    })
+    // Only transition if not already in_progress
+    if (application.status !== "in_progress") {
+      await Application.findByIdAndUpdate(application._id, {
+        status: "in_progress",
+        startedAt: new Date(),
+      })
+    }
 
-    return NextResponse.json({
-      success: true,
-      message: "Assessment started successfully",
-    })
+    return NextResponse.json({ success: true, message: "Assessment started successfully" })
   } catch (error) {
     console.error("Error starting assessment:", error)
     return NextResponse.json({ message: "Failed to start assessment" }, { status: 500 })

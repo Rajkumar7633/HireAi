@@ -83,12 +83,28 @@ export async function GET(req: NextRequest) {
 
     // Ensure arrays exist in response to avoid runtime errors and perceived data loss
     const obj = profile.toObject()
+
+    // Fetch college info from User model (only present if onboarded by a college)
+    const userDoc = await User.findById(session.userId)
+      .select("collegeName department batch cgpa placementStatus companyPlacedAt packageLPA onboardedByCollege")
+      .lean() as any
+
     const responseData = {
       ...obj,
       skills: Array.isArray(obj.skills) ? obj.skills : [],
       projects: Array.isArray((obj as any).projects) ? (obj as any).projects : [],
       achievements: Array.isArray((obj as any).achievements) ? (obj as any).achievements : [],
       experiences: Array.isArray((obj as any).experiences) ? (obj as any).experiences : [],
+      // College placement fields (only populated if college-onboarded)
+      collegeInfo: userDoc?.onboardedByCollege ? {
+        collegeName: userDoc.collegeName,
+        department: userDoc.department,
+        batch: userDoc.batch,
+        cgpa: userDoc.cgpa,
+        placementStatus: userDoc.placementStatus,
+        companyPlacedAt: userDoc.companyPlacedAt,
+        packageLPA: userDoc.packageLPA,
+      } : null,
     }
     console.log("[v0] Returning profile data with keys:", Object.keys(responseData))
     console.log("[v0] GET request completed successfully")
@@ -204,7 +220,7 @@ export async function PUT(req: NextRequest) {
     if (!Array.isArray(cleanedData.experiences)) cleanedData.experiences = []
 
     // Load existing profile for safe fallback
-    const existing = await JobSeekerProfile.findOne({ userId: session.userId }).lean()
+    const existing = await JobSeekerProfile.findOne({ userId: session.userId }).lean() as any
 
     const derivedYears = deriveYearsFromExperiences(cleanedData.experiences)
 

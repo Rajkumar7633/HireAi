@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { authFetch, persistAuthToken, syncClientAuthToken } from "@/lib/client-auth"
 
 interface User {
   id: string
@@ -24,9 +25,8 @@ export function useSession() {
   const fetchSession = async (allowRefresh: boolean = true) => {
     try {
       console.log("🔄 [v0] Fetching session...")
-      const response = await fetch("/api/auth/me", {
+      const response = await authFetch("/api/auth/me", {
         method: "GET",
-        credentials: "include",
         cache: "no-store",
         headers: {
           "Content-Type": "application/json",
@@ -49,6 +49,9 @@ export function useSession() {
           }
           console.log("✅ [v0] Setting session:", sessionData)
           setSession(sessionData)
+          if (!sessionStorage.getItem("auth-token")) {
+            await syncClientAuthToken()
+          }
         } else {
           console.log("❌ [v0] Invalid session data structure:", data)
           setSession(null)
@@ -59,9 +62,8 @@ export function useSession() {
         if (response.status === 401 && allowRefresh) {
           try {
             console.log("🔁 [v0] Attempting token refresh...")
-            const refreshResponse = await fetch("/api/auth/refresh", {
+            const refreshResponse = await authFetch("/api/auth/refresh", {
               method: "POST",
-              credentials: "include",
               cache: "no-store",
               headers: {
                 "Content-Type": "application/json",
@@ -72,6 +74,10 @@ export function useSession() {
 
             if (refreshResponse.ok) {
               console.log("✅ [v0] Refresh successful, retrying session fetch...")
+              try {
+                const refreshData = await refreshResponse.json()
+                persistAuthToken(refreshData.accessToken)
+              } catch { /* ignore */ }
               await fetchSession(false)
               return
             } else {

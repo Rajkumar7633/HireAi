@@ -13,7 +13,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
+import { SkillBar, ScoreRing } from "@/components/ui/charts";
 import { Loader2, ArrowLeft, Download, Shield, BarChart3 } from "lucide-react";
 
 interface QuestionResult {
@@ -145,7 +145,7 @@ export default function DetailedAssessmentReportPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-6">
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="w-full space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -227,17 +227,9 @@ export default function DetailedAssessmentReportPage() {
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">
-                      SCORE
-                    </div>
-                    <div className="text-3xl font-bold">
-                      {results.score}/{results.maxScore}
-                    </div>
-                    <Progress
-                      value={results.percentage}
-                      className="h-2 mt-3"
-                    />
+                  <div className="flex flex-col items-start gap-1">
+                    <div className="text-xs text-muted-foreground mb-1">SCORE</div>
+                    <ScoreRing value={results.percentage} size={80} stroke={7} label={`${results.score}/${results.maxScore}`} />
                   </div>
                   <div>
                     <div className="text-xs text-muted-foreground mb-1">
@@ -383,34 +375,10 @@ export default function DetailedAssessmentReportPage() {
                         Benchmark Comparison
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-3 text-sm">
-                      <div className="flex justify-between items-center">
-                        <span>Your Score</span>
-                        <span className="font-medium">
-                          {results.percentage}%
-                        </span>
-                      </div>
-                      <Progress value={results.percentage} className="h-2" />
-                      <div className="flex justify-between items-center pt-2">
-                        <span>Average Score</span>
-                        <span className="font-medium">
-                          {results.benchmarkData.averageScore}%
-                        </span>
-                      </div>
-                      <Progress
-                        value={results.benchmarkData.averageScore}
-                        className="h-2"
-                      />
-                      <div className="flex justify-between items-center pt-2">
-                        <span>Industry Average</span>
-                        <span className="font-medium">
-                          {results.benchmarkData.industryAverage}%
-                        </span>
-                      </div>
-                      <Progress
-                        value={results.benchmarkData.industryAverage}
-                        className="h-2"
-                      />
+                    <CardContent className="space-y-2 text-sm">
+                      <SkillBar label={`Your Score: ${results.percentage}%`} value={results.percentage} color={results.percentage >= 70 ? "#16a34a" : results.percentage >= 50 ? "#f59e0b" : "#ef4444"} />
+                      <SkillBar label={`Average Score: ${results.benchmarkData.averageScore}%`} value={results.benchmarkData.averageScore} color="#94a3b8" />
+                      <SkillBar label={`Industry Average: ${results.benchmarkData.industryAverage}%`} value={results.benchmarkData.industryAverage} color="#7c3aed" />
                     </CardContent>
                   </Card>
 

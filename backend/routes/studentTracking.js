@@ -8,7 +8,7 @@ const User = require("../models/User")
 // @desc    Create or update student tracking record
 // @access  Private (College Admin)
 router.post("/create", auth, async (req, res) => {
-  if (req.user.role !== "college_admin" && req.user.role !== "admin") {
+  if ((req.user.role !== "college" && req.user.role !== "college_admin" && req.user.role !== "admin")) {
     return res.status(403).json({ msg: "Access denied. Only college admins can create student tracking records." })
   }
 
@@ -116,7 +116,7 @@ router.get("/student/:studentId", auth, async (req, res) => {
 // @desc    Get all student tracking records for a college
 // @access  Private (College Admin)
 router.get("/college/:collegeId", auth, async (req, res) => {
-  if (req.user.role !== "college_admin" && req.user.role !== "admin") {
+  if ((req.user.role !== "college" && req.user.role !== "college_admin" && req.user.role !== "admin")) {
     return res.status(403).json({ msg: "Access denied" })
   }
 
@@ -147,7 +147,7 @@ router.get("/college/:collegeId", auth, async (req, res) => {
 // @desc    Update yearly progress
 // @access  Private (College Admin)
 router.put("/:id/update-progress", auth, async (req, res) => {
-  if (req.user.role !== "college_admin" && req.user.role !== "admin") {
+  if ((req.user.role !== "college" && req.user.role !== "college_admin" && req.user.role !== "admin")) {
     return res.status(403).json({ msg: "Access denied" })
   }
 
@@ -199,7 +199,7 @@ router.put("/:id/update-progress", auth, async (req, res) => {
 // @desc    Update placement readiness
 // @access  Private (College Admin)
 router.put("/:id/update-readiness", auth, async (req, res) => {
-  if (req.user.role !== "college_admin" && req.user.role !== "admin") {
+  if ((req.user.role !== "college" && req.user.role !== "college_admin" && req.user.role !== "admin")) {
     return res.status(403).json({ msg: "Access denied" })
   }
 
@@ -241,7 +241,7 @@ router.put("/:id/update-readiness", auth, async (req, res) => {
 // @desc    Add alert for student
 // @access  Private (College Admin)
 router.put("/:id/add-alert", auth, async (req, res) => {
-  if (req.user.role !== "college_admin" && req.user.role !== "admin") {
+  if ((req.user.role !== "college" && req.user.role !== "college_admin" && req.user.role !== "admin")) {
     return res.status(403).json({ msg: "Access denied" })
   }
 
@@ -279,7 +279,7 @@ router.put("/:id/add-alert", auth, async (req, res) => {
 // @desc    Add recommendation for student
 // @access  Private (College Admin)
 router.put("/:id/add-recommendation", auth, async (req, res) => {
-  if (req.user.role !== "college_admin" && req.user.role !== "admin") {
+  if ((req.user.role !== "college" && req.user.role !== "college_admin" && req.user.role !== "admin")) {
     return res.status(403).json({ msg: "Access denied" })
   }
 
@@ -317,7 +317,7 @@ router.put("/:id/add-recommendation", auth, async (req, res) => {
 // @desc    Get student tracking analytics for college
 // @access  Private (College Admin)
 router.get("/analytics/:collegeId", auth, async (req, res) => {
-  if (req.user.role !== "college_admin" && req.user.role !== "admin") {
+  if ((req.user.role !== "college" && req.user.role !== "college_admin" && req.user.role !== "admin")) {
     return res.status(403).json({ msg: "Access denied" })
   }
 

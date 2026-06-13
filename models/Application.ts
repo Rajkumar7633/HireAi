@@ -36,20 +36,26 @@ export interface IApplication extends Document {
   testAnswers?: Array<{
     questionId: string
     answer: string
+    language?: string
   }>
   testCompletedAt?: Date
   // Assessment results fields
+  score?: number
   startedAt?: Date
   completedAt?: Date
-  score?: number
+  timeSpent?: number
   answers?: Array<{
     questionId: string
     answer: string
     isCorrect?: boolean
     points?: number
   }>
-  timeSpent?: number
   proctoringData?: any
+  proctoringFlags?: {
+    multiFaceCount?: number
+    noFaceLongest?: number
+    tabSwitchCount?: number
+  }
   candidateReview?: {
     rating: number
     comment?: string
@@ -96,7 +102,6 @@ const ApplicationSchema = new Schema<IApplication>(
     jobDescriptionId: {
       type: Schema.Types.ObjectId,
       ref: "JobDescription",
-      required: true,
     },
     jobSeekerId: {
       type: Schema.Types.ObjectId,
@@ -106,7 +111,6 @@ const ApplicationSchema = new Schema<IApplication>(
     applicantId: {
       type: Schema.Types.ObjectId,
       ref: "User",
-      required: true,
     },
     resumeId: {
       type: Schema.Types.ObjectId,
@@ -165,6 +169,7 @@ const ApplicationSchema = new Schema<IApplication>(
       {
         questionId: String,
         answer: String,
+        language: String,
       },
     ],
     testCompletedAt: {
@@ -194,7 +199,11 @@ const ApplicationSchema = new Schema<IApplication>(
       type: Date,
       default: Date.now,
     },
-    // Optional indices-friendly subdocs
+    // Assessment result fields — must be in schema so Mongoose strict mode doesn't drop them
+    score: { type: Number, min: 0, max: 100 },
+    startedAt: { type: Date },
+    completedAt: { type: Date },
+    timeSpent: { type: Number, default: 0 },
     answers: [
       {
         questionId: String,
@@ -204,6 +213,11 @@ const ApplicationSchema = new Schema<IApplication>(
       },
     ],
     proctoringData: Schema.Types.Mixed,
+    proctoringFlags: {
+      multiFaceCount: { type: Number, default: 0 },
+      noFaceLongest: { type: Number, default: 0 },
+      tabSwitchCount: { type: Number, default: 0 },
+    },
     candidateReview: {
       rating: Number,
       comment: String,
@@ -255,5 +269,7 @@ const ApplicationSchema = new Schema<IApplication>(
 ApplicationSchema.index({ jobDescriptionId: 1, status: 1 })
 ApplicationSchema.index({ jobDescriptionId: 1, shortlisted: 1, aiMatchScore: -1 })
 ApplicationSchema.index({ jobSeekerId: 1, jobDescriptionId: 1 })
+ApplicationSchema.index({ assessmentId: 1 })
+ApplicationSchema.index({ assessmentId: 1, status: 1 })
 
 export default mongoose.models.Application || mongoose.model<IApplication>("Application", ApplicationSchema)

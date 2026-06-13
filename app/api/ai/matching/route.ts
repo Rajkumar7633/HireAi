@@ -99,29 +99,27 @@ export async function POST(request: NextRequest) {
       return (overlap || !!c.resume) && locationOk && expOk
     })
 
-    // Score candidates with AI + keyword boost
+    // Score candidates with AI + keyword boost, batching to avoid rate limits
     const hardLimit = Math.min(Math.max(Number(limit) || 50, 1), 200)
     const start = Math.max(0, Number(offset) || 0)
     const scored = [] as any[]
+    const BATCH_SIZE = 8
+    const minScoreNum = Math.max(0, Number(minScore) || 0)
 
-    for (const c of prefiltered) {
+    async function scoreCandidate(c: Candidate) {
       const resumeText = c.resume?.rawText || ""
       const analysis = await aiService.analyzeResume(resumeText, jobDescription, requiredSkills)
       const aiScore = analysis.score
       const ats = typeof c.atsScore === "number" ? c.atsScore : analysis.atsScore
-
       const skillsMatch = analysis.skillsMatch || []
-      // Simple keyword boost based on overlap count, capped at +10
       const resumeSkills = normalizeSkills(c.resume?.parsedSkills)
-      const overlapCount = resumeSkills.filter((s: string) => requiredSet.has(s)).length +
+      const overlapCount =
+        resumeSkills.filter((s: string) => requiredSet.has(s)).length +
         c.profileSkills.filter((s: string) => requiredSet.has(s)).length
       const boost = Math.min(overlapCount, 10)
       const finalScore = Math.max(0, Math.min(100, Math.round(aiScore + boost)))
-
-      // Filter out obviously irrelevant profiles and user-defined minimums
-      if (finalScore < Math.max(0, Number(minScore) || 0) && skillsMatch.length === 0) continue
-
-      scored.push({
+      if (finalScore < minScoreNum && skillsMatch.length === 0) return null
+      return {
         userId: c.userId,
         name: c.name,
         email: c.email,
@@ -129,8 +127,16 @@ export async function POST(request: NextRequest) {
         aiMatchScore: finalScore,
         atsScore: typeof ats === "number" ? Math.round(ats) : undefined,
         skillsMatched: skillsMatch,
-        snippet: resumeText ? (resumeText.slice(0, 300)) : undefined,
-      })
+        snippet: resumeText ? resumeText.slice(0, 300) : undefined,
+      }
+    }
+
+    for (let i = 0; i < prefiltered.length; i += BATCH_SIZE) {
+      const batch = prefiltered.slice(i, i + BATCH_SIZE)
+      const results = await Promise.allSettled(batch.map(scoreCandidate))
+      for (const r of results) {
+        if (r.status === "fulfilled" && r.value) scored.push(r.value)
+      }
     }
 
     scored.sort((a, b) => (b.aiMatchScore || 0) - (a.aiMatchScore || 0))

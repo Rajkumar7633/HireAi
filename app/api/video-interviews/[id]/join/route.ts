@@ -27,29 +27,17 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ message: "Forbidden" }, { status: 403 })
     }
 
-    // Determine join URL
+    // Determine join URL — use a relative path for in-app rooms so the
+    // client router.push() works regardless of which port the app runs on.
     let joinUrl = ""
-    const base = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
     const name = encodeURIComponent(session.name || session.email?.split("@")[0] || "User")
     const isHost = isRecruiter
     if (interview.roomId) {
-      // In-app room
-      joinUrl = `${base}/video-call/${interview.roomId}?interviewId=${interviewId}&isHost=${isHost}&name=${name}`
+      // Relative path — no hardcoded origin/port
+      joinUrl = `/video-call/${interview.roomId}?interviewId=${interviewId}&isHost=${isHost}&name=${name}`
     } else if (interview.meetingLink) {
-      // For external links, append metadata if same-origin, else return as-is
-      try {
-        const u = new URL(interview.meetingLink)
-        if (u.origin === base) {
-          u.searchParams.set("interviewId", interviewId)
-          u.searchParams.set("isHost", String(isHost))
-          u.searchParams.set("name", session.name || session.email?.split("@")[0] || "User")
-          joinUrl = u.toString()
-        } else {
-          joinUrl = interview.meetingLink
-        }
-      } catch {
-        joinUrl = interview.meetingLink
-      }
+      // For external meeting links (Zoom, Google Meet, etc.) return as-is
+      joinUrl = interview.meetingLink
     } else {
       return NextResponse.json({ message: "Interview has no room or link" }, { status: 400 })
     }

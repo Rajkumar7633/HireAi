@@ -4,27 +4,30 @@ const redisClient = redis.createClient({
   url: process.env.REDIS_URL || 'redis://localhost:6379',
   socket: {
     reconnectStrategy: (retries) => {
-      if (retries > 10) {
-        console.error('Redis reconnection failed after 10 retries');
-        return new Error('Redis reconnection failed');
+      if (retries >= 3) {
+        // Stop retrying silently — Redis is optional for local dev
+        return false;
       }
-      return Math.min(retries * 100, 3000);
+      return Math.min(retries * 200, 1000);
     }
   }
 });
 
+let _warned = false;
 redisClient.on('error', (err) => {
-  console.error('Redis Client Error:', err);
+  if (!_warned) {
+    console.warn('⚠️  Redis unavailable (caching disabled):', err.code || err.message);
+    _warned = true;
+  }
 });
 
 redisClient.on('connect', () => {
-  console.log('Redis Client Connected');
+  _warned = false;
+  console.log('✅ Redis connected');
 });
 
-redisClient.on('ready', () => {
-  console.log('Redis Client Ready');
+redisClient.connect().catch(() => {
+  // Swallow — warning already printed via 'error' event
 });
-
-redisClient.connect().catch(console.error);
 
 module.exports = redisClient;

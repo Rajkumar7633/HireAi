@@ -7,7 +7,7 @@ const { invalidateCache } = require("../middleware/cache");
 // POST /api/college/notifications - Create notification
 router.post("/notifications", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -46,7 +46,7 @@ router.post("/notifications", auth, async (req, res) => {
 // GET /api/college/notifications - Get all notifications
 router.get("/notifications", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -76,7 +76,7 @@ router.get("/notifications", auth, async (req, res) => {
 // PUT /api/college/notifications/:id/read - Mark notification as read
 router.put("/notifications/:id/read", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -109,7 +109,7 @@ router.put("/notifications/:id/read", auth, async (req, res) => {
 // PUT /api/college/notifications/read-all - Mark all notifications as read
 router.put("/notifications/read-all", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -131,7 +131,7 @@ router.put("/notifications/read-all", auth, async (req, res) => {
 // DELETE /api/college/notifications/:id - Delete notification
 router.delete("/notifications/:id", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 

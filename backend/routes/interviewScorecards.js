@@ -4,6 +4,29 @@ const auth = require("../middleware/auth")
 const InterviewScorecard = require("../models/InterviewScorecard")
 const JobApplication = require("../models/JobApplication")
 
+// @route   GET /api/interview-scorecards
+// @desc    Get all scorecards for the authenticated recruiter (or candidate's own)
+// @access  Private
+router.get("/", auth, async (req, res) => {
+  try {
+    const query =
+      req.user.role === "recruiter" || req.user.role === "admin"
+        ? { interviewerId: req.user.id }
+        : { candidateId: req.user.id }
+
+    const scorecards = await InterviewScorecard.find(query)
+      .populate("candidateId", "name email")
+      .populate("applicationId", "jobTitle")
+      .sort({ interviewDate: -1 })
+      .limit(50)
+
+    res.json({ success: true, scorecards })
+  } catch (error) {
+    console.error("List scorecards error:", error)
+    res.status(500).json({ msg: "Server error", error: error.message })
+  }
+})
+
 // @route   POST /api/interview-scorecards/create
 // @desc    Create a new interview scorecard
 // @access  Private (Recruiter)

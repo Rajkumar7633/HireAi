@@ -67,6 +67,7 @@ interface ChatMessage {
 interface VideoConferenceRoomProps {
   roomId: string;
   interviewId: string;
+  meetingId?: string;
   isHost?: boolean;
   participantName?: string;
 }
@@ -74,6 +75,7 @@ interface VideoConferenceRoomProps {
 export function VideoConferenceRoom({
   roomId,
   interviewId,
+  meetingId = "",
   isHost = false,
   participantName = "User",
 }: VideoConferenceRoomProps) {
@@ -343,9 +345,9 @@ export function VideoConferenceRoom({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Poll interview status for waiting room if not host
+  // Poll interview status for waiting room if not host (recruiter interviews only)
   useEffect(() => {
-    if (!isHost && interviewId) {
+    if (!isHost && interviewId && !meetingId) {
       let timer: NodeJS.Timeout | null = null;
       const poll = async () => {
         try {
@@ -363,7 +365,33 @@ export function VideoConferenceRoom({
         if (timer) clearTimeout(timer);
       };
     }
-  }, [interviewId, isHost]);
+  }, [interviewId, isHost, meetingId]);
+
+  // College meeting attendance heartbeat (students only)
+  useEffect(() => {
+    if (!meetingId || isHost) return
+    const iv = setInterval(() => {
+      fetch(`/api/job-seeker/meetings/${meetingId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "heartbeat" }),
+      }).catch(() => {})
+    }, 30000)
+    return () => clearInterval(iv)
+  }, [meetingId, isHost])
+
+  const leaveCollegeMeeting = useCallback(async () => {
+    if (!meetingId || isHost) return
+    try {
+      await fetch(`/api/job-seeker/meetings/${meetingId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "leave" }),
+      })
+    } catch {
+      // ignore
+    }
+  }, [meetingId, isHost])
 
   const toggleVideo = useCallback(async () => {
     if (localStream) {
@@ -690,6 +718,20 @@ export function VideoConferenceRoom({
     setIsCallEnding(true);
 
     try {
+      if (meetingId) {
+        await leaveCollegeMeeting();
+        addSystemMessage("Left meeting");
+        toast({
+          title: "Left meeting",
+          description: "You have left the college meeting.",
+        });
+        setTimeout(() => {
+          cleanupWebRTC();
+          router.push("/dashboard/calendar");
+        }, 800);
+        return;
+      }
+
       // Save interview data
       const response = await fetch(`/api/video-interviews/${interviewId}`, {
         method: "PATCH",
@@ -726,12 +768,16 @@ export function VideoConferenceRoom({
       });
       setIsCallEnding(false);
     }
-  }, [cleanupWebRTC, interviewId, interviewNotes, recordingDuration, router, toast]);
+  }, [cleanupWebRTC, interviewId, interviewNotes, recordingDuration, router, toast, meetingId, leaveCollegeMeeting]);
 
   const endCall = useCallback(() => {
+    if (meetingId) {
+      endCallNow();
+      return;
+    }
     // Open feedback dialog first
     setShowFeedback(true);
-  }, []);
+  }, [meetingId, endCallNow]);
 
   const toggleFullscreen = useCallback(() => {
     if (!isFullscreen) {

@@ -9,7 +9,7 @@ const { invalidateCache } = require("../middleware/cache");
 // POST /api/college/interviews - Schedule interview
 router.post("/interviews", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -79,7 +79,7 @@ router.post("/interviews", auth, async (req, res) => {
 // GET /api/college/interviews - Get all interviews
 router.get("/interviews", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -136,7 +136,7 @@ router.get("/interviews", auth, async (req, res) => {
 // GET /api/college/interviews/:id - Get interview details
 router.get("/interviews/:id", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -180,7 +180,7 @@ router.get("/interviews/:id", auth, async (req, res) => {
 // PUT /api/college/interviews/:id - Update interview
 router.put("/interviews/:id", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -221,7 +221,7 @@ router.put("/interviews/:id", auth, async (req, res) => {
 // DELETE /api/college/interviews/:id - Cancel interview
 router.delete("/interviews/:id", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -255,7 +255,7 @@ router.delete("/interviews/:id", auth, async (req, res) => {
 // GET /api/college/interviews/analytics - Get interview analytics
 router.get("/interviews/analytics", auth, async (req, res) => {
   try {
-    if (req.user.role !== "college") {
+    if ((req.user.role !== "college" && req.user.role !== "college_admin")) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
