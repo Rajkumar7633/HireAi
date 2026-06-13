@@ -72,13 +72,13 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, logoUrl, description, website } = body || {}
+    const { name, logoUrl, description, website, brandColor, emailSignature, replyToEmail, defaultCtaUrl } = body || {}
 
     await connectDB()
 
     const updated = await Company.findOneAndUpdate(
       { ownerId: session.userId },
-      { $set: { name, logoUrl, description, website } },
+      { $set: { name, logoUrl, description, website, brandColor, emailSignature, replyToEmail, defaultCtaUrl } },
       { new: true, upsert: true },
     ).lean()
 

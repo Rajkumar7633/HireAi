@@ -215,7 +215,7 @@ export default function CreateOfferLetterPage() {
       signingBonus: parseFloat(compensation.signingBonus) || 0,
       equity: compensation.equityGranted
         ? { granted: true, type: compensation.equityType, quantity: parseFloat(compensation.equityQuantity) || 0, vestingSchedule: compensation.vestingSchedule, strikePrice: parseFloat(compensation.strikePrice) || 0 }
-        : { granted: false },
+        : undefined,
       benefits: selectedBenefits.map((id) => BENEFIT_CATALOG.find((b) => b.id === id)?.label ?? id),
       relocation: compensation.relocationIncluded
         ? { included: true, amount: parseFloat(compensation.relocationAmount) || 0, details: compensation.relocationDetails }

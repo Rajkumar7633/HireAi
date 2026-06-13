@@ -87,13 +87,22 @@ export async function getAssignedApplicationsForTest(testId: string) {
 
 export async function getTestAssignmentStats(testId: string) {
   const assignedApps = await getAssignedApplicationsForTest(testId)
-  const completedApps = assignedApps.filter(app => app.testScore != null && app.testScore !== undefined)
+
+  const completedApps = assignedApps.filter(app =>
+    app.testScore != null && app.testScore !== undefined ||
+    ["Test Passed", "Test Failed", "Test Completed", "test_completed"].includes(String(app.status)),
+  )
+  const inProgressApps = assignedApps.filter(app =>
+    String(app.status) === "in_progress" &&
+    app.testScore == null,
+  )
 
   const TestSubmissionModel = getTestSubmissionModel()
   const submissionDocs = await TestSubmissionModel.find(testIdFilter(testId)).lean()
 
   const totalAssigned = assignedApps.length
   const totalAttempts = completedApps.length
+  const inProgressCount = inProgressApps.length
   const passingScore = 70
 
   const scoreSources = completedApps.length > 0
@@ -109,10 +118,12 @@ export async function getTestAssignmentStats(testId: string) {
     totalAssigned,
     totalAttempts,
     completedCount: totalAttempts,
+    inProgressCount,
     averageScore,
     passRate,
     assignedApps,
     completedApps,
+    inProgressApps,
     submissionDocs,
   }
 }
@@ -121,6 +132,7 @@ export function applicationToSubmissionRow(app: any, testId: string) {
   const seeker = app.jobSeekerId
   const seekerObj = seeker && typeof seeker === "object" ? seeker : null
   const hasScore = app.testScore != null && app.testScore !== undefined
+  const isInProgress = String(app.status) === "in_progress" && !hasScore
 
   return {
     _id: app._id,
@@ -131,8 +143,9 @@ export function applicationToSubmissionRow(app: any, testId: string) {
     score: hasScore ? app.testScore : undefined,
     totalScore: hasScore ? app.testScore : undefined,
     submittedAt: app.testCompletedAt || app.completedAt || app.assignedAt || app.updatedAt,
-    assignedAt: app.assignedAt || app.updatedAt,
-    status: hasScore ? "completed" : "assigned",
+    assignedAt: app.testAssignedAt || app.assignedAt || app.updatedAt,
+    startedAt: app.startedAt,
+    status: hasScore ? "completed" : isInProgress ? "in_progress" : "assigned",
     answers: app.testAnswers || app.answers || [],
     name: seekerObj?.name,
     email: seekerObj?.email,

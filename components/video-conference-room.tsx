@@ -32,14 +32,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { CollabCodePanel } from "@/components/collab-code-panel";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
+import { InterviewFeedbackWizard } from "@/components/interview-feedback-wizard";
 
 interface Participant {
   id: string;
@@ -92,6 +85,10 @@ export function VideoConferenceRoom({
   const [showChat, setShowChat] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
   const [showCode, setShowCode] = useState(false);
+
+  const darkOutlineBtn =
+    "bg-gray-700/90 border-gray-500 text-white hover:bg-gray-600 hover:text-white";
+  const darkOutlineActive = "bg-violet-600 border-violet-500 text-white hover:bg-violet-700";
   const [connectionStatus, setConnectionStatus] = useState<
     "connecting" | "connected" | "disconnected" | "reconnecting"
   >("connecting");
@@ -103,12 +100,6 @@ export function VideoConferenceRoom({
   const [isCallEnding, setIsCallEnding] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [showFeedback, setShowFeedback] = useState(false);
-  const [fbRating, setFbRating] = useState<number | undefined>(undefined);
-  const [fbStrengths, setFbStrengths] = useState("");
-  const [fbConcerns, setFbConcerns] = useState("");
-  const [fbExperience, setFbExperience] = useState("");
-  const [fbIssues, setFbIssues] = useState("");
-  const [fbNextStep, setFbNextStep] = useState<"advance"|"reject"|"follow_up"|"undecided">("undecided");
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(
     null
   );
@@ -797,10 +788,15 @@ export function VideoConferenceRoom({
       .padStart(2, "0")}`;
   };
 
+  const otherParticipant = participants.find((p) => p.id !== "current-user");
+  const remoteLabel = otherParticipant?.name ?? (isHost ? "Candidate" : "Recruiter");
+  const localLabel = participantName || "You";
+  const immersiveVideo = !showCode;
+
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      {/* Enhanced Header */}
-      <div className="bg-gray-800 p-4 flex items-center justify-between border-b border-gray-700">
+    <div className="h-screen flex flex-col bg-gray-950 text-white overflow-hidden">
+      {/* Header */}
+      <div className="shrink-0 bg-gray-900/95 p-3 md:p-4 flex items-center justify-between border-b border-gray-700/80 backdrop-blur-sm">
         <div className="flex items-center space-x-4">
           <h1 className="text-xl font-semibold">Video Interview</h1>
           <Badge
@@ -857,12 +853,12 @@ export function VideoConferenceRoom({
             variant="outline"
             size="sm"
             onClick={() => setShowChat(!showChat)}
-            className="flex items-center gap-1"
+            className={`flex items-center gap-1 ${showChat ? darkOutlineActive : darkOutlineBtn}`}
           >
             <MessageCircle className="w-4 h-4" />
-            Chat
+            <span className="hidden sm:inline">Chat</span>
             {chatMessages.length > 0 && (
-              <Badge variant="secondary" className="ml-1 text-xs">
+              <Badge className="ml-1 text-xs bg-violet-500 text-white border-0">
                 {chatMessages.length}
               </Badge>
             )}
@@ -871,23 +867,29 @@ export function VideoConferenceRoom({
             variant="outline"
             size="sm"
             onClick={() => setShowCode(!showCode)}
-            className="flex items-center gap-1"
+            className={`flex items-center gap-1 ${showCode ? darkOutlineActive : darkOutlineBtn}`}
           >
             <Code2 className="w-4 h-4" />
-            Code
+            <span className="hidden sm:inline">Code</span>
           </Button>
           {isHost && (
             <Button
               variant="outline"
               size="sm"
               onClick={() => setShowNotes(!showNotes)}
-              className="flex items-center gap-1"
+              className={`flex items-center gap-1 ${showNotes ? darkOutlineActive : darkOutlineBtn}`}
             >
               <FileText className="w-4 h-4" />
-              Notes
+              <span className="hidden sm:inline">Notes</span>
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={toggleFullscreen}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={toggleFullscreen}
+            className={darkOutlineBtn}
+            title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+          >
             {isFullscreen ? (
               <Minimize className="w-4 h-4" />
             ) : (
@@ -897,110 +899,174 @@ export function VideoConferenceRoom({
         </div>
       </div>
 
-      <div className="flex h-[calc(100vh-80px)]">
+      <div className="flex flex-1 min-h-0">
         {/* Main Video Area */}
-        <div className="flex-1 relative bg-gray-800">
-          {/* Remote Video */}
-          <video
-            ref={remoteVideoRef}
-            className="w-full h-full object-cover"
-            autoPlay
-            playsInline
-          />
-
-          {/* Local Video (Picture-in-Picture) */}
-          <div className="absolute top-4 right-4 w-64 h-48 bg-gray-700 rounded-lg overflow-hidden border-2 border-gray-600 shadow-lg">
-            <video
-              ref={localVideoRef}
-              className="w-full h-full object-cover"
-              autoPlay
-              playsInline
-              muted
-            />
-            {needsUserPlay && (
-              <button
-                className="absolute inset-0 bg-gray-900/70 flex items-center justify-center text-sm text-white"
-                onClick={async () => {
-                  try {
-                    if (localVideoRef.current) {
-                      await localVideoRef.current.play();
-                      setNeedsUserPlay(false);
-                    }
-                  } catch {}
-                }}
-                aria-label="Tap to start video"
-              >
-                Tap to start video
-              </button>
-            )}
-            {!mediaState.video && (
-              <div className="absolute inset-0 flex items-center justify-center bg-gray-700">
-                <Camera className="w-8 h-8 text-gray-400" />
-                <span className="ml-2 text-sm text-gray-400">Camera Off</span>
-              </div>
-            )}
-          </div>
-
-          {/* Participants List */}
-          <div className="absolute top-4 left-4">
-            <Card className="bg-gray-800/90 border-gray-600 backdrop-blur-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm flex items-center text-white">
-                  <Users className="w-4 h-4 mr-2" />
-                  Participants ({participants.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {participants.map((participant) => (
-                  <div
-                    key={participant.id}
-                    className="flex items-center space-x-2 text-sm"
-                  >
-                    <div
-                      className={`w-2 h-2 rounded-full ${
-                        participant.connectionStatus === "connected"
-                          ? "bg-green-500"
-                          : "bg-red-500"
-                      }`}
-                    />
-                    <span className="text-white flex items-center gap-1">
-                      {participant.name}
-                      {participant.handRaised && (
-                        <span title="Hand raised" className="text-yellow-300">✋</span>
-                      )}
-                    </span>
-                    {participant.isHost && (
-                      <Badge variant="secondary" className="text-xs">
-                        Host
-                      </Badge>
+        <div
+          className={`min-w-0 relative bg-gray-950 flex flex-col min-h-0 ${
+            showCode ? "flex-1" : "flex-1"
+          }`}
+        >
+          <div
+            className={`flex-1 min-h-0 ${
+              immersiveVideo ? "p-2 md:p-3" : "p-2"
+            }`}
+          >
+            <div
+              className={`h-full min-h-[240px] ${
+                immersiveVideo
+                  ? "grid grid-cols-2 gap-2 md:gap-3"
+                  : "grid grid-cols-2 gap-2"
+              }`}
+            >
+              {/* Remote participant — left / first half */}
+              <div className="relative min-h-0 rounded-xl overflow-hidden bg-gray-800 border border-gray-700/80 shadow-lg ring-1 ring-white/5">
+                <video
+                  ref={remoteVideoRef}
+                  className={`w-full h-full min-h-[200px] object-cover bg-gray-900 ${
+                    remoteStream ? "" : "opacity-0"
+                  }`}
+                  autoPlay
+                  playsInline
+                />
+                {!remoteStream && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-800 text-gray-400 gap-3">
+                    <Users className="w-12 h-12 opacity-50" />
+                    <p className="text-sm font-medium">{remoteLabel}</p>
+                    <p className="text-xs text-gray-500">Waiting for video…</p>
+                  </div>
+                )}
+                <div className="absolute top-3 left-3 flex items-center gap-2">
+                  <span className="px-2.5 py-1 rounded-md bg-black/65 text-white text-xs font-medium backdrop-blur-sm">
+                    {remoteLabel}
+                  </span>
+                  {otherParticipant?.isHost && (
+                    <Badge className="bg-violet-600/90 text-white border-0 text-[10px]">Host</Badge>
+                  )}
+                </div>
+                {otherParticipant && (
+                  <div className="absolute top-3 right-3 flex gap-1">
+                    {otherParticipant.mediaState.video ? (
+                      <Video className="w-4 h-4 text-emerald-400 drop-shadow" />
+                    ) : (
+                      <VideoOff className="w-4 h-4 text-red-400 drop-shadow" />
                     )}
-                    <div className="flex space-x-1">
-                      {participant.mediaState.video ? (
-                        <Video className="w-3 h-3 text-green-500" />
-                      ) : (
-                        <VideoOff className="w-3 h-3 text-red-500" />
-                      )}
-                      {participant.mediaState.audio ? (
-                        <Mic className="w-3 h-3 text-green-500" />
-                      ) : (
-                        <MicOff className="w-3 h-3 text-red-500" />
-                      )}
-                    </div>
-                    {isHost && !participant.isHost && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="ml-2 h-6 px-2"
-                        onClick={() => hostToggleMuteParticipant(participant.id)}
-                      >
-                        {participant.mutedByHost ? "Unmute" : "Mute"}
-                      </Button>
+                    {otherParticipant.mediaState.audio ? (
+                      <Mic className="w-4 h-4 text-emerald-400 drop-shadow" />
+                    ) : (
+                      <MicOff className="w-4 h-4 text-red-400 drop-shadow" />
                     )}
                   </div>
-                ))}
-              </CardContent>
-            </Card>
+                )}
+              </div>
+
+              {/* Local participant — right / second half */}
+              <div className="relative min-h-0 rounded-xl overflow-hidden bg-gray-800 border border-gray-700/80 shadow-lg ring-1 ring-white/5">
+                <video
+                  ref={localVideoRef}
+                  className="w-full h-full min-h-[200px] object-cover bg-gray-900"
+                  autoPlay
+                  playsInline
+                  muted
+                />
+                {needsUserPlay && (
+                  <button
+                    className="absolute inset-0 bg-gray-900/75 flex items-center justify-center text-sm text-white z-10"
+                    onClick={async () => {
+                      try {
+                        if (localVideoRef.current) {
+                          await localVideoRef.current.play();
+                          setNeedsUserPlay(false);
+                        }
+                      } catch {}
+                    }}
+                    aria-label="Tap to start video"
+                  >
+                    Tap to start video
+                  </button>
+                )}
+                {!mediaState.video && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-800 text-gray-400 gap-2">
+                    <Camera className="w-10 h-10 opacity-50" />
+                    <span className="text-sm">Camera off</span>
+                  </div>
+                )}
+                <div className="absolute top-3 left-3 flex items-center gap-2">
+                  <span className="px-2.5 py-1 rounded-md bg-black/65 text-white text-xs font-medium backdrop-blur-sm">
+                    {localLabel}
+                  </span>
+                  {isHost && (
+                    <Badge className="bg-violet-600/90 text-white border-0 text-[10px]">Host</Badge>
+                  )}
+                </div>
+                <div className="absolute top-3 right-3 flex gap-1">
+                  {mediaState.video ? (
+                    <Video className="w-4 h-4 text-emerald-400 drop-shadow" />
+                  ) : (
+                    <VideoOff className="w-4 h-4 text-red-400 drop-shadow" />
+                  )}
+                  {mediaState.audio ? (
+                    <Mic className="w-4 h-4 text-emerald-400 drop-shadow" />
+                  ) : (
+                    <MicOff className="w-4 h-4 text-red-400 drop-shadow" />
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
+
+          {/* Participants quick actions (host mute) — compact bar when immersive */}
+          {immersiveVideo && isHost && otherParticipant && (
+            <div className="shrink-0 px-3 pb-2 flex items-center justify-center gap-2">
+              <span className="text-xs text-gray-400">
+                {participants.length} in call
+              </span>
+              {!otherParticipant.isHost && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className={`h-7 text-xs ${darkOutlineBtn}`}
+                  onClick={() => hostToggleMuteParticipant(otherParticipant.id)}
+                >
+                  {otherParticipant.mutedByHost ? "Unmute candidate" : "Mute candidate"}
+                </Button>
+              )}
+            </div>
+          )}
+
+          {!immersiveVideo && (
+            <div className="absolute top-3 left-3 z-10 max-w-[220px]">
+              <Card className="bg-gray-900/90 border-gray-600 backdrop-blur-sm">
+                <CardHeader className="py-2 px-3">
+                  <CardTitle className="text-xs flex items-center text-white">
+                    <Users className="w-3 h-3 mr-1.5" />
+                    Participants ({participants.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-3 pb-2 space-y-1">
+                  {participants.map((participant) => (
+                    <div key={participant.id} className="flex items-center gap-1.5 text-xs text-gray-300">
+                      <div
+                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                          participant.connectionStatus === "connected" ? "bg-emerald-500" : "bg-red-500"
+                        }`}
+                      />
+                      <span className="truncate">{participant.name}</span>
+                      {isHost && !participant.isHost && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className={`ml-auto h-5 px-1.5 text-[10px] ${darkOutlineBtn}`}
+                          onClick={() => hostToggleMuteParticipant(participant.id)}
+                        >
+                          {participant.mutedByHost ? "Unmute" : "Mute"}
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
           {/* Waiting room overlay */}
           {waitingForHost && (
@@ -1013,14 +1079,18 @@ export function VideoConferenceRoom({
           )}
 
           {/* Enhanced Controls */}
-          <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2">
-            <div className="flex items-center space-x-4 bg-gray-800/95 rounded-full px-6 py-3 backdrop-blur-sm border border-gray-600">
+          <div className="absolute bottom-4 md:bottom-6 left-1/2 -translate-x-1/2 z-30 max-w-[95vw]">
+            <div className="flex items-center gap-2 md:gap-3 bg-gray-900/95 rounded-2xl px-3 md:px-5 py-2.5 backdrop-blur-md border border-gray-600/80 shadow-xl">
               <Button
-                variant={mediaState.audio ? "default" : "destructive"}
                 size="sm"
                 onClick={toggleAudio}
-                className="rounded-full w-12 h-12"
+                className={`rounded-full w-11 h-11 shrink-0 ${
+                  mediaState.audio
+                    ? "bg-emerald-600 hover:bg-emerald-500 text-white"
+                    : "bg-red-600 hover:bg-red-500 text-white"
+                }`}
                 disabled={isCallEnding}
+                title={mediaState.audio ? "Mute" : "Unmute"}
               >
                 {mediaState.audio ? (
                   <Mic className="w-5 h-5" />
@@ -1030,11 +1100,15 @@ export function VideoConferenceRoom({
               </Button>
 
               <Button
-                variant={mediaState.video ? "default" : "destructive"}
                 size="sm"
                 onClick={toggleVideo}
-                className="rounded-full w-12 h-12"
+                className={`rounded-full w-11 h-11 shrink-0 ${
+                  mediaState.video
+                    ? "bg-emerald-600 hover:bg-emerald-500 text-white"
+                    : "bg-red-600 hover:bg-red-500 text-white"
+                }`}
                 disabled={isCallEnding}
+                title={mediaState.video ? "Stop camera" : "Start camera"}
               >
                 {mediaState.video ? (
                   <Video className="w-5 h-5" />
@@ -1044,11 +1118,15 @@ export function VideoConferenceRoom({
               </Button>
 
               <Button
-                variant={mediaState.screen ? "default" : "outline"}
                 size="sm"
                 onClick={toggleScreenShare}
-                className="rounded-full w-12 h-12"
+                className={`rounded-full w-11 h-11 shrink-0 ${
+                  mediaState.screen
+                    ? "bg-violet-600 hover:bg-violet-500 text-white"
+                    : "bg-gray-700 hover:bg-gray-600 text-white border border-gray-500"
+                }`}
                 disabled={isCallEnding}
+                title="Share screen"
               >
                 {mediaState.screen ? (
                   <MonitorOff className="w-5 h-5" />
@@ -1057,24 +1135,29 @@ export function VideoConferenceRoom({
                 )}
               </Button>
 
-              {/* Raise Hand */}
               <Button
-                variant="outline"
                 size="sm"
                 onClick={toggleRaiseHand}
-                className="rounded-full px-4"
+                className="rounded-full h-11 px-3 shrink-0 bg-gray-700 hover:bg-gray-600 text-white border border-gray-500 text-xs md:text-sm"
                 disabled={isCallEnding}
               >
-                ✋ {participants.find((p) => p.id === "current-user")?.handRaised ? "Lower" : "Raise"}
+                ✋{" "}
+                <span className="hidden sm:inline">
+                  {participants.find((p) => p.id === "current-user")?.handRaised ? "Lower" : "Raise"}
+                </span>
               </Button>
 
               {isHost && (
                 <Button
-                  variant={isRecording ? "destructive" : "outline"}
                   size="sm"
                   onClick={toggleRecording}
-                  className="rounded-full w-12 h-12"
+                  className={`rounded-full w-11 h-11 shrink-0 ${
+                    isRecording
+                      ? "bg-red-600 hover:bg-red-500 text-white animate-pulse"
+                      : "bg-gray-700 hover:bg-gray-600 text-white border border-gray-500"
+                  }`}
                   disabled={isCallEnding}
+                  title={isRecording ? "Stop recording" : "Record"}
                 >
                   {isRecording ? (
                     <Square className="w-5 h-5" />
@@ -1085,11 +1168,11 @@ export function VideoConferenceRoom({
               )}
 
               <Button
-                variant="destructive"
                 size="sm"
                 onClick={endCall}
-                className="rounded-full w-12 h-12"
+                className="rounded-full w-11 h-11 shrink-0 bg-red-600 hover:bg-red-500 text-white"
                 disabled={isCallEnding}
+                title="End call"
               >
                 {isCallEnding ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
@@ -1153,6 +1236,7 @@ export function VideoConferenceRoom({
                   size="sm"
                   onClick={sendMessage}
                   disabled={!newMessage.trim()}
+                  className="bg-violet-600 hover:bg-violet-700 text-white shrink-0"
                 >
                   <Send className="w-4 h-4" />
                 </Button>
@@ -1163,8 +1247,24 @@ export function VideoConferenceRoom({
 
         {/* Collaborative Code Sidebar */}
         {showCode && (
-          <div className="w-[720px] bg-gray-900 border-l border-gray-700 p-3 flex flex-col">
-            <CollabCodePanel roomId={roomId} interviewId={interviewId} isHost={isHost} />
+          <div className="w-full sm:w-[min(720px,48vw)] shrink-0 bg-gray-950 border-l border-gray-700/80 flex flex-col min-h-0 shadow-2xl">
+            <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-700/80 bg-gray-900/80">
+              <h3 className="text-sm font-semibold flex items-center gap-2 text-white">
+                <Code2 className="w-4 h-4 text-violet-400" />
+                Live coding studio
+              </h3>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowCode(false)}
+                className={darkOutlineBtn}
+              >
+                Close
+              </Button>
+            </div>
+            <div className="flex-1 min-h-0 p-3 overflow-hidden">
+              <CollabCodePanel roomId={roomId} interviewId={interviewId} isHost={isHost} />
+            </div>
           </div>
         )}
 
@@ -1207,115 +1307,42 @@ export function VideoConferenceRoom({
         )}
       </div>
 
-      {/* Feedback Dialog */}
-      <Dialog open={showFeedback} onOpenChange={setShowFeedback}>
-        <DialogContent className="bg-gray-900 text-white border border-gray-700">
-          <DialogHeader>
-            <DialogTitle>Interview Feedback</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label className="text-gray-300">Rating (1-5)</Label>
-              <input
-                type="number"
-                min={1}
-                max={5}
-                value={fbRating ?? ''}
-                onChange={(e)=>setFbRating(e.target.value ? Number(e.target.value) : undefined)}
-                className="mt-1 w-24 bg-gray-800 border border-gray-600 rounded px-2 py-1"
-              />
-            </div>
-
-            {isHost ? (
-              <>
-                <div>
-                  <Label className="text-gray-300">Strengths</Label>
-                  <Textarea
-                    value={fbStrengths}
-                    onChange={(e)=>setFbStrengths(e.target.value)}
-                    className="mt-1 bg-gray-800 border-gray-600 text-white"
-                    rows={3}
-                  />
-                </div>
-                <div>
-                  <Label className="text-gray-300">Concerns</Label>
-                  <Textarea
-                    value={fbConcerns}
-                    onChange={(e)=>setFbConcerns(e.target.value)}
-                    className="mt-1 bg-gray-800 border-gray-600 text-white"
-                    rows={3}
-                  />
-                </div>
-                <div>
-                  <Label className="text-gray-300">Next Step</Label>
-                  <select
-                    value={fbNextStep}
-                    onChange={(e)=>setFbNextStep(e.target.value as any)}
-                    className="mt-1 bg-gray-800 border border-gray-600 rounded px-2 py-1"
-                  >
-                    <option value="advance">Advance</option>
-                    <option value="reject">Reject</option>
-                    <option value="follow_up">Follow-up</option>
-                    <option value="undecided">Undecided</option>
-                  </select>
-                </div>
-              </>
-            ) : (
-              <>
-                <div>
-                  <Label className="text-gray-300">Interview Experience</Label>
-                  <Textarea
-                    value={fbExperience}
-                    onChange={(e)=>setFbExperience(e.target.value)}
-                    className="mt-1 bg-gray-800 border-gray-600 text-white"
-                    rows={3}
-                  />
-                </div>
-                <div>
-                  <Label className="text-gray-300">Issues</Label>
-                  <Textarea
-                    value={fbIssues}
-                    onChange={(e)=>setFbIssues(e.target.value)}
-                    className="mt-1 bg-gray-800 border-gray-600 text-white"
-                    rows={3}
-                  />
-                </div>
-              </>
-            )}
-          </div>
-          <DialogFooter className="sm:justify-between">
-            <Button
-              variant="outline"
-              className="bg-gray-800 border-gray-600 text-gray-200 hover:bg-gray-700"
-              onClick={endCallNow}
-              disabled={isCallEnding}
-            >
-              Skip & End
-            </Button>
-            <Button
-              onClick={async ()=>{
-                // Submit to API then end
-                try {
-                  setIsCallEnding(true);
-                  const payload = isHost
-                    ? { rating: fbRating, strengths: fbStrengths, concerns: fbConcerns }
-                    : { rating: fbRating, experience: fbExperience, issues: fbIssues };
-                  await fetch(`/api/video-interviews/${interviewId}/feedback`, {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ roomId, role: isHost ? "recruiter" : "candidate", payload, nextStep: isHost ? fbNextStep : undefined }),
-                  });
-                } catch {}
-                setShowFeedback(false);
-                await endCallNow();
-              }}
-              disabled={isCallEnding}
-            >
-              Submit & End
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Post-interview feedback → syncs to job pipeline */}
+      <InterviewFeedbackWizard
+        open={showFeedback}
+        onOpenChange={setShowFeedback}
+        isHost={isHost}
+        isSubmitting={isCallEnding}
+        onSkip={() => {
+          setShowFeedback(false);
+          endCallNow();
+        }}
+        onSubmit={async ({ recruiterPayload, candidatePayload, nextStep }) => {
+          try {
+            setIsCallEnding(true);
+            if (interviewId) {
+              await fetch(`/api/video-interviews/${interviewId}/feedback`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  roomId,
+                  role: isHost ? "recruiter" : "candidate",
+                  payload: isHost ? recruiterPayload : candidatePayload,
+                  nextStep: isHost ? nextStep : undefined,
+                }),
+              });
+            }
+          } catch {
+            toast({
+              title: "Feedback save issue",
+              description: "Interview will still end — check pipeline later.",
+              variant: "destructive",
+            });
+          }
+          setShowFeedback(false);
+          await endCallNow();
+        }}
+      />
     </div>
   );
 }

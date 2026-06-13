@@ -41,6 +41,7 @@ export default function MyTestsPage() {
   )
 
   const pending = tests.filter(t => t.status !== "completed")
+  const inProgress = tests.filter(t => t.status === "in_progress")
   const completed = tests.filter(t => t.status === "completed")
 
   return (
@@ -55,6 +56,9 @@ export default function MyTestsPage() {
         </div>
         <div className="flex gap-2 text-sm">
           <span className="px-3 py-1 bg-orange-50 text-orange-700 rounded-full font-medium">{pending.length} Pending</span>
+          {inProgress.length > 0 && (
+            <span className="px-3 py-1 bg-amber-50 text-amber-700 rounded-full font-medium">{inProgress.length} In Progress</span>
+          )}
           <span className="px-3 py-1 bg-green-50 text-green-700 rounded-full font-medium">{completed.length} Done</span>
         </div>
       </div>
@@ -94,6 +98,7 @@ export default function MyTestsPage() {
 
 function TestCard({ test }: { test: any }) {
   const isDone = test.status === "completed"
+  const isInProgress = test.status === "in_progress"
   const isDeadlineSoon = test.dueDate && !isDone &&
     new Date(test.dueDate).getTime() - Date.now() < 48 * 60 * 60 * 1000
 
@@ -114,7 +119,9 @@ function TestCard({ test }: { test: any }) {
                 <span className="font-semibold text-gray-900">{test.title}</span>
                 {isDone
                   ? <><CheckCircle2 className="h-4 w-4 text-green-500" /><ScoreBadge score={test.score} passing={test.passingScore} /></>
-                  : <Circle className="h-4 w-4 text-orange-400" />}
+                  : isInProgress
+                    ? <Badge className="text-[10px] bg-amber-100 text-amber-800 border-amber-200">In Progress</Badge>
+                    : <Circle className="h-4 w-4 text-orange-400" />}
                 <Badge variant="outline" className={`text-xs ${test.source === "college" ? "border-purple-200 text-purple-600" : "border-blue-200 text-blue-600"}`}>
                   {test.source === "college" ? "College" : test.companyName}
                 </Badge>
@@ -151,7 +158,7 @@ function TestCard({ test }: { test: any }) {
               ) : (
                 <Button size="sm" className="h-8 text-xs bg-purple-600 hover:bg-purple-700" asChild>
                   <Link href={`/dashboard/job-seeker/tests/${test.applicationId}`}>
-                    <Play className="h-3.5 w-3.5 mr-1" /> Start
+                    <Play className="h-3.5 w-3.5 mr-1" /> {isInProgress ? "Resume" : "Start"}
                   </Link>
                 </Button>
               )

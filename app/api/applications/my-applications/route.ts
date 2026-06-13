@@ -43,6 +43,10 @@ import Application from "@/models/Application"
 import "@/models/JobDescription"
 import "@/models/Resume"
 import "@/models/Test"
+import {
+  getPipelineProgress,
+  normalizeApplicationStatus,
+} from "@/lib/application-status"
 
 export async function GET(request: NextRequest) {
   try {
@@ -54,13 +58,28 @@ export async function GET(request: NextRequest) {
     await connectDB()
 
     const applications = await Application.find({ jobSeekerId: session.userId })
-      .populate("jobDescriptionId", "title location recruiterId")
+      .populate("jobDescriptionId", "title location recruiterId companyId")
       .populate("resumeId", "filename")
       .populate("testId", "title")
       .sort({ applicationDate: -1 })
       .lean()
 
-    return NextResponse.json({ applications })
+    const enriched = applications.map((app) => {
+      const normalizedStatus = normalizeApplicationStatus(app.status)
+      const pipelineProgress = getPipelineProgress({
+        status: app.status,
+        currentStage: app.currentStage,
+        rounds: app.rounds,
+      })
+      return {
+        ...app,
+        status: normalizedStatus,
+        rawStatus: app.status,
+        pipelineProgress,
+      }
+    })
+
+    return NextResponse.json({ applications: enriched })
   } catch (error) {
     console.error("Error fetching applications:", error)
     return NextResponse.json({ message: "Failed to fetch applications" }, { status: 500 })

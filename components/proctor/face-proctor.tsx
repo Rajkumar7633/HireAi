@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { authFetch } from "@/lib/client-auth";
+import { ProctorObjectDetector, drawObjectOverlay, type SuspiciousObjectHit } from "@/lib/proctor-object-detection";
 
 // Proctoring component using FaceDetector API and MediaPipe FaceMesh (CDN) fallback for landmarks.
 // Features
@@ -27,9 +28,13 @@ export type FaceProctorProps = {
   checkIntervalMs?: number; // analysis cadence
   evidence?: boolean; // capture base64 snapshot on violations
   enableAudioMonitoring?: boolean; // detect conversations/background noise
+  enableObjectDetection?: boolean; // COCO-SSD phone/book/device detection
   blockClipboard?: boolean; // prevent copy/paste/context menu
   maxWarningsBeforePause?: number; // auto-pause after N warnings
   onViolation?: (payload: { type: string; message: string }) => void; // callback to parent
+  onTabSwitch?: (count: number) => void;
+  maxTabSwitches?: number;
+  onTerminate?: (reason: string) => void;
   autoStart?: boolean;
   className?: string;
 };
@@ -46,9 +51,13 @@ export function FaceProctor({
   checkIntervalMs = 1200,
   evidence = true,
   enableAudioMonitoring = false,
+  enableObjectDetection = true,
   blockClipboard = false,
   maxWarningsBeforePause = 3,
   onViolation,
+  onTabSwitch,
+  maxTabSwitches = 2,
+  onTerminate,
   autoStart = false,
   className,
 }: FaceProctorProps) {
@@ -68,6 +77,13 @@ export function FaceProctor({
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const audioSrcRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const tabSwitchCountRef = useRef(0);
+  const hadFaceRef = useRef(false);
+  const noFaceStreakRef = useRef(0);
+  const objectDetectorRef = useRef<ProctorObjectDetector>(new ProctorObjectDetector());
+  const objectFrameCounterRef = useRef(0);
+  const lastObjectHitsRef = useRef<SuspiciousObjectHit[]>([]);
+  const [objectAiReady, setObjectAiReady] = useState(false);
 
   useEffect(() => {
     // Check FaceDetector support
@@ -80,10 +96,15 @@ export function FaceProctor({
     }
   }, []);
 
-  // Tab/visibility & clipboard security
+  // Tab/visibility & clipboard security (FaceProctor layer — parent may also track)
   useEffect(() => {
     const onVisibility = async () => {
       if (document.hidden) {
+        tabSwitchCountRef.current += 1;
+        onTabSwitch?.(tabSwitchCountRef.current);
+        if (tabSwitchCountRef.current >= maxTabSwitches) {
+          onTerminate?.(`Tab switch limit reached (${maxTabSwitches})`);
+        }
         await warn("tab_switch", "Tab switch detected. Please stay on the assessment tab.");
       }
     };
@@ -133,9 +154,18 @@ export function FaceProctor({
       setEnabled(true);
       // Try to load FaceMesh for robust landmark detection
       await tryInitFaceMesh();
+      if (enableObjectDetection) {
+        const ok = await objectDetectorRef.current.init();
+        setObjectAiReady(ok);
+      }
       if (enableAudioMonitoring) initAudio(stream);
       scheduleChecks();
-      toast({ title: "Proctoring Enabled", description: "Webcam monitoring is active (face recognition & movement)." });
+      toast({
+        title: "Proctoring Enabled",
+        description: enableObjectDetection && objectDetectorRef.current.ready
+          ? "Face + phone/object AI monitoring active."
+          : "Webcam monitoring is active (face recognition & movement).",
+      });
     } catch (e) {
       toast({ title: "Camera Error", description: "Cannot access camera. Please allow permission and refresh.", variant: "destructive" });
     }
@@ -265,6 +295,22 @@ export function FaceProctor({
     return rms > 0.08; // tweak threshold for speaking/background noise
   };
 
+  const runObjectDetection = async (video: HTMLVideoElement) => {
+    if (!enableObjectDetection || !objectDetectorRef.current.ready) return;
+
+    objectFrameCounterRef.current += 1;
+    if (objectFrameCounterRef.current % 2 !== 0) return;
+
+    const hits = await objectDetectorRef.current.detect(video);
+    lastObjectHitsRef.current = hits;
+
+    for (const hit of hits) {
+      if (!objectDetectorRef.current.shouldWarn(hit.kind)) continue;
+      const violation = objectDetectorRef.current.violationMessage(hit);
+      await warn(violation.type, violation.message);
+    }
+  };
+
   const analyzeFrame = async () => {
     const video = videoRef.current;
     if (!video || video.readyState < 2) return;
@@ -276,6 +322,8 @@ export function FaceProctor({
     if (enableAudioMonitoring && checkAudioLevel()) {
       await warn("audio_noise", "Significant audio detected. Please ensure a quiet environment.");
     }
+
+    await runObjectDetection(video);
 
     // If FaceMesh is available, prefer it for robust detection and overlay
     if (usingMesh && meshRef.current) {
@@ -299,9 +347,16 @@ export function FaceProctor({
           const count = multi.length;
           if (ctx && canvas) { ctx.clearRect(0, 0, canvas.width, canvas.height); }
           if (count === 0) {
-            await warn("no_face", "No face detected. Please stay in view of the camera.");
+            noFaceStreakRef.current += 1;
+            if (hadFaceRef.current && noFaceStreakRef.current >= 3) {
+              await warn("camera_blocked", "Camera may be covered or blocked. Uncover your camera to continue.");
+            } else {
+              await warn("no_face", "No face detected. Please stay in view of the camera.");
+            }
             return;
           }
+          hadFaceRef.current = true;
+          noFaceStreakRef.current = 0;
           if (count > maxFaces) {
             await warn("multi_face", "Multiple faces detected. Please ensure only you are in frame.");
           }
@@ -333,6 +388,9 @@ export function FaceProctor({
               const x = p.x * vw, y = p.y * vh;
               ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
             });
+            if (lastObjectHitsRef.current.length) {
+              drawObjectOverlay(ctx, lastObjectHitsRef.current);
+            }
           }
 
           // Movement detection based on bbox center drift
@@ -358,9 +416,16 @@ export function FaceProctor({
         const faces = await detectorRef.current.detect(video);
         const count = Array.isArray(faces) ? faces.length : 0;
         if (count === 0) {
-          await warn("no_face", "No face detected. Please stay in view of the camera.");
+          noFaceStreakRef.current += 1;
+          if (hadFaceRef.current && noFaceStreakRef.current >= 3) {
+            await warn("camera_blocked", "Camera may be covered or blocked. Uncover your camera to continue.");
+          } else {
+            await warn("no_face", "No face detected. Please stay in view of the camera.");
+          }
           return;
         }
+        hadFaceRef.current = true;
+        noFaceStreakRef.current = 0;
         if (count > maxFaces) {
           await warn("multi_face", "Multiple faces detected. Please ensure only you are in frame.");
         }
@@ -396,6 +461,9 @@ export function FaceProctor({
             ctx.strokeStyle = "rgba(16,185,129,0.7)";
             ctx.lineWidth = 2;
             ctx.strokeRect(bb.x, bb.y, bb.width, bb.height);
+            if (lastObjectHitsRef.current.length) {
+              drawObjectOverlay(ctx, lastObjectHitsRef.current);
+            }
           }
         }
       } catch (e) {
@@ -414,7 +482,12 @@ export function FaceProctor({
       <div className="rounded-lg border bg-background shadow-md p-3">
         <div className="flex items-center justify-between mb-2">
           <div className="text-sm font-medium">AI Proctoring</div>
-          <Badge variant={enabled ? "default" : "secondary"}>{enabled ? "On" : "Off"}</Badge>
+          <div className="flex items-center gap-1">
+            {objectAiReady && (
+              <Badge variant="outline" className="text-[9px] px-1.5">Object AI</Badge>
+            )}
+            <Badge variant={enabled ? "default" : "secondary"}>{enabled ? "On" : "Off"}</Badge>
+          </div>
         </div>
         {supported === false && (
           <div className="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded p-2 mb-2">

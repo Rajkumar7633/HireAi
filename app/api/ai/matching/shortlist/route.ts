@@ -5,7 +5,8 @@ import Application from "@/models/Application"
 import EmailTemplate from "@/models/EmailTemplate"
 import User from "@/models/User"
 import JobDescription from "@/models/JobDescription"
-import { sendEmail, renderTemplate } from "@/lib/email-service"
+import { sendEmail } from "@/lib/email-service"
+import { renderTemplate } from "@/lib/template-render"
 import Resume from "@/models/Resume"
 
 export async function POST(request: NextRequest) {

@@ -18,6 +18,10 @@ const EmailTemplateSchema = new mongoose.Schema({
     enum: ["application_update", "interview", "offer", "rejection", "follow_up"],
     required: true,
   },
+  linkedStatus: {
+    type: String,
+    default: null,
+  },
   variables: [
     {
       type: String,

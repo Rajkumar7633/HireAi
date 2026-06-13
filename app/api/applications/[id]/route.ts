@@ -3,11 +3,7 @@ import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import Application from "@/models/Application"
 import Notification from "@/models/Notification"
-import EmailTemplate from "@/models/EmailTemplate"
-import User from "@/models/User"
-import JobDescription from "@/models/JobDescription"
-import { sendEmail } from "@/lib/email-service"
-import { renderTemplate } from "@/lib/template-render"
+import { sendStatusChangeEmail } from "@/lib/status-change-email"
 
 function getIdString(value: unknown): string {
   if (!value) return ""
@@ -101,36 +97,14 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
         relatedEntity: { id: before._id, type: "job_application" },
       }).catch(() => {})
 
-      // Auto-email on selected status changes
-      if (process.env.EMAIL_AUTOSEND === "true") {
-        try {
-          const user = await User.findById(before.jobSeekerId).select("email name").lean() as any
-          const job = await JobDescription.findById(before.jobDescriptionId).select("title").lean() as any
-          if (user?.email) {
-            const vars = {
-              candidateName: (user as any).name || "Candidate",
-              jobTitle: (job as any)?.title || "the role",
-              companyName: process.env.COMPANY_NAME || "Our Company",
-            }
-            let tplName: string | null = null
-            if (status === "Rejected") tplName = "Application Rejection"
-            else if (status === "Interview Scheduled") tplName = "Interview Invitation"
-            else if (status === "Shortlisted") tplName = "Shortlisted for Next Round"
-
-            if (tplName) {
-              const tpl = await EmailTemplate.findOne({ name: tplName }).lean()
-              if (tpl) {
-                const subject = renderTemplate((tpl as any).subject, vars)
-                const htmlRaw = renderTemplate((tpl as any).content, vars)
-                const html = htmlRaw.includes("<") ? htmlRaw : htmlRaw.replaceAll("\n", "<br/>")
-                await sendEmail({ to: (user as any).email, subject, html })
-              }
-            }
-          }
-        } catch (e) {
-          console.error("auto-email on status change failed", e)
-        }
-      }
+      await sendStatusChangeEmail({
+        applicationId: String(before._id),
+        jobSeekerId: String(before.jobSeekerId),
+        jobDescriptionId: String(before.jobDescriptionId),
+        recruiterId: session.userId,
+        newStatus: status,
+        previousStatus: before.status,
+      }).catch((e) => console.error("auto-email on status change failed", e))
     }
 
     return NextResponse.json({ application })

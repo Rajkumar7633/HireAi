@@ -13,6 +13,11 @@ import {
   Play, Bell, Award, Eye,
 } from "lucide-react";
 import { format, formatDistanceToNow, differenceInDays, isPast } from "date-fns";
+import {
+  PIPELINE_STAGES,
+  normalizeApplicationStatus,
+  type CanonicalApplicationStatus,
+} from "@/lib/application-status";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -35,9 +40,9 @@ interface Application {
   };
   resumeId: { _id: string; filename: string };
   applicationDate: string;
-  status:
-    | "Pending" | "Reviewed" | "Interview Scheduled"
-    | "Test Assigned" | "Assessment Assigned" | "Rejected" | "Hired";
+  status: CanonicalApplicationStatus;
+  rawStatus?: string;
+  pipelineProgress?: number;
   testScore?: number;
   interviewDate?: string;
   currentStage?: string;
@@ -53,17 +58,12 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
   "Interview Scheduled":{ label: "Interview",        color: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe", icon: <Video className="h-3.5 w-3.5" /> },
   "Test Assigned":     { label: "Test Pending",      color: "#0e7490", bg: "#ecfeff", border: "#a5f3fc", icon: <ClipboardList className="h-3.5 w-3.5" /> },
   "Assessment Assigned":{ label: "Assessment",       color: "#0e7490", bg: "#ecfeff", border: "#a5f3fc", icon: <ClipboardList className="h-3.5 w-3.5" /> },
+  Offer:               { label: "Offer received",    color: "#059669", bg: "#ecfdf5", border: "#a7f3d0", icon: <FileText className="h-3.5 w-3.5" /> },
   Rejected:            { label: "Rejected",          color: "#dc2626", bg: "#fef2f2", border: "#fecaca", icon: <XCircle className="h-3.5 w-3.5" /> },
   Hired:               { label: "Hired!",            color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0", icon: <Award className="h-3.5 w-3.5" /> },
 };
 
-const PIPELINE_STAGES = [
-  { key: "submitted",  label: "Submitted",  statuses: ["Pending"] },
-  { key: "reviewed",   label: "Reviewed",   statuses: ["Reviewed"] },
-  { key: "test",       label: "Test",       statuses: ["Test Assigned", "Assessment Assigned"] },
-  { key: "interview",  label: "Interview",  statuses: ["Interview Scheduled"] },
-  { key: "hired",      label: "Hired",      statuses: ["Hired"] },
-];
+const PIPELINE_STAGE_LABELS = PIPELINE_STAGES;
 
 const STAGE_MAP: Record<string, string> = {
   application: "Application Submitted", hr_shortlist: "HR Shortlisting",
@@ -100,7 +100,15 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function PipelineBar({ status, isRejected }: { status: string; isRejected: boolean }) {
+function PipelineBar({
+  progress,
+  isRejected,
+  isHired,
+}: {
+  progress: number;
+  isRejected: boolean;
+  isHired: boolean;
+}) {
   if (isRejected) {
     return (
       <div className="flex items-center gap-1 mt-2">
@@ -109,22 +117,51 @@ function PipelineBar({ status, isRejected }: { status: string; isRejected: boole
       </div>
     );
   }
-  const activeIdx = PIPELINE_STAGES.findIndex(s => s.statuses.includes(status));
+
+  const activeIdx = Math.max(0, Math.min(progress, PIPELINE_STAGE_LABELS.length - 1));
+
   return (
     <div className="flex items-center gap-1 mt-2">
-      {PIPELINE_STAGES.map((stage, i) => {
-        const done = i < activeIdx;
-        const active = i === activeIdx;
-        const color = done || active ? "#7c3aed" : "#e5e7eb";
+      {PIPELINE_STAGE_LABELS.map((stage, i) => {
+        const done = isHired || i < activeIdx;
+        const active = !isHired && i === activeIdx;
         return (
           <div key={stage.key} className="flex items-center gap-1 flex-1">
             <div className="flex flex-col items-center gap-0.5 flex-1">
-              <div style={{ height: 4, borderRadius: 10, background: done ? "#7c3aed" : active ? `linear-gradient(90deg, #7c3aed 60%, #e5e7eb 60%)` : "#e5e7eb", width: "100%" }} />
-              <span style={{ fontSize: 9, color: active ? "#7c3aed" : done ? "#64748b" : "#94a3b8", fontWeight: active ? 700 : 400 }}>
+              <div
+                style={{
+                  height: 4,
+                  borderRadius: 10,
+                  background: done
+                    ? "#7c3aed"
+                    : active
+                      ? "linear-gradient(90deg, #7c3aed 60%, #e5e7eb 60%)"
+                      : "#e5e7eb",
+                  width: "100%",
+                }}
+              />
+              <span
+                style={{
+                  fontSize: 9,
+                  color: active ? "#7c3aed" : done ? "#64748b" : "#94a3b8",
+                  fontWeight: active || (isHired && i === stage.index) ? 700 : 400,
+                }}
+              >
                 {stage.label}
               </span>
             </div>
-            {i < PIPELINE_STAGES.length - 1 && <div style={{ width: 4, height: 4, borderRadius: "50%", background: done || active ? "#7c3aed" : "#e5e7eb", flexShrink: 0, marginBottom: 10 }} />}
+            {i < PIPELINE_STAGE_LABELS.length - 1 && (
+              <div
+                style={{
+                  width: 4,
+                  height: 4,
+                  borderRadius: "50%",
+                  background: done || active ? "#7c3aed" : "#e5e7eb",
+                  flexShrink: 0,
+                  marginBottom: 10,
+                }}
+              />
+            )}
           </div>
         );
       })}
@@ -162,22 +199,44 @@ export default function MyApplicationsPage() {
   const [sort, setSort] = useState<"date" | "status">("date");
   const { toast } = useToast();
 
-  useEffect(() => { fetchApplications(); }, []);
+  useEffect(() => {
+    fetchApplications();
 
-  const fetchApplications = async () => {
-    setLoading(true);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") fetchApplications();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") fetchApplications();
+    }, 45000);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  const fetchApplications = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
-      const r = await fetch("/api/applications/my-applications");
+      const r = await fetch("/api/applications/my-applications", { cache: "no-store" });
       if (r.ok) {
         const d = await r.json();
-        setApplications(d.applications || []);
-      } else {
+        const list = (d.applications || []).map((a: Application) => ({
+          ...a,
+          status: normalizeApplicationStatus(a.status || a.rawStatus),
+        }));
+        setApplications(list);
+      } else if (!silent) {
         toast({ title: "Error", description: "Failed to load applications.", variant: "destructive" });
       }
     } catch {
-      toast({ title: "Network error", description: "Could not load applications.", variant: "destructive" });
+      if (!silent) {
+        toast({ title: "Network error", description: "Could not load applications.", variant: "destructive" });
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -185,12 +244,14 @@ export default function MyApplicationsPage() {
   const stats = useMemo(() => {
     const total = applications.length;
     const active = applications.filter(a => !["Rejected", "Hired"].includes(a.status)).length;
-    const tests = applications.filter(a => ["Test Assigned", "Assessment Assigned"].includes(a.status)).length;
+    const tests = applications.filter(a => a.status === "Test Assigned").length;
     const interviews = applications.filter(a => a.status === "Interview Scheduled").length;
+    const offers = applications.filter(a => a.status === "Offer").length;
     const hired = applications.filter(a => a.status === "Hired").length;
     const rejected = applications.filter(a => a.status === "Rejected").length;
-    const responseRate = total > 0 ? Math.round(((total - applications.filter(a => a.status === "Pending").length) / total) * 100) : 0;
-    return { total, active, tests, interviews, hired, rejected, responseRate };
+    const reviewed = applications.filter(a => (a.pipelineProgress ?? 0) >= 1).length;
+    const responseRate = total > 0 ? Math.round((reviewed / total) * 100) : 0;
+    return { total, active, tests, interviews, offers, hired, rejected, reviewed, responseRate };
   }, [applications]);
 
   // ── Filter + Sort ──
@@ -204,7 +265,7 @@ export default function MyApplicationsPage() {
       )) return false;
 
       if (activeTab === "active") return !["Rejected", "Hired"].includes(a.status);
-      if (activeTab === "tests") return ["Test Assigned", "Assessment Assigned"].includes(a.status);
+      if (activeTab === "tests") return a.status === "Test Assigned";
       if (activeTab === "interviews") return a.status === "Interview Scheduled";
       if (activeTab === "hired") return a.status === "Hired";
       if (activeTab === "rejected") return a.status === "Rejected";
@@ -213,7 +274,15 @@ export default function MyApplicationsPage() {
 
     if (sort === "date") list.sort((a, b) => new Date(b.applicationDate).getTime() - new Date(a.applicationDate).getTime());
     if (sort === "status") {
-      const order: Record<string, number> = { "Interview Scheduled": 0, "Test Assigned": 1, "Assessment Assigned": 2, "Reviewed": 3, "Pending": 4, "Hired": 5, "Rejected": 6 };
+      const order: Record<string, number> = {
+        "Interview Scheduled": 0,
+        "Offer": 1,
+        "Test Assigned": 2,
+        "Reviewed": 3,
+        "Pending": 4,
+        "Hired": 5,
+        "Rejected": 6,
+      };
       list.sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
     }
     return list;
@@ -281,8 +350,9 @@ export default function MyApplicationsPage() {
               <span className="font-medium text-gray-700">Application Funnel:</span>
               {[
                 { label: "Applied",    n: stats.total,       color: "#64748b" },
-                { label: "Reviewed",   n: applications.filter(a => a.status !== "Pending").length, color: "#2563eb" },
+                { label: "Reviewed",   n: stats.reviewed,    color: "#2563eb" },
                 { label: "Interview",  n: stats.interviews,  color: "#7c3aed" },
+                { label: "Offer",      n: stats.offers,      color: "#059669" },
                 { label: "Hired",      n: stats.hired,       color: "#16a34a" },
               ].map((s, i) => (
                 <div key={s.label} className="flex items-center gap-1.5">
@@ -358,9 +428,25 @@ export default function MyApplicationsPage() {
           {filtered.map(app => {
             const isRejected = app.status === "Rejected";
             const isHired = app.status === "Hired";
-            const isTest = ["Test Assigned", "Assessment Assigned"].includes(app.status);
+            const isOffer = app.status === "Offer";
+            const isTest = app.status === "Test Assigned";
             const isInterview = app.status === "Interview Scheduled";
             const cfg = STATUS_CONFIG[app.status] || STATUS_CONFIG["Pending"];
+            const pipelineProgress =
+              typeof app.pipelineProgress === "number"
+                ? app.pipelineProgress
+                : app.status === "Hired"
+                  ? 5
+                  : app.status === "Offer"
+                    ? 4
+                    : app.status === "Interview Scheduled"
+                      ? 3
+                      : app.status === "Test Assigned"
+                        ? 2
+                        : app.status === "Reviewed"
+                          ? 1
+                          : 0;
+            const displayScore = app.testScore ?? (app as Application & { score?: number }).score;
             const jobTitle = app.jobDescriptionId?.title || "Untitled Role";
             const company = app.jobDescriptionId?.companyName || "";
             const location = app.jobDescriptionId?.location || "";
@@ -400,11 +486,11 @@ export default function MyApplicationsPage() {
                       </div>
 
                       {/* Test score */}
-                      {typeof app.testScore === "number" && (
+                      {typeof displayScore === "number" && (
                         <div className={`flex items-center gap-1.5 text-sm font-bold px-2.5 py-1 rounded-xl ${
-                          app.testScore >= 70 ? "bg-green-100 text-green-700" : app.testScore >= 50 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"
+                          displayScore >= 70 ? "bg-green-100 text-green-700" : displayScore >= 50 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"
                         }`}>
-                          <Trophy className="h-3.5 w-3.5" /> {app.testScore}%
+                          <Trophy className="h-3.5 w-3.5" /> {displayScore}%
                         </div>
                       )}
                     </div>
@@ -424,8 +510,15 @@ export default function MyApplicationsPage() {
                       </div>
                     )}
 
+                    {isOffer && (
+                      <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1.5 rounded-lg">
+                        <FileText className="h-3.5 w-3.5" />
+                        You have a job offer — view and respond in My Offers
+                      </div>
+                    )}
+
                     {/* Pipeline bar */}
-                    <PipelineBar status={app.status} isRejected={isRejected} />
+                    <PipelineBar progress={pipelineProgress} isRejected={isRejected} isHired={isHired} />
 
                     {/* Rounds */}
                     {rounds.length > 0 && (
@@ -484,6 +577,13 @@ export default function MyApplicationsPage() {
                       <Button size="sm" className="h-7 text-xs bg-purple-600 hover:bg-purple-700" asChild>
                         <Link href={`/dashboard/job-seeker/interviews/${app._id}`}>
                           <Video className="h-3 w-3 mr-1" /> View Interview
+                        </Link>
+                      </Button>
+                    )}
+                    {isOffer && (
+                      <Button size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700" asChild>
+                        <Link href="/dashboard/job-seeker/offer-letters">
+                          <FileText className="h-3 w-3 mr-1" /> View Offer
                         </Link>
                       </Button>
                     )}

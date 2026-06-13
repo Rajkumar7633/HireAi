@@ -22,7 +22,7 @@ function getTransporter() {
     throw new Error('Email service configuration missing')
   }
 
-  transporter = nodemailer.createTransporter({
+  transporter = nodemailer.createTransport({
     host,
     port,
     secure: port === 465,

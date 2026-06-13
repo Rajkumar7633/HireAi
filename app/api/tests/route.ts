@@ -108,6 +108,8 @@ export async function POST(req: NextRequest) {
         timeLimitMs: q.timeLimitMs || 2000,
         memoryLimitMb: q.memoryLimitMb || 256,
       })),
+      settings: body.settings || {},
+      passingScore: body.passingScore ?? body.passScore ?? 70,
       createdAt: new Date(),
     }
 

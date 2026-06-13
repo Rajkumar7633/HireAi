@@ -192,5 +192,8 @@ const OfferLetterSchema = new Schema<IOfferLetter>(
   { timestamps: true }
 )
 
-export default (mongoose.models.OfferLetter as mongoose.Model<IOfferLetter>) ||
-  mongoose.model<IOfferLetter>("OfferLetter", OfferLetterSchema)
+if (mongoose.models.OfferLetter) {
+  delete mongoose.models.OfferLetter
+}
+
+export default mongoose.model<IOfferLetter>("OfferLetter", OfferLetterSchema)

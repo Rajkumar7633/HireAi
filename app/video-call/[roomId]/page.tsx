@@ -29,20 +29,11 @@ const VideoConferenceRoom = dynamic(
     ssr: false,
     loading: () => (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white gap-3">
-        <Loader2 className="h-10 w-10 animate-spin text-blue-500" />
-        <span>Loading video interview…</span>
+        <Loader2 className="h-10 w-10 animate-spin text-violet-500" />
+        <span>Loading video interview studio…</span>
       </div>
     ),
   },
-);
-
-const RealTimeChat = dynamic(() => import("@/components/real-time-chat").then((m) => m.RealTimeChat), {
-  ssr: false,
-});
-
-const ScreenShareControls = dynamic(
-  () => import("@/components/screen-share-controls").then((m) => m.ScreenShareControls),
-  { ssr: false },
 );
 
 export default function VideoCallPage() {
@@ -63,10 +54,6 @@ export default function VideoCallPage() {
   const [isLoading, setIsLoading] = useState(!isCollegeMeeting);
   const [error, setError] = useState<string | null>(null);
   const [hasPermissions, setHasPermissions] = useState(isCollegeViewer);
-  const [showChat, setShowChat] = useState(false);
-  const [showScreenControls, setShowScreenControls] = useState(false);
-  const [isScreenSharing, setIsScreenSharing] = useState(false);
-  const [chatMessageCount, setChatMessageCount] = useState(0);
 
   useEffect(() => {
     if (isCollegeMeeting) {
@@ -78,62 +65,28 @@ export default function VideoCallPage() {
 
   const checkPermissions = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
-
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       stream.getTracks().forEach((track) => track.stop());
-
       setHasPermissions(true);
       setIsLoading(false);
-
-      toast({
-        title: "Ready to Join",
-        description: "Camera and microphone access granted successfully.",
-      });
-    } catch (error) {
-      console.error("Permission error:", error);
-      setError(
-        "Camera and microphone access is required for video interviews.",
-      );
+      toast({ title: "Ready to join", description: "Camera and microphone are ready." });
+    } catch {
+      setError("Camera and microphone access is required for video interviews.");
       setIsLoading(false);
     }
   };
 
   const requestPermissions = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       stream.getTracks().forEach((track) => track.stop());
       setHasPermissions(true);
       setError(null);
-
-      toast({
-        title: "Permissions Granted",
-        description: "You can now join the video interview.",
-      });
-    } catch (error) {
-      setError(
-        "Please allow camera and microphone access to join the interview.",
-      );
-      toast({
-        title: "Permission Denied",
-        description:
-          "Camera and microphone access is required for video interviews.",
-        variant: "destructive",
-      });
+      toast({ title: "Permissions granted" });
+    } catch {
+      setError("Please allow camera and microphone access to join the interview.");
+      toast({ title: "Permission denied", variant: "destructive" });
     }
-  };
-
-  const handleToggleScreenShare = () => {
-    setIsScreenSharing(!isScreenSharing);
-  };
-
-  const handleScreenShareEnd = () => {
-    setIsScreenSharing(false);
   };
 
   if (isCollegeMeeting && meetingId) {
@@ -149,13 +102,11 @@ export default function VideoCallPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-center text-white">
-          <Loader2 className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4" />
-          <p>Preparing video interview...</p>
-          <p className="text-sm text-gray-400 mt-2">
-            Checking camera and microphone permissions
-          </p>
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center text-white">
+        <div className="text-center">
+          <Loader2 className="animate-spin h-12 w-12 text-violet-500 mx-auto mb-4" />
+          <p className="font-medium">Preparing interview room…</p>
+          <p className="text-sm text-gray-400 mt-2">Checking camera and microphone</p>
         </div>
       </div>
     );
@@ -163,28 +114,23 @@ export default function VideoCallPage() {
 
   if (error || !hasPermissions) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md bg-gray-800 border-gray-600">
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md bg-gray-900 border-gray-700">
           <CardContent className="p-6 text-center">
             <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-white mb-2">
-              Permissions Required
-            </h2>
-            <p className="text-gray-300 mb-6">
-              {error ||
-                "Camera and microphone access is required to join the video interview."}
-            </p>
+            <h2 className="text-xl font-semibold text-white mb-2">Permissions required</h2>
+            <p className="text-gray-300 mb-6 text-sm">{error || "Allow camera and microphone to join."}</p>
             <div className="space-y-3">
-              <Button onClick={requestPermissions} className="w-full">
+              <Button onClick={requestPermissions} className="w-full bg-violet-600 hover:bg-violet-700">
                 <Video className="w-4 h-4 mr-2" />
-                Allow Camera & Microphone
+                Allow camera & microphone
               </Button>
               <Button
                 variant="outline"
                 onClick={() => router.push("/dashboard")}
-                className="w-full"
+                className="w-full border-gray-600 bg-gray-800 text-white hover:bg-gray-700"
               >
-                Return to Dashboard
+                Return to dashboard
               </Button>
             </div>
           </CardContent>
@@ -194,56 +140,12 @@ export default function VideoCallPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 flex">
-      <div className="flex-1 relative">
-        <VideoConferenceRoom
-          roomId={roomId}
-          interviewId={interviewId}
-          meetingId={meetingId}
-          isHost={isHost}
-          participantName={participantName}
-        />
-
-        {showScreenControls && (
-          <div className="absolute top-20 left-4 z-40">
-            <ScreenShareControls
-              isScreenSharing={isScreenSharing}
-              onToggleScreenShare={handleToggleScreenShare}
-              onScreenShareEnd={handleScreenShareEnd}
-              isHost={isHost}
-            />
-          </div>
-        )}
-      </div>
-
-      {showChat && (
-        <RealTimeChat
-          roomId={roomId}
-          participantName={participantName}
-          participantId="current-user"
-          isHost={isHost}
-          onMessageCount={setChatMessageCount}
-        />
-      )}
-
-      <div className="absolute top-4 right-4 z-50 flex flex-col gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowChat(!showChat)}
-          className="bg-gray-800/90 border-gray-600 text-white hover:bg-gray-700"
-        >
-          Chat {chatMessageCount > 0 && `(${chatMessageCount})`}
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowScreenControls(!showScreenControls)}
-          className="bg-gray-800/90 border-gray-600 text-white hover:bg-gray-700"
-        >
-          Screen Share
-        </Button>
-      </div>
-    </div>
+    <VideoConferenceRoom
+      roomId={roomId}
+      interviewId={interviewId}
+      meetingId={meetingId}
+      isHost={isHost}
+      participantName={participantName}
+    />
   );
 }

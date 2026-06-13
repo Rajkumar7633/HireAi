@@ -27,11 +27,14 @@ export interface IApplication extends Document {
   | "Test Assigned"
   | "Test Passed"
   | "Test Failed"
+  | "in_progress"
   | "Hired"
   | "Rejected"
   | "Shortlisted"
   | "Under Review"
+  | "Offer"
   testId?: mongoose.Types.ObjectId
+  testAssignedAt?: Date
   testScore?: number
   testAnswers?: Array<{
     questionId: string
@@ -91,6 +94,23 @@ export interface IApplication extends Document {
     latestScore?: number
     notes?: string
   }>
+  interviewFeedback?: string
+  interviewRating?: number
+  interviewDate?: Date
+  videoInterviewSummaries?: Array<{
+    interviewId?: string
+    completedAt?: Date
+    rating?: number
+    overallScore?: number
+    technicalScore?: number
+    communicationScore?: number
+    codingScore?: number
+    nextStep?: string
+    summary?: string
+    strengths?: string
+    concerns?: string
+    candidateRating?: number
+  }>
 }
 
 const ApplicationSchema = new Schema<IApplication>(
@@ -149,16 +169,21 @@ const ApplicationSchema = new Schema<IApplication>(
         "Test Assigned",
         "Test Passed",
         "Test Failed",
+        "in_progress",
         "Hired",
         "Rejected",
         "Shortlisted",
         "Under Review",
+        "Offer",
       ],
       default: "Pending",
     },
     testId: {
       type: Schema.Types.ObjectId,
       ref: "Test",
+    },
+    testAssignedAt: {
+      type: Date,
     },
     testScore: {
       type: Number,
@@ -257,6 +282,25 @@ const ApplicationSchema = new Schema<IApplication>(
         },
         latestScore: Number,
         notes: String,
+      },
+    ],
+    interviewFeedback: { type: String },
+    interviewRating: { type: Number, min: 1, max: 10 },
+    interviewDate: { type: Date },
+    videoInterviewSummaries: [
+      {
+        interviewId: String,
+        completedAt: Date,
+        rating: Number,
+        overallScore: Number,
+        technicalScore: Number,
+        communicationScore: Number,
+        codingScore: Number,
+        nextStep: String,
+        summary: String,
+        strengths: String,
+        concerns: String,
+        candidateRating: Number,
       },
     ],
   },

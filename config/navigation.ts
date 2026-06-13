@@ -78,7 +78,9 @@ export const navigationByRole: Record<Role, NavItem[]> = {
         { title: "Browse Jobs",     url: "/dashboard/jobs" },
         { title: "Job Matches",     url: "/dashboard/job-seeker/matches" },
         { title: "My Applications", url: "/dashboard/job-seeker/applications" },
+        { title: "My Offers",       url: "/dashboard/job-seeker/offer-letters" },
         { title: "Status Portal",   url: "/dashboard/job-seeker/status-portal" },
+        { title: "Activity History", url: "/dashboard/history" },
       ],
     },
     { title: "Assessments", url: "#", icon: ClipboardList,
@@ -157,7 +159,7 @@ export const navigationByRole: Record<Role, NavItem[]> = {
       items: [
         { title: "Tests",                   url: "/dashboard/recruiter/tests" },
         { title: "Background Verification", url: "/dashboard/recruiter/background-verification" },
-        { title: "Offer Letters",           url: "/dashboard/recruiter/offer-letters/create" },
+        { title: "Offer Letters",           url: "/dashboard/recruiter/offer-letters" },
       ],
     },
     { title: "Campus Drives", url: "/dashboard/recruiter/campus-drives", icon: GraduationCap },

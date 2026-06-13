@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
-import { sendEmail, renderTemplate } from "@/lib/email-service"
+import { sendEmail } from "@/lib/email-service"
+import { renderTemplate } from "@/lib/template-render"
 import EmailTemplate from "@/models/EmailTemplate"
 import User from "@/models/User"
 

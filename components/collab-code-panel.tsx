@@ -2,7 +2,7 @@
 
 import { acquireCollab, releaseCollab } from "@/lib/collab-store";
 
-import {useEffect, useMemo, useRef, useState} from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
 import * as Y from "yjs";
 import { WebrtcProvider } from "y-webrtc";
@@ -14,25 +14,33 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, Play } from "lucide-react";
 
-const LANGUAGE_PRESETS: Record<string, { id: number; sample: string; monaco: string }> = {
-  javascript: {
-    id: 63,
-    monaco: "javascript",
-    sample: `// Write JavaScript here\nfunction add(a,b){return a+b}\nconsole.log(add(2,3));`,
-  },
-  python: { id: 71, monaco: "python", sample: `# Write Python here\nprint(2+3)` },
-  cpp: {
-    id: 54,
-    monaco: "cpp",
-    sample: `#include <bits/stdc++.h>\nusing namespace std;\nint main(){cout<<2+3<<"\n";}`,
-  },
-  c: { id: 50, monaco: "c", sample: `#include <stdio.h>\nint main(){printf("%d\n",2+3);}` },
-  java: {
-    id: 62,
-    monaco: "java",
-    sample: `import java.util.*;\nclass Main{public static void main(String[] args){System.out.println(2+3);}}`,
-  },
+const LANGUAGE_PRESETS: Record<string, { id: number; starter: string; monaco: string }> = {
+  javascript: { id: 63, monaco: "javascript", starter: "" },
+  python: { id: 71, monaco: "python", starter: "" },
+  cpp: { id: 54, monaco: "cpp", starter: "" },
+  c: { id: 50, monaco: "c", starter: "" },
+  java: { id: 62, monaco: "java", starter: "" },
 };
+
+const darkBtn = "bg-gray-700 border-gray-500 text-white hover:bg-gray-600 hover:text-white";
+
+function runJavaScriptLocally(code: string, stdin: string): string {
+  const logs: string[] = [];
+  const mockConsole = {
+    log: (...args: unknown[]) => logs.push(args.map(String).join(" ")),
+    error: (...args: unknown[]) => logs.push(`Error: ${args.map(String).join(" ")}`),
+    warn: (...args: unknown[]) => logs.push(`Warn: ${args.map(String).join(" ")}`),
+  };
+  try {
+    const stdinLines = stdin ? stdin.split("\n") : [];
+    const fn = new Function("console", "stdin", code);
+    fn(mockConsole, stdinLines);
+    if (logs.length === 0) return "Ran successfully (no output)";
+    return logs.join("\n");
+  } catch (e) {
+    return `Error: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
 
 export type CollabCodePanelProps = {
   roomId: string;
@@ -45,60 +53,80 @@ export function CollabCodePanel({ roomId, interviewId, isHost = false }: CollabC
   const [stdin, setStdin] = useState("");
   const [running, setRunning] = useState(false);
   const [output, setOutput] = useState<string>("");
+  const [promptText, setPromptText] = useState("");
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<any>(null);
+  const editorWrapRef = useRef<HTMLDivElement>(null);
+  const [editorHeight, setEditorHeight] = useState(280);
   const [locked, setLocked] = useState(false);
   const [showPrompt, setShowPrompt] = useState(true);
   const [missingKeyHint, setMissingKeyHint] = useState<string | null>(null);
-  const promptLocalRef = useRef<string>("");
   const promptDebounceRef = useRef<number | null>(null);
 
-  // Yjs doc+provider via shared store (prevents duplicate room error)
   const { doc, provider, yText, yPrompt, yMeta } = useMemo(() => {
     const roomKey = `code-${roomId}-${interviewId}`;
     return acquireCollab(roomKey);
   }, [roomId, interviewId]);
 
   useEffect(() => {
+    const syncPrompt = () => setPromptText(yPrompt.toString());
+    syncPrompt();
+    yPrompt.observe(syncPrompt);
+    return () => {
+      try {
+        yPrompt.unobserve(syncPrompt);
+      } catch {}
+    };
+  }, [yPrompt]);
+
+  useEffect(() => {
     const metaObserver = () => {
       const mLocked = !!yMeta.get("locked");
       setLocked(mLocked);
+      if (editorRef.current?.updateOptions) {
+        editorRef.current.updateOptions({ readOnly: !isHost && mLocked });
+      }
     };
     metaObserver();
     yMeta.observe(metaObserver);
 
     return () => {
-      try { yMeta.unobserve(metaObserver) } catch {}
-      try { releaseCollab(`code-${roomId}-${interviewId}`) } catch {}
+      try {
+        yMeta.unobserve(metaObserver);
+      } catch {}
+      try {
+        releaseCollab(`code-${roomId}-${interviewId}`);
+      } catch {}
     };
-  }, [doc, provider, yMeta, roomId, interviewId]);
+  }, [doc, provider, yMeta, roomId, interviewId, isHost]);
+
+  useEffect(() => {
+    const el = editorWrapRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      const h = el.clientHeight;
+      if (h > 120) setEditorHeight(h);
+    });
+    ro.observe(el);
+    setEditorHeight(el.clientHeight || 280);
+    return () => ro.disconnect();
+  }, [showPrompt]);
 
   const handleMount = (editor: any, monaco: any) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
-    // Initialize with sample if empty
-    if (yText.length === 0) {
-      yText.insert(0, LANGUAGE_PRESETS[language].sample);
-    }
-    // Initialize prompt default
-    if (yPrompt.length === 0) {
-      yPrompt.insert(0, "Describe the problem here (Markdown supported).\n\nExample: Implement a function add(a, b) that returns the sum.");
-    }
-    // Bind Yjs to Monaco
+    // Leave editor and problem empty — host writes the question when ready
     const model = editor.getModel();
     if (model) {
       const binding = new MonacoBinding(yText, model, new Set([editor]), provider.awareness);
-      // Keep binding referenced to avoid GC
       (editor as any)._yBinding = binding;
     }
-    // Apply initial readOnly if locked and not host
     if (!isHost && locked && editor.updateOptions) {
       editor.updateOptions({ readOnly: true });
     }
   };
 
   const beforeMount = (monaco: any) => {
-    // Reduce diagnostics overhead where possible
     try {
       monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
         noSemanticValidation: true,
@@ -110,8 +138,6 @@ export function CollabCodePanel({ roomId, interviewId, isHost = false }: CollabC
         noSyntaxValidation: false,
         onlyVisible: true,
       });
-      // Lighter worker config
-      monaco.editor.EditorOptions.stickyScroll = { default: false } as any;
     } catch {}
   };
 
@@ -124,103 +150,165 @@ export function CollabCodePanel({ roomId, interviewId, isHost = false }: CollabC
       if (m && monacoRef.current?.editor?.setModelLanguage) {
         monacoRef.current.editor.setModelLanguage(m, monacoLang);
       }
-      // If code is empty, inject preset
-      if (yText.length === 0) {
-        yText.insert(0, LANGUAGE_PRESETS[langKey].sample);
-      }
     }
+  };
+
+  const onPromptChange = (val: string) => {
+    setPromptText(val);
+    if (!isHost) return;
+    if (promptDebounceRef.current) cancelAnimationFrame(promptDebounceRef.current);
+    promptDebounceRef.current = requestAnimationFrame(() => {
+      yPrompt.delete(0, yPrompt.length);
+      yPrompt.insert(0, val);
+    });
   };
 
   const runCode = async () => {
     try {
       setRunning(true);
       setOutput("");
+      setMissingKeyHint(null);
       const code = yText.toString();
       const lang = LANGUAGE_PRESETS[language];
+
       const res = await fetch("/api/code/execute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ languageId: lang.id, language, code, stdin }),
       });
       const text = await res.text();
+
       if (!res.ok) {
+        if (language === "javascript") {
+          const local = runJavaScriptLocally(code, stdin);
+          setOutput(`${local}\n\n(Used local JS runner — remote executor unavailable)`);
+          return;
+        }
         setOutput(`Error: ${text}`);
         if (text.includes("JUDGE0_KEY missing")) {
-          setMissingKeyHint("Set JUDGE0_URL and JUDGE0_KEY in .env.local, then restart the app.");
+          setMissingKeyHint("Set JUDGE0_URL and JUDGE0_KEY in .env.local for Python/C++/Java, or use JavaScript for local run.");
         }
         return;
       }
-      setOutput(text);
-      setMissingKeyHint(null);
-    } catch (e: any) {
-      setOutput(`Run failed: ${e?.message || e}`);
+
+      setOutput(text || "Ran successfully (no output)");
+    } catch (e: unknown) {
+      const code = yText.toString();
+      if (language === "javascript") {
+        setOutput(runJavaScriptLocally(code, stdin));
+      } else {
+        setOutput(`Run failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
     } finally {
       setRunning(false);
     }
   };
 
   return (
-    <div className="h-full flex flex-col gap-2">
-      <div className="flex items-center gap-2">
+    <div className="h-full flex flex-col gap-2 min-h-0">
+      <div className="shrink-0 flex flex-wrap items-center gap-2">
         <Select value={language} onValueChange={onChangeLanguage}>
-          <SelectTrigger className="w-48 bg-gray-800 border-gray-600 text-white"><SelectValue placeholder="Language" /></SelectTrigger>
-          <SelectContent>
+          <SelectTrigger className="w-36 bg-gray-800 border-gray-600 text-white">
+            <SelectValue placeholder="Language" />
+          </SelectTrigger>
+          <SelectContent className="bg-gray-900 border-gray-700 text-white">
             {Object.keys(LANGUAGE_PRESETS).map((k) => (
-              <SelectItem key={k} value={k}>{k}</SelectItem>
+              <SelectItem key={k} value={k} className="focus:bg-gray-800 focus:text-white">
+                {k}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <Button onClick={runCode} disabled={running} className="bg-green-600 hover:bg-green-700">
-          {running ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin"/>Running...</>) : (<><Play className="h-4 w-4 mr-2"/>Run</>)}
+        <Button
+          onClick={runCode}
+          disabled={running}
+          className="bg-emerald-600 hover:bg-emerald-500 text-white"
+        >
+          {running ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Running…
+            </>
+          ) : (
+            <>
+              <Play className="h-4 w-4 mr-2" />
+              Run
+            </>
+          )}
         </Button>
-        <Button variant="outline" className="bg-gray-800 border-gray-600 text-gray-200 hover:bg-gray-700" onClick={() => setShowPrompt((s)=>!s)}>
-          {showPrompt ? "Hide Prompt" : "Show Prompt"}
+        <Button variant="outline" className={darkBtn} onClick={() => setShowPrompt((s) => !s)}>
+          {showPrompt ? "Hide prompt" : "Show prompt"}
         </Button>
         {isHost && (
-          <Button
-            variant={locked ? "destructive" : "outline"}
-            className={locked ? "" : "bg-gray-800 border-gray-600 text-gray-200 hover:bg-gray-700"}
-            onClick={() => {
-              const next = !locked;
-              setLocked(next);
-              yMeta.set("locked", next);
-              if (editorRef.current?.updateOptions) editorRef.current.updateOptions({ readOnly: next });
-            }}
-            title="Lock editing for candidates"
-          >
-            {locked ? "Unlock Edit" : "Lock Edit"}
-          </Button>
+          <>
+            <Button
+              variant="outline"
+              className={locked ? "bg-red-600 border-red-500 text-white hover:bg-red-500" : darkBtn}
+              onClick={() => {
+                const next = !locked;
+                setLocked(next);
+                yMeta.set("locked", next);
+                if (editorRef.current?.updateOptions) {
+                  editorRef.current.updateOptions({ readOnly: next });
+                }
+              }}
+              title="Lock editing for candidates"
+            >
+              {locked ? "Unlock edit" : "Lock edit"}
+            </Button>
+            <Button
+              variant="outline"
+              className={darkBtn}
+              onClick={() => {
+                yPrompt.delete(0, yPrompt.length);
+                setPromptText("");
+              }}
+              title="Remove the current question"
+            >
+              Clear question
+            </Button>
+            <Button
+              variant="outline"
+              className={darkBtn}
+              onClick={() => {
+                yText.delete(0, yText.length);
+              }}
+              title="Clear the code editor"
+            >
+              Clear code
+            </Button>
+          </>
         )}
       </div>
 
       {showPrompt && (
-        <Card className="bg-gray-900 border-gray-700">
-          <CardContent className="p-2 space-y-2">
-            <div className="text-xs text-gray-400">Problem (host edits, all see)</div>
+        <Card className="shrink-0 bg-gray-900/80 border-gray-700">
+          <CardContent className="p-2 space-y-1">
+            <div className="text-xs text-gray-400 font-medium">
+              {isHost ? "Your question (visible to candidate)" : "Problem"}
+            </div>
             <Textarea
               rows={4}
-              value={(promptLocalRef.current = yPrompt.toString())}
-              onChange={(e)=>{
-                const val = e.target.value;
-                // Debounced Yjs update to avoid heavy ops per keystroke
-                if (promptDebounceRef.current) cancelAnimationFrame(promptDebounceRef.current);
-                promptDebounceRef.current = requestAnimationFrame(() => {
-                  yPrompt.delete(0, yPrompt.length);
-                  yPrompt.insert(0, val);
-                });
-                promptLocalRef.current = val;
-              }}
+              value={promptText}
+              onChange={(e) => onPromptChange(e.target.value)}
               disabled={!isHost}
-              className="bg-gray-800 border-gray-700 text-white"
-              placeholder="Write the coding question here (Markdown supported)"
+              className="bg-gray-800 border-gray-600 text-white text-sm resize-y min-h-[80px] focus-visible:ring-violet-500"
+              placeholder={
+                isHost
+                  ? "Type your coding question here… (Markdown supported). Nothing is pre-filled — write what you want the candidate to solve."
+                  : "Waiting for the host to share the question…"
+              }
             />
           </CardContent>
         </Card>
       )}
 
-      <div className="flex-1 min-h-0 border border-gray-700 rounded overflow-hidden">
+      <div
+        ref={editorWrapRef}
+        className="flex-1 min-h-[200px] border border-gray-700/80 rounded-lg overflow-hidden bg-[#1e1e1e]"
+      >
         <Editor
-          height="100%"
+          height={editorHeight}
           defaultLanguage={LANGUAGE_PRESETS[language].monaco}
           theme="vs-dark"
           onMount={handleMount}
@@ -230,35 +318,36 @@ export function CollabCodePanel({ roomId, interviewId, isHost = false }: CollabC
             minimap: { enabled: false },
             readOnly: !isHost && locked,
             smoothScrolling: true,
-            cursorBlinking: "phase",
-            renderWhitespace: "none",
-            renderLineHighlight: "gutter",
+            scrollBeyondLastLine: false,
+            automaticLayout: true,
             wordWrap: "on",
-            dragAndDrop: false,
-            occurrencesHighlight: false,
-            emptySelectionClipboard: false,
-            folding: false,
-            codeLens: false,
-            lightbulb: { enabled: false },
-            quickSuggestions: { other: true, comments: false, strings: false },
-            suggestOnTriggerCharacters: true,
+            padding: { top: 12, bottom: 12 },
           }}
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-        <Card className="bg-gray-900 border-gray-700">
-          <CardContent className="p-2">
-            <div className="text-xs text-gray-400 mb-1">stdin</div>
-            <Textarea rows={5} value={stdin} onChange={(e)=>setStdin(e.target.value)} className="bg-gray-800 border-gray-700 text-white"/>
+      <div className="shrink-0 grid grid-cols-1 md:grid-cols-2 gap-2 min-h-[100px] max-h-[140px]">
+        <Card className="bg-gray-900/80 border-gray-700 min-h-0">
+          <CardContent className="p-2 h-full">
+            <div className="text-xs text-gray-400 mb-1 font-medium">stdin</div>
+            <Textarea
+              rows={4}
+              value={stdin}
+              onChange={(e) => setStdin(e.target.value)}
+              className="bg-gray-800 border-gray-600 text-white text-sm h-[calc(100%-20px)] min-h-[72px] resize-none"
+            />
           </CardContent>
         </Card>
-        <Card className="bg-gray-900 border-gray-700">
-          <CardContent className="p-2">
-            <div className="text-xs text-gray-400 mb-1">Output</div>
-            <pre className="text-sm whitespace-pre-wrap text-green-300">{output || ""}</pre>
+        <Card className="bg-gray-900/80 border-gray-700 min-h-0">
+          <CardContent className="p-2 h-full">
+            <div className="text-xs text-gray-400 mb-1 font-medium">Output</div>
+            <pre
+              className="text-sm whitespace-pre-wrap text-emerald-300 font-mono h-[calc(100%-20px)] min-h-[72px] overflow-auto bg-gray-800/50 rounded p-2 border border-gray-700/50"
+            >
+              {output || "Run code to see output…"}
+            </pre>
             {missingKeyHint && (
-              <div className="mt-2 text-xs text-yellow-300">{missingKeyHint}</div>
+              <div className="mt-1 text-xs text-amber-300">{missingKeyHint}</div>
             )}
           </CardContent>
         </Card>

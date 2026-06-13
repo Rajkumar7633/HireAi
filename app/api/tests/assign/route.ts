@@ -44,7 +44,9 @@ export async function POST(request: NextRequest) {
     // Update application
     application.testId = test._id
     application.status = "Test Assigned" as any
-    ;(application as any).testAssignedAt = new Date()
+    const assignedNow = new Date()
+    application.assignedAt = application.assignedAt || assignedNow
+    ;(application as any).testAssignedAt = assignedNow
 
     if (!(application as any).currentStage) {
       ;(application as any).currentStage = roundStage

@@ -107,12 +107,13 @@ export default function CreateCodingTestPage() {
   const [availableFrom, setAvailableFrom] = useState("")
   const [availableTo, setAvailableTo] = useState("")
 
-  const [enableProctoring, setEnableProctoring] = useState(false)
+  const [enableProctoring, setEnableProctoring] = useState(true)
+  const [enableObjectDetection, setEnableObjectDetection] = useState(true)
   const [restrictCopyPaste, setRestrictCopyPaste] = useState(true)
   const [detectTabSwitch, setDetectTabSwitch] = useState(true)
-  const [webcamRequired, setWebcamRequired] = useState(false)
+  const [webcamRequired, setWebcamRequired] = useState(true)
   const [shuffleProblems, setShuffleProblems] = useState(false)
-  const [maxTabSwitches, setMaxTabSwitches] = useState(3)
+  const [maxTabSwitches, setMaxTabSwitches] = useState(2)
 
   const [restrictLanguages, setRestrictLanguages] = useState(false)
   const [allowedLanguages, setAllowedLanguages] = useState<string[]>(["python", "javascript", "java", "cpp", "typescript"])
@@ -201,7 +202,7 @@ export default function CreateCodingTestPage() {
           testCases: p.testCases.map(tc => ({ input: tc.input, expectedOutput: tc.expectedOutput, hidden: tc.hidden, weight: tc.weight })),
           points: p.points, timeLimitMs: p.timeLimitMs, memoryLimitMb: p.memoryLimitMb, correctAnswer: "",
         })),
-        settings: { enableProctoring, restrictCopyPaste, detectTabSwitch, webcamRequired, shuffleProblems, maxTabSwitches, restrictLanguages, allowedLanguages: restrictLanguages ? allowedLanguages : [] },
+        settings: { enableProctoring, enableObjectDetection, restrictCopyPaste, detectTabSwitch, webcamRequired, shuffleProblems, maxTabSwitches, restrictLanguages, allowedLanguages: restrictLanguages ? allowedLanguages : [] },
       }
       if (enableSchedule) { payload.availableFrom = availableFrom || null; payload.availableTo = availableTo || null }
       const res = await authFetch("/api/tests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
@@ -458,6 +459,7 @@ export default function CreateCodingTestPage() {
                 </div>
                 <div className="space-y-2">
                   {[
+                    { l: "Phone/Object AI (COCO-SSD)", d: "Detect phones, books, and extra persons via camera", v: enableObjectDetection, s: setEnableObjectDetection },
                     { l: "Restrict Copy-Paste", d: "Block clipboard in editor", v: restrictCopyPaste, s: setRestrictCopyPaste },
                     { l: "Tab Switch Detection", d: "Warn when leaving test window", v: detectTabSwitch, s: setDetectTabSwitch },
                     { l: "Webcam Required", d: "Candidate must enable camera", v: webcamRequired, s: setWebcamRequired },

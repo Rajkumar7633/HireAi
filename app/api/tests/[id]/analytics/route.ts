@@ -26,6 +26,7 @@ async function fetchAnalyticsFromMongo(testId: string) {
     totalAssigned: stats.totalAssigned,
     totalAttempts: stats.totalAttempts,
     completedCount: stats.completedCount,
+    inProgressCount: stats.inProgressCount,
     averageScore: stats.averageScore,
     passRate: stats.passRate,
     avgPlagiarismScore: 0,

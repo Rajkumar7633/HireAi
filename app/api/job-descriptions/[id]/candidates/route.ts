@@ -62,6 +62,20 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         status: r.status,
         latestScore: r.latestScore ?? null,
         testId: r.testId ? String(r.testId) : undefined,
+        notes: r.notes || "",
+      })),
+      interviewFeedback: a.interviewFeedback || "",
+      interviewRating: a.interviewRating ?? null,
+      interviewDate: a.interviewDate ?? null,
+      videoInterviewSummaries: (a.videoInterviewSummaries || []).map((s: any) => ({
+        interviewId: s.interviewId,
+        completedAt: s.completedAt,
+        rating: s.rating,
+        overallScore: s.overallScore,
+        summary: s.summary,
+        nextStep: s.nextStep,
+        strengths: s.strengths,
+        concerns: s.concerns,
       })),
     }))
 

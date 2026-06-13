@@ -2,6 +2,16 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
 import { ensureConnection } from "@/lib/mongodb"
 import VideoInterview from "@/models/VideoInterview"
+import Application from "@/models/Application"
+import Notification from "@/models/Notification"
+import { sendStatusChangeEmail } from "@/lib/status-change-email"
+
+function nanoid(len = 12) {
+  const alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+  let id = ""
+  for (let i = 0; i < len; i++) id += alphabet[(Math.random() * alphabet.length) | 0]
+  return id
+}
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -138,24 +148,68 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       }
     }
     if (typeof notes === "string") updateData.notes = notes
-    if (typeof duration === "number") updateData.duration = duration
+    const durationNum = typeof duration === "number" ? duration : Number(duration)
+    if (!Number.isNaN(durationNum) && durationNum > 0) updateData.duration = durationNum
+
+    const isReschedule = reason === "reschedule"
+
     if (typeof scheduledDate === "string" && scheduledDate) {
-      updateData.scheduledDate = new Date(scheduledDate)
-      // On explicit reschedule, reset session fields and status -> scheduled
-      if (reason === "reschedule") {
+      const newDate = new Date(scheduledDate)
+      if (Number.isNaN(newDate.getTime())) {
+        return NextResponse.json({ message: "Invalid scheduledDate" }, { status: 400 })
+      }
+      updateData.scheduledDate = newDate
+
+      if (isReschedule) {
         updateData.status = "scheduled"
         updateData.startedAt = undefined
         updateData.endedAt = undefined
         updateData.hostJoinedAt = undefined
         updateData.candidateJoinedAt = undefined
+        // Fresh in-app room for a new session
+        if (!interview.meetingLink) {
+          updateData.roomId = `room-${nanoid(12)}`
+        }
       }
     }
 
     const updated = await VideoInterview.findByIdAndUpdate(
       id,
-      { $set: updateData, ...(reason === "reschedule" ? { $unset: { startedAt: "", endedAt: "", hostJoinedAt: "", candidateJoinedAt: "" } } : {}) },
-      { new: true }
+      {
+        $set: updateData,
+        ...(isReschedule
+          ? { $unset: { startedAt: "", endedAt: "", hostJoinedAt: "", candidateJoinedAt: "" } }
+          : {}),
+      },
+      { new: true },
     ).exec()
+
+    if (isReschedule && updated) {
+      const candidateId = String(interview.candidateId)
+      const when = updateData.scheduledDate as Date
+
+      await Notification.create({
+        userId: candidateId,
+        type: "application_status_update",
+        message: `Your interview has been rescheduled to ${when.toLocaleString()}.`,
+        relatedEntity: { id: updated._id, type: "interview" },
+      }).catch(() => {})
+
+      if (interview.applicationId) {
+        await Application.findByIdAndUpdate(interview.applicationId, {
+          $set: { status: "Interview Scheduled" },
+        }).catch(() => {})
+
+        await sendStatusChangeEmail({
+          applicationId: String(interview.applicationId),
+          jobSeekerId: candidateId,
+          jobDescriptionId: String(interview.jobId),
+          recruiterId: String(interview.recruiterId),
+          newStatus: "Interview Scheduled",
+          previousStatus: interview.status,
+        }).catch((e) => console.error("reschedule auto-email failed", e))
+      }
+    }
 
     return NextResponse.json({ success: true, interview: updated })
   } catch (error) {

@@ -5,31 +5,48 @@
 
 // ── ScoreRing ────────────────────────────────────────────────────────────────
 interface ScoreRingProps {
-  value: number
+  value?: number
+  /** Alias for `value` (legacy usage across recruiter pages) */
+  score?: number
   max?: number
   size?: number
   stroke?: number
   color?: string
+  /** Alias for `color` */
+  ringColor?: string
   label?: string
   sublabel?: string
   showValue?: boolean
 }
+
+function toSafeScore(raw: unknown, max: number): number {
+  if (raw == null) return 0
+  const n = typeof raw === "number" ? raw : parseFloat(String(raw))
+  if (!Number.isFinite(n)) return 0
+  return Math.min(max, Math.max(0, n))
+}
+
 export function ScoreRing({
   value,
+  score,
   max = 100,
   size = 80,
   stroke = 8,
   color,
+  ringColor,
   label,
   sublabel,
   showValue = true,
 }: ScoreRingProps) {
-  const pct = Math.min(100, Math.max(0, (value / max) * 100))
+  const safeValue = toSafeScore(score ?? value, max)
+  const pct = max > 0 ? Math.min(100, Math.max(0, (safeValue / max) * 100)) : 0
   const r = (size - stroke) / 2
   const circ = 2 * Math.PI * r
   const offset = circ - (pct / 100) * circ
   const c = size / 2
-  const autoColor = color ?? (pct >= 70 ? "#10b981" : pct >= 50 ? "#f59e0b" : "#ef4444")
+  const resolvedColor = ringColor ?? color
+  const autoColor = resolvedColor ?? (pct >= 70 ? "#10b981" : pct >= 50 ? "#f59e0b" : "#ef4444")
+  const displayValue = Math.round(safeValue)
   return (
     <div className="flex flex-col items-center gap-0.5">
       <div className="relative" style={{ width: size, height: size }}>
@@ -47,7 +64,7 @@ export function ScoreRing({
         {showValue && (
           <div className="absolute inset-0 flex flex-col items-center justify-center">
             <span className="text-xs font-bold leading-none" style={{ color: autoColor }}>
-              {Math.round(value)}{max === 100 ? "%" : ""}
+              {displayValue}{max === 100 ? "%" : ""}
             </span>
             {sublabel && <span className="text-[8px] text-slate-400 uppercase tracking-wider mt-0.5">{sublabel}</span>}
           </div>

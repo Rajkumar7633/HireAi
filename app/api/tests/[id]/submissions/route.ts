@@ -118,6 +118,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       headers: {
         "X-Total-Assigned": String(stats.totalAssigned),
         "X-Completed-Count": String(stats.completedCount),
+        "X-In-Progress-Count": String(stats.inProgressCount ?? 0),
       },
     })
   } catch (error) {

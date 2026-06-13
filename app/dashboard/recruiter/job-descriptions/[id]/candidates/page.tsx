@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, User, FileText, TestTube, ExternalLink, Trophy } from "lucide-react";
+import { Loader2, User, FileText, TestTube, ExternalLink, Trophy, Star, MessageSquare } from "lucide-react";
 import { ScoreRing, SkillBar } from "@/components/ui/charts";
 import {
   Dialog,
@@ -77,6 +77,16 @@ interface Application {
   aiExplanation?: string;
   currentStage?: string;
   rounds?: RoundInfo[];
+  interviewFeedback?: string;
+  interviewRating?: number | null;
+  interviewDate?: string | null;
+  videoInterviewSummaries?: Array<{
+    interviewId?: string;
+    summary?: string;
+    overallScore?: number;
+    nextStep?: string;
+    completedAt?: string;
+  }>;
 }
 
 export default function CandidatesPage() {
@@ -497,6 +507,40 @@ export default function CandidatesPage() {
                         Test completed: {format(new Date(effectiveCompletedAt), "MMM dd, yyyy HH:mm")}
                       </div>
                     )}
+                    {application.interviewFeedback && (
+                      <div className="mt-2 rounded-lg border border-violet-200 bg-violet-50/80 p-3 text-xs">
+                        <div className="flex items-center gap-1.5 font-semibold text-violet-900 mb-1">
+                          <MessageSquare className="h-3.5 w-3.5" />
+                          Video interview feedback
+                          {application.interviewRating != null && (
+                            <span className="flex items-center gap-0.5 ml-1">
+                              {[1, 2, 3, 4, 5].map((s) => (
+                                <Star
+                                  key={s}
+                                  className={`h-3 w-3 ${
+                                    s <= Math.min(5, application.interviewRating!)
+                                      ? "text-amber-500 fill-amber-500"
+                                      : "text-gray-300"
+                                  }`}
+                                />
+                              ))}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-violet-900/90 leading-relaxed">{application.interviewFeedback}</p>
+                        {application.interviewDate && (
+                          <p className="text-[10px] text-violet-700 mt-1">
+                            Interviewed {format(new Date(application.interviewDate), "MMM dd, yyyy")}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {application.videoInterviewSummaries &&
+                      application.videoInterviewSummaries.length > 1 && (
+                        <div className="text-[10px] text-muted-foreground">
+                          {application.videoInterviewSummaries.length} interview session(s) logged
+                        </div>
+                      )}
                     <div className="text-[11px] text-muted-foreground/80">
                       Flow: Application → HR Shortlisting → Tests → Tech Rounds → HR → Offer.
                     </div>

@@ -12,6 +12,8 @@ import {
 } from "@/lib/code-runner"
 import { getTestSubmissionModel } from "@/lib/test-submission"
 import { getTestResultModelForWrite } from "@/lib/enrich-submission"
+import { getIO } from "@/lib/socket-server"
+import { computeIntegrityScore } from "@/lib/coding-test-security"
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5001"
 
@@ -223,6 +225,11 @@ export async function POST(
       roundStage,
     })
 
+    const tabSwitchCount = body.tabSwitches || 0
+    const activityLog = body.activityLog || []
+    const integrityScore = body.integrityAudit?.score ??
+      computeIntegrityScore(tabSwitchCount, activityLog, test.settings?.maxTabSwitches ?? 2)
+
     const submissionDoc = await TestSubmissionModel.create({
       testId: test._id,
       applicationId: id,
@@ -239,10 +246,11 @@ export async function POST(
       plagiarismFlags: [],
       submittedAt,
       integrityAudit: {
-        score: 100,
-        summary: "Submission recorded.",
-        flags: [],
-        logs: body.activityLog || [],
+        score: integrityScore,
+        summary: body.integrityAudit?.summary || (activityLog.length ? `${activityLog.length} security events` : "Clean session"),
+        flags: body.integrityAudit?.flags || activityLog.map((l: any) => l.type),
+        logs: activityLog,
+        tabSwitches: tabSwitchCount,
       },
     })
 
@@ -272,7 +280,8 @@ export async function POST(
         totalScore: totalEarned,
         percentage: score,
         submittedAt,
-        tabSwitches: body.tabSwitches || 0,
+        tabSwitches: tabSwitchCount,
+        integrityScore,
       })
     } catch (err) {
       console.warn("[submit-test] TestResultRecord save failed:", err)
@@ -297,7 +306,8 @@ export async function POST(
         percentage: score,
         breakdown,
         submittedAt,
-        tabSwitches: body.tabSwitches || 0,
+        tabSwitches: tabSwitchCount,
+        integrityScore,
       })
     } catch {
       /* non-fatal */
@@ -311,6 +321,25 @@ export async function POST(
           type: "test_submitted",
           message: `A candidate completed "${test.title}" with a score of ${score}%.`,
           relatedEntity: { id: test._id, type: "test" },
+        })
+      }
+    } catch {
+      /* non-fatal */
+    }
+
+    try {
+      const io = getIO()
+      if (io) {
+        io.to(`test:${testId}:recruiters`).emit("test:submission", {
+          testId,
+          applicationId: id,
+          candidateId: session.userId,
+          score,
+          passed: passedOverall,
+          breakdown,
+          tabSwitches: tabSwitchCount,
+          integrityScore,
+          submittedAt: submittedAt.toISOString(),
         })
       }
     } catch {

@@ -21,7 +21,7 @@ import {
   User, ExternalLink, Download, BookOpen, Code, Trophy, ArrowLeft,
   Building2, Layers, Sparkles, Tag, Plus, Trash2,
   Copy, ChevronDown, ChevronUp, AlertCircle, Activity, Bookmark,
-  ThumbsUp, BarChart3, Send, Zap, BookmarkCheck,
+  ThumbsUp, BarChart3, Send, Zap, BookmarkCheck, Shield,
 } from "lucide-react";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -78,11 +78,22 @@ interface Application {
 interface Job { _id: string; title: string; skillsRequired?: string[] }
 interface RecruiterNote { id: string; text: string; createdAt: string }
 
+interface BgVerificationSummary {
+  _id: string
+  applicationId: string
+  status: string
+  overallResult?: string
+  provider: string
+  initiatedAt?: string
+  components?: Record<string, { status: string }>
+}
+
 // ─── Constants ─────────────────────────────────────────────────────────────
 
 const STATUS_OPTIONS = [
   "Under Review", "Shortlisted", "Rejected",
-  "Interview Scheduled", "Hired", "Test Assigned",
+  "Interview Scheduled",   "Hired", "Test Assigned",
+  "Offer",
 ] as const;
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; dot: string }> = {
@@ -95,6 +106,7 @@ const STATUS_CONFIG: Record<string, { color: string; bg: string; dot: string }> 
   "Test Failed":           { color: "text-rose-600",    bg: "bg-rose-100",    dot: "bg-rose-400" },
   "Interview Scheduled":   { color: "text-indigo-600",  bg: "bg-indigo-100",  dot: "bg-indigo-400" },
   "Hired":                 { color: "text-emerald-700", bg: "bg-emerald-100", dot: "bg-emerald-500" },
+  "Offer":                 { color: "text-purple-700",  bg: "bg-purple-100",  dot: "bg-purple-500" },
   "Rejected":              { color: "text-rose-700",    bg: "bg-rose-100",    dot: "bg-rose-500" },
 };
 
@@ -115,6 +127,14 @@ function getVerdict(score: number) {
 function getSkillNames(raw: any[]): string[] {
   if (!Array.isArray(raw)) return [];
   return raw.map((s) => (typeof s === "string" ? s : s?.name || s?.skill || "")).filter(Boolean);
+}
+
+/** Parse API scores safely — avoids NaN in rings and charts */
+function normalizeScore(raw: unknown): number | null {
+  if (raw == null || raw === "") return null;
+  const n = typeof raw === "number" ? raw : parseFloat(String(raw));
+  if (!Number.isFinite(n)) return null;
+  return Math.min(100, Math.max(0, Math.round(n)));
 }
 
 
@@ -242,6 +262,11 @@ export default function CandidateProfilePage() {
   // Saved (bookmark) toggle
   const [isSaved, setIsSaved] = useState(false);
 
+  // Background verification per application
+  const [bgByApp, setBgByApp] = useState<Record<string, BgVerificationSummary | null>>({});
+  const [bgLoading, setBgLoading] = useState(false);
+  const [bgActionId, setBgActionId] = useState<string | null>(null);
+
   // ── Derived ─────────────────────────────────────────────────────────────
 
   const jsp = profile?.jobSeekerProfile;
@@ -273,7 +298,14 @@ export default function CandidateProfilePage() {
     [candidateApplications]
   );
 
-  const verdict = bestApp?.aiMatchScore != null ? getVerdict(bestApp.aiMatchScore) : null;
+  const displayAtsScore = normalizeScore(jsp?.atsScore ?? bestApp?.atsScore);
+  const displayAiScore = normalizeScore(bestApp?.aiMatchScore);
+  const bestTestScore = useMemo(() => {
+    const scores = candidateApplications.map(a => a.testScore).filter((s): s is number => s != null);
+    return scores.length > 0 ? Math.max(...scores) : null;
+  }, [candidateApplications]);
+
+  const verdict = displayAiScore != null ? getVerdict(displayAiScore) : null;
 
   const matchJob = useMemo(() => jobs.find(j => j._id === matchJobId), [jobs, matchJobId]);
 
@@ -343,6 +375,9 @@ export default function CandidateProfilePage() {
               const jd = a.jobDescriptionId;
               return {
                 ...a,
+                aiMatchScore: normalizeScore(a.aiMatchScore),
+                atsScore: normalizeScore(a.atsScore),
+                testScore: normalizeScore(a.testScore),
                 jobDescriptionId: jd && typeof jd === "object" ? jd : { _id: jd || "", title: a.jobTitle || "Job" },
               };
             });
@@ -362,7 +397,73 @@ export default function CandidateProfilePage() {
     loadAll();
   }, [userId]);
 
+  useEffect(() => {
+    if (allApplications.length > 0) {
+      loadBgChecks(allApplications);
+    }
+  }, [allApplications.length]);
+
   // ── Actions ─────────────────────────────────────────────────────────────
+
+  const loadBgChecks = async (apps: Application[]) => {
+    if (!apps.length) return;
+    setBgLoading(true);
+    const map: Record<string, BgVerificationSummary | null> = {};
+    await Promise.all(
+      apps.map(async (app) => {
+        try {
+          const res = await fetch(`/api/background-verification?applicationId=${app._id}`, {
+            credentials: "include",
+          });
+          if (res.ok) {
+            const d = await res.json();
+            map[app._id] = d.verification;
+          } else {
+            map[app._id] = null;
+          }
+        } catch {
+          map[app._id] = null;
+        }
+      }),
+    );
+    setBgByApp(map);
+    setBgLoading(false);
+  };
+
+  const startBgCheck = async (applicationId: string) => {
+    setBgActionId(applicationId);
+    try {
+      const res = await fetch("/api/background-verification", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          applicationId,
+          provider: "Manual",
+          components: {
+            identity: true,
+            education: true,
+            employment: true,
+            criminal: true,
+            drug: false,
+            reference: true,
+          },
+          notes: "Initiated from candidate profile",
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setBgByApp(prev => ({ ...prev, [applicationId]: data.verification }));
+        toast({ title: "Background check started" });
+      } else {
+        toast({ title: data.message || "Could not start check", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Network error", variant: "destructive" });
+    } finally {
+      setBgActionId(null);
+    }
+  };
 
   const addNote = () => {
     if (!noteInput.trim()) return;
@@ -406,6 +507,33 @@ export default function CandidateProfilePage() {
       if (res.ok) {
         setAllApplications(prev => prev.map(a => a._id === appId ? { ...a, status } : a));
         toast({ title: "Status updated", description: `Moved to "${status}"` });
+        if (status === "Offer") {
+          const bgRes = await fetch("/api/background-verification", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              applicationId: appId,
+              provider: "Manual",
+              components: {
+                identity: true,
+                education: true,
+                employment: true,
+                criminal: true,
+                drug: false,
+                reference: true,
+              },
+              notes: "Auto-initiated when application status set to Offer",
+            }),
+          });
+          if (bgRes.ok) {
+            const bgData = await bgRes.json();
+            if (bgData.verification) {
+              setBgByApp(prev => ({ ...prev, [appId]: bgData.verification }));
+              toast({ title: "Background verification auto-started" });
+            }
+          }
+        }
       } else {
         toast({ title: "Failed to update", variant: "destructive" });
       }
@@ -456,9 +584,9 @@ export default function CandidateProfilePage() {
 
   if (loading) {
     return (
-      <div className="p-6 space-y-5">
-        <div className="h-8 w-48 bg-muted animate-pulse rounded-lg" />
-        <div className="h-44 bg-muted animate-pulse rounded-2xl" />
+      <div className="p-4 sm:p-6 space-y-4 max-w-[1400px] mx-auto w-full">
+        <div className="h-6 w-56 bg-muted animate-pulse rounded-lg" />
+        <div className="h-[280px] sm:h-[240px] bg-muted animate-pulse rounded-2xl" />
         <div className="grid lg:grid-cols-4 gap-5">
           <div className="h-96 bg-muted animate-pulse rounded-xl" />
           <div className="lg:col-span-3 h-96 bg-muted animate-pulse rounded-xl" />
@@ -482,127 +610,159 @@ export default function CandidateProfilePage() {
   // ── Render ──────────────────────────────────────────────────────────────
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-5 max-w-[1400px] mx-auto w-full">
 
       {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Link href="/dashboard/recruiter" className="hover:text-foreground">Dashboard</Link>
-        <ChevronRight className="h-3 w-3" />
-        <Link href="/dashboard/recruiter/talent-pool" className="hover:text-foreground">Talent Pool</Link>
-        <ChevronRight className="h-3 w-3" />
-        <span className="text-foreground">{displayName}</span>
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
+        <Link href="/dashboard/recruiter" className="hover:text-foreground transition-colors">Dashboard</Link>
+        <ChevronRight className="h-3 w-3 shrink-0 opacity-50" />
+        <Link href="/dashboard/recruiter/candidates" className="hover:text-foreground transition-colors">Candidates</Link>
+        <ChevronRight className="h-3 w-3 shrink-0 opacity-50" />
+        <span className="text-foreground font-medium truncate max-w-[200px] sm:max-w-none">{displayName}</span>
       </div>
 
       {/* Hero Banner */}
       <Card className="border shadow-sm overflow-hidden">
-        <div className="h-24 bg-gradient-to-r from-violet-600 via-indigo-600 to-blue-600 relative">
-          {verdict && (
-            <div className={`absolute top-3 right-3 rounded-full px-3 py-1 text-xs font-bold ${verdict.bg} ${verdict.color} border border-current/20`}>
-              AI Verdict: {verdict.label}
-            </div>
-          )}
-        </div>
-        <CardContent className="px-6 pb-5">
-          <div className="flex items-end gap-4 -mt-12 flex-wrap">
-            <div className="h-24 w-24 rounded-2xl bg-gradient-to-br from-violet-100 to-indigo-200 border-4 border-white shadow-lg flex items-center justify-center text-3xl font-bold text-violet-700 shrink-0">
-              {displayName.slice(0, 2).toUpperCase()}
-            </div>
-            <div className="flex-1 min-w-0 pt-14 sm:pt-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-2xl font-bold">{displayName}</h1>
-                {jsp?.openToWork && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold px-2.5 py-1">
-                    <Sparkles className="h-3 w-3" />Open to Work
-                  </span>
-                )}
-                {selectedTags.size > 0 && Array.from(selectedTags).map(tag => (
-                  <span key={tag} className="inline-flex items-center gap-1 rounded-full bg-violet-100 text-violet-700 text-xs font-medium px-2 py-0.5">
-                    <Tag className="h-2.5 w-2.5" />{tag}
-                  </span>
-                ))}
+        {/* Top band — avatar + identity live inside the gradient (no overlap collapse) */}
+        <div className="relative bg-gradient-to-br from-violet-600 via-indigo-600 to-blue-600 text-white overflow-hidden">
+          <div className="absolute inset-0 opacity-[0.12] bg-[radial-gradient(circle_at_20%_0%,white,transparent_45%),radial-gradient(circle_at_80%_100%,white,transparent_40%)]" />
+          <div className="relative px-4 sm:px-6 pt-5 pb-6 sm:pt-6 sm:pb-7">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+              {/* Identity block */}
+              <div className="flex flex-col sm:flex-row gap-4 sm:gap-5 min-w-0 flex-1">
+                <div
+                  className="h-20 w-20 sm:h-[88px] sm:w-[88px] rounded-2xl bg-white/15 backdrop-blur-md border border-white/25 shadow-xl flex items-center justify-center text-2xl sm:text-3xl font-bold text-white shrink-0 mx-auto sm:mx-0"
+                >
+                  {displayName.slice(0, 2).toUpperCase()}
+                </div>
+                <div className="min-w-0 text-center sm:text-left space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-wrap justify-center sm:justify-start">
+                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{displayName}</h1>
+                    {verdict && (
+                      <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${verdict.bg} ${verdict.color} border border-current/15 shadow-sm`}>
+                        <Sparkles className="h-3 w-3" />
+                        {verdict.label}
+                      </span>
+                    )}
+                    {jsp?.openToWork && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/90 text-white text-xs font-semibold px-2.5 py-1">
+                        <Sparkles className="h-3 w-3" />Open to Work
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-violet-100 text-sm sm:text-base">
+                    {jsp?.currentTitle || profile.role.replace("_", " ")}
+                  </p>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1.5 justify-center sm:justify-start text-xs sm:text-sm text-violet-100/90">
+                    <button onClick={copyEmail} className="flex items-center gap-1.5 hover:text-white transition-colors max-w-full">
+                      <Mail className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{profile.email}</span>
+                      <Copy className="h-3 w-3 shrink-0 opacity-60" />
+                    </button>
+                    {(profile.phone || jsp?.phone) && (
+                      <span className="flex items-center gap-1.5">
+                        <Phone className="h-3.5 w-3.5 shrink-0" />
+                        {profile.phone || jsp?.phone}
+                      </span>
+                    )}
+                    {(jsp?.location || profile.address) && (
+                      <span className="flex items-center gap-1.5">
+                        <MapPin className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{jsp?.location || profile.address}</span>
+                      </span>
+                    )}
+                    {jsp?.industry && (
+                      <span className="flex items-center gap-1.5">
+                        <Building2 className="h-3.5 w-3.5 shrink-0" />
+                        {jsp.industry}
+                      </span>
+                    )}
+                  </div>
+                  {selectedTags.size > 0 && (
+                    <div className="flex flex-wrap gap-1.5 justify-center sm:justify-start pt-1">
+                      {Array.from(selectedTags).map(tag => (
+                        <span key={tag} className="inline-flex items-center gap-1 rounded-full bg-white/15 text-white text-xs font-medium px-2 py-0.5 border border-white/20">
+                          <Tag className="h-2.5 w-2.5" />{tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-              <p className="text-muted-foreground mt-0.5">{jsp?.currentTitle || profile.role.replace("_", " ")}</p>
-              <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted-foreground">
-                <button onClick={copyEmail} className="flex items-center gap-1 hover:text-foreground transition-colors">
-                  <Mail className="h-3 w-3" />{profile.email}<Copy className="h-3 w-3 ml-0.5 opacity-50" />
-                </button>
-                {(profile.phone || jsp?.phone) && (
-                  <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{profile.phone || jsp?.phone}</span>
-                )}
-                {(jsp?.location || profile.address) && (
-                  <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{jsp?.location || profile.address}</span>
-                )}
-                {jsp?.industry && (
-                  <span className="flex items-center gap-1"><Building2 className="h-3 w-3" />{jsp.industry}</span>
-                )}
-              </div>
-            </div>
 
-            {/* Action buttons */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <button onClick={toggleSaved} className={`p-2 rounded-lg border transition-colors ${isSaved ? "bg-amber-50 text-amber-600 border-amber-200" : "hover:bg-muted text-muted-foreground border-transparent"}`} title="Save candidate">
-                {isSaved ? <BookmarkCheck className="h-4 w-4" fill="currentColor" /> : <Bookmark className="h-4 w-4" />}
-              </button>
-              {jsp?.linkedinUrl && (
-                <Button asChild variant="outline" size="sm" className="h-8 text-xs">
-                  <a href={jsp.linkedinUrl} target="_blank" rel="noreferrer"><Linkedin className="h-3.5 w-3.5 mr-1.5" />LinkedIn</a>
+              {/* Actions */}
+              <div className="flex flex-wrap items-center justify-center lg:justify-end gap-2 shrink-0">
+                <button
+                  onClick={toggleSaved}
+                  className={`p-2.5 rounded-xl border transition-colors ${isSaved ? "bg-amber-400/20 text-amber-100 border-amber-300/40" : "bg-white/10 hover:bg-white/20 border-white/20 text-white"}`}
+                  title="Save candidate"
+                >
+                  {isSaved ? <BookmarkCheck className="h-4 w-4" fill="currentColor" /> : <Bookmark className="h-4 w-4" />}
+                </button>
+                {jsp?.linkedinUrl && (
+                  <Button asChild variant="secondary" size="sm" className="h-9 text-xs bg-white/95 hover:bg-white text-violet-900 border-0">
+                    <a href={jsp.linkedinUrl} target="_blank" rel="noreferrer">
+                      <Linkedin className="h-3.5 w-3.5 mr-1.5" />LinkedIn
+                    </a>
+                  </Button>
+                )}
+                {jsp?.githubUrl && (
+                  <Button asChild variant="secondary" size="sm" className="h-9 text-xs bg-white/95 hover:bg-white text-slate-800 border-0">
+                    <a href={jsp.githubUrl} target="_blank" rel="noreferrer">
+                      <Github className="h-3.5 w-3.5 mr-1.5" />GitHub
+                    </a>
+                  </Button>
+                )}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="h-9 text-xs bg-white/95 hover:bg-white text-slate-800 border-0"
+                  onClick={exportProfile}
+                >
+                  <Download className="h-3.5 w-3.5 mr-1.5" />Export
                 </Button>
-              )}
-              {jsp?.githubUrl && (
-                <Button asChild variant="outline" size="sm" className="h-8 text-xs">
-                  <a href={jsp.githubUrl} target="_blank" rel="noreferrer"><Github className="h-3.5 w-3.5 mr-1.5" />GitHub</a>
+                <Button asChild size="sm" className="h-9 text-xs bg-white text-violet-700 hover:bg-violet-50 shadow-md border-0 font-semibold">
+                  <Link href={`/dashboard/messages?userId=${profile._id}`}>
+                    <MessageSquare className="h-3.5 w-3.5 mr-1.5" />Message
+                  </Link>
                 </Button>
-              )}
-              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={exportProfile}>
-                <Download className="h-3.5 w-3.5 mr-1.5" />Export
-              </Button>
-              <Button asChild size="sm" className="h-8 text-xs bg-violet-600 hover:bg-violet-700">
-                <Link href={`/dashboard/messages?userId=${profile._id}`}>
-                  <MessageSquare className="h-3.5 w-3.5 mr-1.5" />Message
-                </Link>
-              </Button>
+              </div>
             </div>
           </div>
+        </div>
 
-          {/* Stats row */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-5 pt-5 border-t">
-            {/* Experience */}
-            <div className="rounded-xl bg-violet-50 border border-violet-100 px-3 py-3 relative overflow-hidden">
-              <div className="absolute bottom-0 left-0 right-0 h-1 bg-violet-200">
-                <div className="h-full bg-violet-500 transition-all" style={{ width: `${Math.min((jsp?.yearsOfExperience ?? profile.yearsOfExperience ?? 0) / 10 * 100, 100)}%` }} />
-              </div>
-              <p className="text-lg font-bold text-violet-700">{jsp?.yearsOfExperience ?? profile.yearsOfExperience ?? 0} yrs</p>
-              <p className="text-xs text-muted-foreground">Experience</p>
+        {/* Stats strip — clean white section below banner */}
+        <CardContent className="px-4 sm:px-6 py-4 sm:py-5 bg-gradient-to-b from-slate-50/80 to-white">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="rounded-xl bg-white border border-violet-100 shadow-sm px-4 py-3.5">
+              <p className="text-2xl font-bold text-violet-700 tabular-nums">
+                {jsp?.yearsOfExperience ?? profile.yearsOfExperience ?? 0}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">Years experience</p>
             </div>
-            {/* Skills */}
-            <div className="rounded-xl bg-blue-50 border border-blue-100 px-3 py-3 relative overflow-hidden">
-              <div className="absolute bottom-0 left-0 right-0 h-1 bg-blue-200">
-                <div className="h-full bg-blue-500 transition-all" style={{ width: `${Math.min(allSkills.length / 30 * 100, 100)}%` }} />
-              </div>
-              <p className="text-lg font-bold text-blue-700">{allSkills.length || "—"}</p>
-              <p className="text-xs text-muted-foreground">Skills</p>
+            <div className="rounded-xl bg-white border border-blue-100 shadow-sm px-4 py-3.5">
+              <p className="text-2xl font-bold text-blue-700 tabular-nums">{allSkills.length || "—"}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Skills listed</p>
             </div>
-            {/* ATS Score ring */}
-            <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-3 py-2 flex flex-col items-center">
-              {(jsp?.atsScore || bestApp?.atsScore) != null
-                ? <ScoreRing score={jsp?.atsScore ?? bestApp?.atsScore ?? 0} size={42} ringColor="#10b981" />
-                : <p className="text-lg font-bold text-emerald-700 mt-2">—</p>}
-              <p className="text-xs text-muted-foreground -mt-0.5">ATS Score</p>
+            <div className="rounded-xl bg-white border border-emerald-100 shadow-sm px-3 py-2 flex flex-col items-center justify-center min-h-[88px]">
+              {displayAtsScore != null ? (
+                <ScoreRing value={displayAtsScore} size={52} stroke={5} color="#10b981" />
+              ) : (
+                <p className="text-2xl font-bold text-slate-300">—</p>
+              )}
+              <p className="text-xs text-muted-foreground mt-1 font-medium">ATS Score</p>
             </div>
-            {/* AI Match ring */}
-            <div className="rounded-xl bg-amber-50 border border-amber-100 px-3 py-2 flex flex-col items-center">
-              {bestApp?.aiMatchScore != null
-                ? <ScoreRing score={bestApp.aiMatchScore} size={42} ringColor="#f59e0b" />
-                : <p className="text-lg font-bold text-amber-700 mt-2">—</p>}
-              <p className="text-xs text-muted-foreground -mt-0.5">Best AI Match</p>
+            <div className="rounded-xl bg-white border border-amber-100 shadow-sm px-3 py-2 flex flex-col items-center justify-center min-h-[88px]">
+              {displayAiScore != null ? (
+                <ScoreRing value={displayAiScore} size={52} stroke={5} color="#f59e0b" />
+              ) : (
+                <p className="text-2xl font-bold text-slate-300">—</p>
+              )}
+              <p className="text-xs text-muted-foreground mt-1 font-medium">Best AI Match</p>
             </div>
-            {/* Applications */}
-            <div className="rounded-xl bg-indigo-50 border border-indigo-100 px-3 py-3 relative overflow-hidden">
-              <div className="absolute bottom-0 left-0 right-0 h-1 bg-indigo-200">
-                <div className="h-full bg-indigo-500 transition-all" style={{ width: `${Math.min(candidateApplications.length / 10 * 100, 100)}%` }} />
-              </div>
-              <p className="text-lg font-bold text-indigo-700">{candidateApplications.length}</p>
-              <p className="text-xs text-muted-foreground">Applications</p>
+            <div className="rounded-xl bg-white border border-indigo-100 shadow-sm px-4 py-3.5 col-span-2 sm:col-span-1">
+              <p className="text-2xl font-bold text-indigo-700 tabular-nums">{candidateApplications.length}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Applications</p>
             </div>
           </div>
         </CardContent>
@@ -665,11 +825,11 @@ export default function CandidateProfilePage() {
           </Card>
 
           {/* Verdict Card */}
-          {verdict && bestApp?.aiMatchScore != null && (
+          {verdict && displayAiScore != null && (
             <Card className={`border shadow-sm ${verdict.bg}`}>
               <CardContent className="pt-4 pb-4">
                 <div className="flex items-center gap-3">
-                  <ScoreRing score={bestApp.aiMatchScore} size={52} ringColor={verdict.ring} />
+                  <ScoreRing value={displayAiScore} size={52} stroke={5} color={verdict.ring} />
                   <div>
                     <p className={`text-sm font-bold ${verdict.color}`}>{verdict.label}</p>
                     <p className="text-xs text-muted-foreground">AI Recommendation</p>
@@ -729,7 +889,7 @@ export default function CandidateProfilePage() {
                     { label: "Profile",   val: jsp?.profileCompleteness,color: "#f59e0b" },
                   ].filter(s => s.val != null).map(s => (
                     <div key={s.label} className="flex flex-col items-center gap-1">
-                      <ScoreRing score={s.val!} size={48} ringColor={s.color} />
+                      <ScoreRing value={s.val!} size={48} stroke={5} color={s.color} />
                       <span className="text-[10px] text-muted-foreground font-medium">{s.label}</span>
                     </div>
                   ))}
@@ -799,6 +959,10 @@ export default function CandidateProfilePage() {
                 Applications {candidateApplications.length > 0 && <Badge className="ml-1.5 bg-blue-100 text-blue-700 border-0 text-xs h-4 px-1">{candidateApplications.length}</Badge>}
               </TabsTrigger>
               <TabsTrigger value="match" className="text-xs sm:text-sm">Job Match</TabsTrigger>
+              <TabsTrigger value="verification" className="text-xs sm:text-sm">
+                <Shield className="h-3.5 w-3.5 mr-1 hidden sm:inline" />
+                Verification
+              </TabsTrigger>
               <TabsTrigger value="notes" className="text-xs sm:text-sm">
                 Notes {notes.length > 0 && <Badge className="ml-1.5 bg-amber-100 text-amber-700 border-0 text-xs h-4 px-1">{notes.length}</Badge>}
               </TabsTrigger>
@@ -1345,8 +1509,8 @@ export default function CandidateProfilePage() {
                       <p className="text-xs text-muted-foreground mt-0.5">Total Applied</p>
                     </div>
                     <div className="rounded-xl border bg-violet-50 px-3 py-3 flex flex-col items-center">
-                      {bestApp?.aiMatchScore != null
-                        ? <ScoreRing score={bestApp.aiMatchScore} size={44} ringColor="#8b5cf6" />
+                      {displayAiScore != null
+                        ? <ScoreRing value={displayAiScore} size={44} stroke={5} color="#8b5cf6" />
                         : <p className="text-xl font-bold text-violet-700">—</p>}
                       <p className="text-xs text-muted-foreground mt-0.5">Best AI Score</p>
                     </div>
@@ -1355,8 +1519,8 @@ export default function CandidateProfilePage() {
                       <p className="text-xs text-muted-foreground mt-0.5">Shortlisted</p>
                     </div>
                     <div className="rounded-xl border bg-blue-50 px-3 py-3 flex flex-col items-center">
-                      {Math.max(...candidateApplications.map(a => a.testScore ?? 0)) > 0
-                        ? <ScoreRing score={Math.max(...candidateApplications.map(a => a.testScore ?? 0))} size={44} ringColor="#3b82f6" />
+                      {bestTestScore != null
+                        ? <ScoreRing value={bestTestScore} size={44} stroke={5} color="#3b82f6" />
                         : <p className="text-xl font-bold text-blue-700">—</p>}
                       <p className="text-xs text-muted-foreground mt-0.5">Best Test</p>
                     </div>
@@ -1698,6 +1862,93 @@ export default function CandidateProfilePage() {
                   </CardContent>
                 </Card>
               )}
+            </TabsContent>
+
+            {/* ══ VERIFICATION TAB ══ */}
+            <TabsContent value="verification" className="space-y-4">
+              <Card className="border shadow-sm">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Shield className="h-4 w-4 text-blue-600" />
+                    Background Verification
+                    <Link
+                      href="/dashboard/recruiter/background-verification"
+                      className="ml-auto text-xs text-primary hover:underline flex items-center gap-1"
+                    >
+                      Open full dashboard <ExternalLink className="h-3 w-3" />
+                    </Link>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {bgLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground py-6 justify-center">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Loading checks…
+                    </div>
+                  ) : allApplications.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-6 text-center">No applications for this candidate.</p>
+                  ) : (
+                    allApplications.map((app) => {
+                      const bg = bgByApp[app._id];
+                      const jobTitle = app.jobDescriptionId?.title || "Job";
+                      return (
+                        <div key={app._id} className="rounded-xl border p-4 space-y-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-medium text-sm">{jobTitle}</p>
+                              <p className="text-xs text-muted-foreground">Application · {app.status}</p>
+                            </div>
+                            {bg ? (
+                              <Badge className="bg-blue-100 text-blue-800">{bg.status}</Badge>
+                            ) : (
+                              <Badge variant="secondary">Not started</Badge>
+                            )}
+                          </div>
+                          {bg ? (
+                            <div className="space-y-2">
+                              <div className="flex flex-wrap gap-2 text-xs">
+                                <span className="text-muted-foreground">Provider: {bg.provider}</span>
+                                {bg.overallResult && (
+                                  <Badge className="bg-emerald-100 text-emerald-800">{bg.overallResult}</Badge>
+                                )}
+                                {bg.initiatedAt && (
+                                  <span className="text-muted-foreground">
+                                    Started {format(new Date(bg.initiatedAt), "MMM d, yyyy")}
+                                  </span>
+                                )}
+                              </div>
+                              {bg.components && (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {Object.entries(bg.components).map(([key, comp]) => (
+                                    comp.status !== "Not Required" ? (
+                                      <span key={key} className="text-xs px-2 py-0.5 rounded-full bg-muted capitalize">
+                                        {key}: {comp.status}
+                                      </span>
+                                    ) : null
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <Button
+                              size="sm"
+                              className="h-8 gap-2 bg-blue-600 hover:bg-blue-700"
+                              disabled={bgActionId === app._id}
+                              onClick={() => startBgCheck(app._id)}
+                            >
+                              {bgActionId === app._id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Shield className="h-3.5 w-3.5" />
+                              )}
+                              Start background check
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </CardContent>
+              </Card>
             </TabsContent>
 
             {/* ══ NOTES TAB ══ */}

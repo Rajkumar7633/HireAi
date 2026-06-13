@@ -3,44 +3,17 @@ import { connectDB } from "@/lib/mongodb"
 import EmailTemplate from "@/models/EmailTemplate"
 import { getSession } from "@/lib/auth"
 
-const defaultTemplates = [
-  {
-    name: "Application Received",
-    subject: "Application Received - {{jobTitle}}",
-    category: "application_update",
-    content:
-      `Dear {{candidateName}},\n\nThank you for applying to the {{jobTitle}} position at {{companyName}}. We have received your application and will review it carefully. We will contact you if your profile matches our requirements.\n\nBest regards,\n{{companyName}} Recruiting Team`,
-    variables: ["candidateName", "jobTitle", "companyName"],
-    isDefault: true,
-  },
-  {
-    name: "Interview Invitation",
-    subject: "Interview Invitation - {{jobTitle}}",
-    category: "interview",
-    content:
-      `Dear {{candidateName}},\n\nWe are pleased to invite you for an interview for the {{jobTitle}} position at {{companyName}}.\n\nDate: {{interviewDate}}\nTime: {{interviewTime}}\nMode: {{interviewMode}}\n\nPlease reply to confirm your availability.\n\nRegards,\n{{companyName}} Recruiting Team`,
-    variables: ["candidateName", "jobTitle", "companyName", "interviewDate", "interviewTime", "interviewMode"],
-    isDefault: true,
-  },
-  {
-    name: "Application Rejection",
-    subject: "Update on your application - {{jobTitle}}",
-    category: "rejection",
-    content:
-      `Dear {{candidateName}},\n\nThank you for your interest in the {{jobTitle}} position at {{companyName}} and for taking the time to apply. After careful consideration, we have decided not to move forward with your application at this time.\n\nWe will keep your profile on file for future opportunities.\n\nWe wish you the best in your job search.\n\nSincerely,\n{{companyName}} Recruiting Team`,
-    variables: ["candidateName", "jobTitle", "companyName"],
-    isDefault: true,
-  },
-  {
-    name: "Shortlisted for Next Round",
-    subject: "Shortlisted - {{jobTitle}}",
-    category: "application_update",
-    content:
-      `Hi {{candidateName}},\n\nGood news! You have been shortlisted for the next round for the {{jobTitle}} role at {{companyName}}. Our team will reach out with next steps.\n\nBest,\n{{companyName}} Recruiting Team`,
-    variables: ["candidateName", "jobTitle", "companyName"],
-    isDefault: true,
-  },
-]
+import { DEFAULT_EMAIL_TEMPLATES } from "@/lib/email-default-templates"
+
+const defaultTemplates = DEFAULT_EMAIL_TEMPLATES.map((t) => ({
+  name: t.name,
+  subject: t.subject,
+  category: t.category,
+  content: t.content,
+  variables: [...t.variables],
+  linkedStatus: t.linkedStatus,
+  isDefault: true,
+}))
 
 export async function GET(request: NextRequest) {
   try {

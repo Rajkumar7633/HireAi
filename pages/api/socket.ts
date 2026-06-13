@@ -51,6 +51,47 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         },
       )
 
+      socket.on("test:monitor-join", ({ testId, role, applicationId, candidateId }: {
+        testId?: string; role?: string; applicationId?: string; candidateId?: string
+      }) => {
+        if (!testId) return
+        socket.join(`test:${testId}`)
+        socket.data.testMonitorId = testId
+        socket.data.testMonitorRole = role || "candidate"
+        if (applicationId) socket.data.testApplicationId = applicationId
+        if (candidateId) socket.data.testCandidateId = candidateId
+        if (role === "recruiter") {
+          socket.join(`test:${testId}:recruiters`)
+        }
+      })
+
+      socket.on("test:monitor-leave", ({ testId }: { testId?: string }) => {
+        const tid = testId || socket.data.testMonitorId
+        if (!tid) return
+        socket.leave(`test:${tid}`)
+        socket.leave(`test:${tid}:recruiters`)
+      })
+
+      socket.on("test:proctor-event", (payload: Record<string, unknown>) => {
+        const testId = payload.testId as string | undefined
+        if (!testId) return
+        io.to(`test:${testId}:recruiters`).emit("test:proctor-event", payload)
+        io.to(`test:${testId}:recruiters`).emit("test:live-update", {
+          type: "proctor",
+          ...payload,
+        })
+      })
+
+      socket.on("test:submission", (payload: Record<string, unknown>) => {
+        const testId = payload.testId as string | undefined
+        if (!testId) return
+        io.to(`test:${testId}:recruiters`).emit("test:submission", payload)
+        io.to(`test:${testId}:recruiters`).emit("test:live-update", {
+          type: "submission",
+          ...payload,
+        })
+      })
+
       socket.on("disconnect", () => {
         const rid = socket.data.meetingRoom as string | undefined
         if (!rid) return

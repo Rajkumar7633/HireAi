@@ -17,9 +17,16 @@ import {
   BarChart3, Timer, Shield, AlertTriangle, Camera,
 } from "lucide-react"
 import { useSession } from "@/hooks/use-session"
-import { FaceProctor } from "@/components/proctor/face-proctor"
+import { CodingTestProctor } from "@/components/proctor/coding-test-proctor"
 import { MonacoCodeEditor } from "@/components/code/MonacoCodeEditor"
 import { authFetch } from "@/lib/client-auth"
+import {
+  CODING_SECURITY_LAYERS,
+  mergeTestSecurity,
+  computeIntegrityScore,
+  type SecurityActivityLog,
+  type TestSecuritySettings,
+} from "@/lib/coding-test-security"
 
 const LANGS = [
   { value: "javascript", label: "JavaScript", monaco: "javascript", judgeId: 63 },
@@ -54,8 +61,18 @@ interface Question {
   difficulty?: string; tags?: string[]; constraints?: string
   examples?: { input: string; output: string; explanation?: string }[]
   testCases?: { input: string; expectedOutput: string; hidden?: boolean }[]
+  hiddenTestCaseCount?: number
 }
-interface TestDetails { _id: string; title: string; description?: string; questions: Question[]; durationMinutes: number }
+interface TestDetails {
+  _id: string; title: string; description?: string; questions: Question[]
+  durationMinutes: number; settings?: TestSecuritySettings; passingScore?: number
+}
+interface HiddenValidation {
+  samplePassed: number; sampleTotal: number
+  hiddenPassed: number; hiddenTotal: number
+  allSamplePassed: boolean; allHiddenPassed: boolean; canSubmit: boolean
+  sampleResults: boolean[]; hiddenResults: boolean[]
+}
 interface AppDetails { _id: string; jobDescriptionId: { _id: string; title: string }; testId: string | { _id: string }; testScore?: number; status: string }
 interface SubmitResult {
   score: number
@@ -74,6 +91,7 @@ interface SubmitResult {
 }
 
 const COMPLETED_STATUSES = new Set(["Test Completed", "Test Passed", "Test Failed", "test_completed", "Reviewed"])
+const ACTIVE_TEST_STATUSES = new Set(["Test Assigned", "in_progress"])
 
 // ─────────────────────────────────────────────────────────────────────────────
 export default function TakeTestPage() {
@@ -111,6 +129,9 @@ export default function TakeTestPage() {
   const [cameraReady, setCameraReady] = useState(false)
   const [agreedProctoring, setAgreedProctoring] = useState(false)
   const [preflightError, setPreflightError] = useState("")
+  const [securityLogs, setSecurityLogs] = useState<SecurityActivityLog[]>([])
+  const [hiddenValidation, setHiddenValidation] = useState<Record<string, HiddenValidation>>({})
+  const [validatingHidden, setValidatingHidden] = useState<string | null>(null)
   const preflightVideoRef = useRef<HTMLVideoElement>(null)
   const preflightStreamRef = useRef<MediaStream | null>(null)
   const pendingDurationRef = useRef<number | null>(null)
@@ -127,18 +148,6 @@ export default function TakeTestPage() {
   const loadDraft = useCallback((qId: string) => {
     try { return localStorage.getItem(`draft-${appId}-${qId}`) } catch { return null }
   }, [appId])
-
-  // Tab switch detection
-  useEffect(() => {
-    const onVisibility = () => {
-      if (document.hidden && !submitted && test) {
-        tabSwitches.current++
-        toast({ title: `⚠️ Tab switch #${tabSwitches.current} detected`, description: "This may be flagged as suspicious activity.", variant: "destructive" })
-      }
-    }
-    document.addEventListener("visibilitychange", onVisibility)
-    return () => document.removeEventListener("visibilitychange", onVisibility)
-  }, [submitted, test, toast])
 
   useEffect(() => {
     return () => {
@@ -167,10 +176,18 @@ export default function TakeTestPage() {
     }
   }
 
-  const beginTest = () => {
+  const beginTest = async () => {
     if (!cameraReady || !agreedProctoring) return
     preflightStreamRef.current?.getTracks().forEach(t => t.stop())
     preflightStreamRef.current = null
+    if (!isCollegeMode) {
+      try {
+        await authFetch(`/api/applications/${appId}/start-test`, { method: "POST" })
+        setApp(prev => prev ? { ...prev, status: "in_progress" } : prev)
+      } catch {
+        /* allow local start if API unreachable */
+      }
+    }
     if (pendingDurationRef.current !== null) {
       setTimeLeft(pendingDurationRef.current)
       pendingDurationRef.current = null
@@ -190,7 +207,22 @@ export default function TakeTestPage() {
         : `/api/applications/${appId}/submit-test`
       const res = await authFetch(submitUrl, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers: finalAnswers, tabSwitches: tabSwitches.current }),
+        body: JSON.stringify({
+          answers: finalAnswers,
+          tabSwitches: tabSwitches.current,
+          activityLog: securityLogs,
+          integrityAudit: {
+            score: computeIntegrityScore(
+              tabSwitches.current,
+              securityLogs,
+              mergeTestSecurity(test?.settings).maxTabSwitches ?? 2,
+            ),
+            summary: securityLogs.length ? `${securityLogs.length} security events` : "Clean session",
+            flags: securityLogs.map(l => l.type),
+            logs: securityLogs,
+            tabSwitches: tabSwitches.current,
+          },
+        }),
       })
       if (res.ok) {
         const data = await res.json()
@@ -214,14 +246,90 @@ export default function TakeTestPage() {
       toast({ title: "Network error", description: "Check your connection.", variant: "destructive" })
       submittingRef.current = false; autoSubmitted.current = false
     } finally { setSubmitting(false) }
-  }, [appId, answers, toast, isCollegeMode])
+  }, [appId, answers, toast, isCollegeMode, securityLogs, test?.settings])
+
+  const handleSecurityActivity = useCallback((log: SecurityActivityLog) => {
+    setSecurityLogs(prev => [...prev, log])
+  }, [])
+
+  const handleSecurityTerminate = useCallback((reason: string) => {
+    toast({ title: "Test ended", description: reason, variant: "destructive" })
+    tabSwitches.current = mergeTestSecurity(test?.settings).maxTabSwitches ?? 2
+    doSubmit(true, answers)
+  }, [answers, doSubmit, test?.settings, toast])
+
+  const testSettings = mergeTestSecurity(test?.settings)
+
+  const validateHiddenCases = async (q: Question) => {
+    const ans = answers.find(a => a.questionId === q._id)
+    const code = (ans?.answer as string) || ""
+    const lang = ans?.language || q.language || "python"
+    const langCfg = LANGS.find(l => l.value === lang) || LANGS[2]
+    if (!code.trim() || !test?._id) return null
+    setValidatingHidden(q._id)
+    try {
+      const res = await authFetch("/api/code/validate-hidden", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          testId: test._id,
+          questionId: q._id,
+          code,
+          languageId: langCfg.judgeId,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setHiddenValidation(prev => ({ ...prev, [q._id]: data as HiddenValidation }))
+        return data as HiddenValidation
+      }
+      toast({ title: "Validation failed", description: data.message, variant: "destructive" })
+      return null
+    } catch {
+      toast({ title: "Network error", variant: "destructive" })
+      return null
+    } finally {
+      setValidatingHidden(null)
+    }
+  }
+
+  const canSubmitCodingQuestion = (q: Question) => {
+    const hv = hiddenValidation[q._id]
+    const sampleRuns = runResults[q._id] || []
+    const visible = (q.testCases || []).filter(tc => !tc.hidden)
+    const sampleOk = visible.length === 0 || sampleRuns.length === visible.length &&
+      sampleRuns.every(r => r.passed)
+    const hiddenOk = !hv || hv.canSubmit
+    return sampleOk && hiddenOk
+  }
+
+  const trySubmitTest = async () => {
+    if (!test) return
+    const codingQs = test.questions.filter(q => q.type === "code_snippet")
+    for (const q of codingQs) {
+      if (!canSubmitCodingQuestion(q)) {
+        const hv = await validateHiddenCases(q)
+        if (!hv?.canSubmit) {
+          toast({
+            title: "Fix your code before submitting",
+            description: "All sample and hidden test cases must pass. Hidden case inputs are not shown — only pass/fail status.",
+            variant: "destructive",
+          })
+          return
+        }
+      }
+    }
+    const un = test.questions.length - answered
+    if (un > 0 && !window.confirm(`${un} unanswered question(s). Submit anyway?`)) return
+    doSubmit(false, answers)
+  }
 
   useEffect(() => {
     if (timeLeft === null || submitted || !securityReady) return
     if (timeLeft <= 0) { if (!autoSubmitted.current) doSubmit(true, answers); return }
     timerRef.current = setInterval(() => setTimeLeft(p => (p !== null && p > 0 ? p - 1 : 0)), 1000)
     return () => { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null } }
-  }, [timeLeft, submitted, doSubmit, answers])
+  }, [timeLeft, submitted, doSubmit, answers, securityReady])
 
   useEffect(() => {
     if (!submitted) return
@@ -440,7 +548,8 @@ export default function TakeTestPage() {
       if (res.ok && data.results) {
         setRunResults(p => ({ ...p, [q._id]: data.results }))
         const passed = data.results.filter((r: RunResult) => r.passed).length
-        toast({ title: `${passed}/${data.results.length} passed`, variant: passed === data.results.length ? "default" : "destructive" })
+        toast({ title: `${passed}/${data.results.length} sample cases passed`, variant: passed === data.results.length ? "default" : "destructive" })
+        await validateHiddenCases(q)
       } else {
         toast({
           title: res.status === 401 ? "Session expired" : "Run failed",
@@ -631,7 +740,7 @@ export default function TakeTestPage() {
     )
   }
 
-  if (app.status !== "Test Assigned" && !COMPLETED_STATUSES.has(app.status)) {
+  if (!ACTIVE_TEST_STATUSES.has(app.status) && !COMPLETED_STATUSES.has(app.status)) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#0d1117]">
         <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-8 text-center max-w-md space-y-4">
@@ -689,9 +798,12 @@ export default function TakeTestPage() {
             </div>
 
             <ul className="text-xs text-[#8b949e] space-y-2">
-              <li className="flex items-start gap-2"><Shield className="h-3.5 w-3.5 text-purple-400 mt-0.5 shrink-0" /> Tab switches and face violations are logged</li>
-              <li className="flex items-start gap-2"><AlertTriangle className="h-3.5 w-3.5 text-amber-400 mt-0.5 shrink-0" /> Stay in fullscreen focus — do not switch tabs</li>
-              <li className="flex items-start gap-2"><Clock className="h-3.5 w-3.5 text-blue-400 mt-0.5 shrink-0" /> Timer starts only after you click Begin Test</li>
+              {CODING_SECURITY_LAYERS.map(layer => (
+                <li key={layer.id} className="flex items-start gap-2">
+                  <Shield className="h-3.5 w-3.5 text-purple-400 mt-0.5 shrink-0" />
+                  <span><strong className="text-[#c9d1d9]">{layer.label}</strong> — {layer.description}</span>
+                </li>
+              ))}
             </ul>
 
             <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-[#30363d] p-3 hover:border-purple-700/50">
@@ -730,16 +842,16 @@ export default function TakeTestPage() {
 
   return (
     <div className="flex flex-col bg-[#0d1117] text-white" style={{ height: "100vh", overflow: "hidden" }}>
-      {session?.user?.id && (
-        <FaceProctor
-          assessmentId={appId}
+      {session?.user?.id && test && (
+        <CodingTestProctor
+          testId={test._id}
+          applicationId={appId}
           candidateId={session.user.id}
-          blockClipboard
-          enableAudioMonitoring
-          evidence
-          autoStart
-          className="fixed bottom-4 right-4 z-50"
-          onViolation={v => toast({ title: "Proctoring alert", description: v.message, variant: "destructive" })}
+          candidateName={session.user.name}
+          settings={testSettings}
+          onTerminate={handleSecurityTerminate}
+          onActivity={handleSecurityActivity}
+          onTabSwitch={count => { tabSwitches.current = count }}
         />
       )}
 
@@ -800,11 +912,7 @@ export default function TakeTestPage() {
               <Shield className="h-3 w-3" />{tabSwitches.current}
             </div>
           )}
-          <Button onClick={() => {
-            const un = test.questions.length - answered
-            if (un > 0 && !window.confirm(`${un} unanswered question(s). Submit anyway?`)) return
-            doSubmit(false, answers)
-          }} disabled={submitting} size="sm"
+          <Button onClick={() => trySubmitTest()} disabled={submitting} size="sm"
             className="h-7 bg-green-700 hover:bg-green-600 text-white text-xs px-3 gap-1.5 font-semibold">
             {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
             {submitting ? "Submitting…" : "Submit"}
@@ -901,6 +1009,35 @@ export default function TakeTestPage() {
                         </div>
                       )
                     })}
+                  </div>
+                )}
+
+                {(q.hiddenTestCaseCount ?? 0) > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-bold text-[#8b949e] uppercase tracking-wider flex items-center gap-1">
+                      <Shield className="h-3 w-3" /> Hidden Test Cases
+                    </p>
+                    <p className="text-[10px] text-[#8b949e]">
+                      {q.hiddenTestCaseCount} hidden case(s) — inputs are not shown. Run code to validate pass/fail.
+                    </p>
+                    {hiddenValidation[q._id] ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {hiddenValidation[q._id].hiddenResults.map((passed, i) => (
+                          <span key={i} className={`text-[10px] px-2 py-1 rounded border font-bold ${passed ? "bg-green-900/30 text-green-400 border-green-700/50" : "bg-red-900/30 text-red-400 border-red-700/50"}`}>
+                            Hidden {i + 1}: {passed ? "Pass" : "Fail"}
+                          </span>
+                        ))}
+                        <span className="text-[10px] text-[#8b949e] self-center">
+                          {hiddenValidation[q._id].hiddenPassed}/{hiddenValidation[q._id].hiddenTotal} passed
+                        </span>
+                      </div>
+                    ) : validatingHidden === q._id ? (
+                      <p className="text-[10px] text-purple-400 flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Validating hidden cases…</p>
+                    ) : (
+                      <Button size="sm" variant="outline" className="h-7 text-[10px] border-[#30363d]" onClick={() => validateHiddenCases(q)}>
+                        Check hidden cases
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>
@@ -1095,11 +1232,7 @@ export default function TakeTestPage() {
                       Next<ChevronRight className="ml-2 h-4 w-4" />
                     </Button>
                   )}
-                  <Button onClick={() => {
-                    const un = test.questions.length - answered
-                    if (un > 0 && !window.confirm(`${un} unanswered. Submit anyway?`)) return
-                    doSubmit(false, answers)
-                  }} disabled={submitting} className="bg-green-700 hover:bg-green-600 text-white font-semibold">
+                  <Button onClick={() => trySubmitTest()} disabled={submitting} className="bg-green-700 hover:bg-green-600 text-white font-semibold">
                     {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
                     {submitting ? "Submitting…" : "Submit Test"}
                   </Button>

@@ -75,14 +75,17 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         ...test,
         durationMinutes,
         timeLimit: test.timeLimit ?? durationMinutes,
+        settings: test.settings || {},
         questions: (test.questions || []).map((q: any, i: number) => {
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { correctAnswer, testCases, ...safeQuestion } = q
+          const hiddenCount = (testCases || []).filter((tc: any) => tc.hidden).length
           return {
             ...safeQuestion,
             _id: safeQuestion._id || safeQuestion.id || String(i),
             questionText: safeQuestion.questionText || safeQuestion.question || "",
             type: safeQuestion.type === "coding" ? "code_snippet" : safeQuestion.type,
+            hiddenTestCaseCount: hiddenCount,
             testCases: (testCases || [])
               .filter((tc: any) => !tc.hidden)
               .map(({ input, expectedOutput }: any) => ({ input, expectedOutput })),

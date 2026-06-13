@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test:pipeline": "node scripts/verify-coding-test-pipeline.mjs",
+    "test:bg-verification": "node scripts/verify-background-verification-pipeline.mjs",
     "backfill:companies": "node scripts/backfill-company-links.js"
   },
   "dependencies": {

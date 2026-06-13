@@ -43,6 +43,7 @@ import {
   Code2,
 } from "lucide-react"
 import { extractCodeAnswers, extractSubmissionLanguage } from "@/lib/submission-utils"
+import { TestLiveMonitor } from "@/components/recruiter/test-live-monitor"
 
 interface SubmissionAnswer {
   questionId: string
@@ -64,6 +65,14 @@ interface Submission {
   answers?: SubmissionAnswer[]
   plagiarismScore: number
   plagiarismFlags: string[]
+  integrityAudit?: {
+    score?: number
+    summary?: string
+    flags?: string[]
+    logs?: Array<{ type: string; message: string; at?: string }>
+    tabSwitches?: number
+  }
+  tabSwitches?: number
   roundStage?: string
   attemptNumber: number
   submittedAt: string
@@ -82,6 +91,16 @@ interface Analytics {
 function integrityScore(plagiarism: number, flags: string[]): number {
   const flagPenalty = Math.min(flags.length * 5, 30)
   return Math.max(0, 100 - plagiarism - flagPenalty)
+}
+
+function getSubmissionIntegrity(sub: Submission): number {
+  if (sub.integrityAudit?.score != null) return sub.integrityAudit.score
+  return integrityScore(sub.plagiarismScore, sub.plagiarismFlags)
+}
+
+function getSubmissionFlags(sub: Submission): string[] {
+  if (sub.integrityAudit?.flags?.length) return sub.integrityAudit.flags
+  return sub.plagiarismFlags || []
 }
 
 function integrityLabel(score: number) {
@@ -212,8 +231,8 @@ export default function TestResultsPage() {
     if (sortBy === "score") { valA = a.percentage; valB = b.percentage }
     else if (sortBy === "plagiarism") { valA = a.plagiarismScore; valB = b.plagiarismScore }
     else if (sortBy === "integrity") {
-      valA = integrityScore(a.plagiarismScore, a.plagiarismFlags)
-      valB = integrityScore(b.plagiarismScore, b.plagiarismFlags)
+      valA = getSubmissionIntegrity(a)
+      valB = getSubmissionIntegrity(b)
     } else { valA = new Date(a.submittedAt).getTime(); valB = new Date(b.submittedAt).getTime() }
     return sortDir === "desc" ? valB - valA : valA - valB
   })
@@ -280,6 +299,8 @@ export default function TestResultsPage() {
           </Dialog>
         </div>
       </div>
+
+      <TestLiveMonitor testId={testId} />
 
       {/* Analytics cards */}
       {analytics && (
@@ -381,7 +402,8 @@ export default function TestResultsPage() {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {sortedSubmissions.map((sub, idx) => {
-                    const integrity = integrityScore(sub.plagiarismScore, sub.plagiarismFlags)
+                    const integrity = getSubmissionIntegrity(sub)
+                    const flags = getSubmissionFlags(sub)
                     const { label: intLabel, cls: intCls } = integrityLabel(integrity)
                     const appStatus = sub.applicationId?.status || ""
                     const alreadyDecided = ["Shortlisted", "Rejected", "Hired"].includes(appStatus)
@@ -411,9 +433,9 @@ export default function TestResultsPage() {
                           </Badge>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
-                          {sub.plagiarismFlags && sub.plagiarismFlags.length > 0 ? (
+                          {flags.length > 0 ? (
                             <div className="flex flex-col gap-0.5">
-                              {sub.plagiarismFlags.map((flag, i) => (
+                              {flags.map((flag, i) => (
                                 <Badge key={i} variant="outline" className="text-[10px] text-orange-700 border-orange-200 bg-orange-50 w-fit">
                                   {flag.replace(/_/g, " ")}
                                 </Badge>
@@ -424,7 +446,11 @@ export default function TestResultsPage() {
                           )}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
-                          {sub.percentage >= 70 ? (
+                          {sub.status === "in_progress" ? (
+                            <Badge className="bg-amber-100 text-amber-800 flex w-fit items-center gap-1">
+                              In Progress
+                            </Badge>
+                          ) : sub.percentage >= 70 ? (
                             <Badge className="bg-green-100 text-green-800 flex w-fit items-center gap-1">
                               <CheckCircle2 className="h-3 w-3" /> Passed
                             </Badge>
@@ -540,10 +566,26 @@ export default function TestResultsPage() {
                 <div className="bg-gray-50 rounded-lg p-3">
                   <p className="text-xs text-muted-foreground mb-1">Integrity</p>
                   <p className="text-2xl font-bold text-green-700">
-                    {integrityScore(detailSub.plagiarismScore, detailSub.plagiarismFlags)}%
+                    {getSubmissionIntegrity(detailSub)}%
                   </p>
                 </div>
               </div>
+              {detailSub.integrityAudit && (
+                <div className="rounded-lg border bg-amber-50/50 p-3 space-y-2 text-sm">
+                  <p className="text-xs font-semibold text-amber-900">Proctoring audit</p>
+                  <p className="text-xs text-amber-800">{detailSub.integrityAudit.summary || "—"}</p>
+                  {detailSub.integrityAudit.tabSwitches != null && (
+                    <p className="text-xs text-amber-700">Tab switches: {detailSub.integrityAudit.tabSwitches}</p>
+                  )}
+                  {detailSub.integrityAudit.logs && detailSub.integrityAudit.logs.length > 0 && (
+                    <div className="max-h-28 overflow-y-auto space-y-1">
+                      {detailSub.integrityAudit.logs.slice(-8).map((log, i) => (
+                        <p key={i} className="text-[10px] text-amber-900/80">{log.type}: {log.message}</p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="text-sm space-y-1">
                 <div><span className="font-medium">Attempt:</span> #{detailSub.attemptNumber}</div>
                 <div><span className="font-medium">Round:</span> {detailSub.roundStage || "—"}</div>
@@ -575,11 +617,11 @@ export default function TestResultsPage() {
                   ))}
                 </div>
               )}
-              {detailSub.plagiarismFlags.length > 0 && (
+              {getSubmissionFlags(detailSub).length > 0 && (
                 <div>
-                  <p className="text-sm font-medium mb-1">Plagiarism flags</p>
+                  <p className="text-sm font-medium mb-1">Security flags</p>
                   <div className="flex flex-wrap gap-1">
-                    {detailSub.plagiarismFlags.map((f, i) => (
+                    {getSubmissionFlags(detailSub).map((f, i) => (
                       <Badge key={i} variant="outline" className="text-orange-700 border-orange-200 bg-orange-50 text-[11px]">
                         {f.replace(/_/g, " ")}
                       </Badge>

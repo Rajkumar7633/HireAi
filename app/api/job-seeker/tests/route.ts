@@ -47,6 +47,7 @@ export async function GET(req: NextRequest) {
         const completed = isApplicationTestCompleted(a)
         const score = getApplicationTestScore(a)
         const completedAt = getApplicationCompletedAt(a)
+        const isInProgress = String(a.status) === "in_progress" && !completed
 
         return {
           _id: t._id,
@@ -61,10 +62,10 @@ export async function GET(req: NextRequest) {
           jobTitle: a.jobDescriptionId?.title || "",
           applicationId: a._id,
           assignmentId: null,
-          status: completed ? "completed" : "pending",
+          status: completed ? "completed" : isInProgress ? "in_progress" : "pending",
           score,
           completedAt,
-          assignedAt: a.testAssignedAt || a.updatedAt,
+          assignedAt: a.testAssignedAt || a.assignedAt || a.updatedAt,
         }
       })
 

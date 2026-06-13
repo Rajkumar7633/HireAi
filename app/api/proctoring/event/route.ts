@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server"
 import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import ProctorEvent from "@/models/ProctorEvent"
+import { getIO } from "@/lib/socket-server"
 
 export async function POST(req: NextRequest) {
   try {
@@ -31,6 +32,19 @@ export async function POST(req: NextRequest) {
       meta: meta || {},
       createdAt: at ? new Date(at) : new Date(),
     })
+
+    const io = getIO()
+    const testId = meta?.testId as string | undefined
+    if (io && testId) {
+      io.to(`test:${testId}:recruiters`).emit("test:proctor-event", {
+        testId,
+        applicationId: assessmentId,
+        candidateId,
+        type,
+        message: message || type,
+        at: at || new Date().toISOString(),
+      })
+    }
 
     return NextResponse.json({ ok: true }, { status: 201 })
   } catch (e) {

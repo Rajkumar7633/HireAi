@@ -5,6 +5,7 @@ import Application from "@/models/Application"
 import User from "@/models/User"
 import VideoInterview from "@/models/VideoInterview"
 import Notification from "@/models/Notification"
+import { sendStatusChangeEmail } from "@/lib/status-change-email"
 
 type Provider = "in_app" | "external"
 
@@ -140,6 +141,14 @@ export async function POST(request: NextRequest) {
       message: `Interview scheduled for ${new Date(scheduledAt).toLocaleString()}`,
       relatedEntity: { id: created._id, type: "interview" },
     })
+
+    await sendStatusChangeEmail({
+      applicationId: String(app._id),
+      jobSeekerId: String(candidateId),
+      jobDescriptionId: String(jobId),
+      recruiterId: session.userId,
+      newStatus: "Interview Scheduled",
+    }).catch((e) => console.error("interview auto-email failed", e))
 
     return NextResponse.json({ success: true, interview: created })
   } catch (error) {

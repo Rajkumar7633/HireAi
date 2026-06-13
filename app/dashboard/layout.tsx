@@ -143,6 +143,15 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     college_admin: "College Admin",
   };
 
+  const dashboardHome = (() => {
+    const role = session?.role ?? session?.user?.role
+    if (role === "recruiter") return "/dashboard/recruiter"
+    if (role === "job_seeker") return "/dashboard/job-seeker"
+    if (role === "admin") return "/dashboard/admin"
+    if (role === "college" || role === "college_admin") return "/dashboard/college"
+    return "/dashboard"
+  })();
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-white">
@@ -183,7 +192,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             <BreadcrumbList className="flex-nowrap text-sm">
               <BreadcrumbItem>
                 <BreadcrumbLink
-                  href="/dashboard"
+                  href={dashboardHome}
                   className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <LayoutDashboard className="h-3.5 w-3.5" />
