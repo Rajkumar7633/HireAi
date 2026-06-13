@@ -6,6 +6,8 @@ import { renderTemplate } from "@/lib/template-render"
 import EmailTemplate from "@/models/EmailTemplate"
 import User from "@/models/User"
 
+type UserEmailLean = { email?: string; name?: string } | null
+
 export async function POST(request: NextRequest) {
   try {
     const session = await getSession(request)
@@ -31,7 +33,9 @@ export async function POST(request: NextRequest) {
     for (const c of candidates) {
       let to = c.email as string | undefined
       if (!to) {
-        const u = await User.findById(c.userId || c.jobSeekerId).select("email name").lean()
+        const u = (await User.findById(c.userId || c.jobSeekerId)
+          .select("email name")
+          .lean()) as UserEmailLean
         to = u?.email
         if (!to) continue
         variables.candidateName = variables.candidateName || u?.name || "Candidate"
