@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
 import { aiService } from "@/lib/ai-service"
+import { clampAtsScore } from "@/lib/normalize-ats-analysis"
 
 // Real-time NLP utilities for ATS analysis
 class TextProcessor {
@@ -222,10 +223,12 @@ export async function POST(req: NextRequest) {
 
     // Heuristic scoring to complement AI
     const heur = heuristicAnalysis(resumeText, jobDescription || "")
+    const aiScore = clampAtsScore(aiAnalysis.score, heur.overall)
+    const aiAts = clampAtsScore(aiAnalysis.atsScore, heur.overall)
 
     // Transform AI analysis to match expected ATS format
     const analysis = {
-      atsScore: Math.round((aiAnalysis.atsScore * 0.6) + (heur.overall * 0.4)),
+      atsScore: clampAtsScore(aiAts * 0.6 + heur.overall * 0.4, heur.overall),
       keywordMatches: requiredSkills.map((skill) => ({
         keyword: skill,
         found: aiAnalysis.skillsMatch.includes(skill) || heur.keywordsFound.includes(skill.toLowerCase()),
@@ -235,13 +238,20 @@ export async function POST(req: NextRequest) {
       improvements: Array.from(new Set([...(aiAnalysis.suggestions || []), ...heur.suggestions])).slice(0, 10),
       sections: {
         contact: { score: heur.contact, feedback: heur.contactFeedback },
-        summary: { score: Math.max(60, aiAnalysis.score - 15), feedback: "Professional summary analysis" },
-        experience: { score: Math.max(65, aiAnalysis.score - 10), feedback: aiAnalysis.experienceMatch || "Work experience analysis" },
+        summary: { score: clampAtsScore(aiScore - 15, Math.max(55, heur.overall - 10)), feedback: "Professional summary analysis" },
+        experience: {
+          score: clampAtsScore(aiScore - 10, Math.max(60, heur.overall - 5)),
+          feedback: aiAnalysis.experienceMatch || "Work experience analysis",
+        },
         skills: {
-          score: requiredSkills.length > 0
-            ? Math.max(50, Math.round((aiAnalysis.skillsMatch.length / requiredSkills.length) * 100))
-            : heur.overall,
-          feedback: `${aiAnalysis.skillsMatch.length} of ${requiredSkills.length} required skills found`,
+          score:
+            requiredSkills.length > 0
+              ? clampAtsScore((aiAnalysis.skillsMatch.length / requiredSkills.length) * 100, heur.overall)
+              : clampAtsScore(heur.extractedSkills.length * 8, heur.overall),
+          feedback:
+            requiredSkills.length > 0
+              ? `${aiAnalysis.skillsMatch.length} of ${requiredSkills.length} required skills found`
+              : `${heur.extractedSkills.length} relevant skills detected`,
         },
         education: { score: heur.education, feedback: heur.educationFeedback },
       },
@@ -264,11 +274,11 @@ export async function POST(req: NextRequest) {
 
     // Real-time fallback using heuristic analysis only (no hardcoded data)
     const heur = heuristicAnalysis(resumeText, jobDescription || "")
-    const requiredSkills = jobDescription ? TextProcessor.extractSkillsFromText(jobDescription).slice(0, 15) : []
+    const requiredSkillsFallback = jobDescription ? TextProcessor.extractSkillsFromText(jobDescription).slice(0, 15) : []
 
     const fallbackAnalysis = {
       atsScore: heur.overall,
-      keywordMatches: requiredSkills.map((skill) => ({
+      keywordMatches: requiredSkillsFallback.map((skill) => ({
         keyword: skill,
         found: heur.keywordsFound.includes(skill.toLowerCase()),
         frequency: heur.keywordFrequency[skill.toLowerCase()] || 0,
@@ -283,12 +293,13 @@ export async function POST(req: NextRequest) {
       improvements: heur.suggestions,
       sections: {
         contact: { score: heur.contact, feedback: heur.contactFeedback },
-        summary: { score: Math.max(60, heur.overall - 10), feedback: "Professional summary analysis" },
-        experience: { score: Math.max(65, heur.overall - 5), feedback: "Work experience analysis" },
+        summary: { score: clampAtsScore(heur.overall - 10, 55), feedback: "Professional summary analysis" },
+        experience: { score: clampAtsScore(heur.overall - 5, 60), feedback: "Work experience analysis" },
         skills: {
-          score: requiredSkills.length > 0
-            ? Math.round((heur.keywordsFound.length / Math.max(requiredSkills.length, 1)) * 100)
-            : heur.overall,
+          score:
+            requiredSkillsFallback.length > 0
+              ? clampAtsScore((heur.keywordsFound.length / Math.max(requiredSkillsFallback.length, 1)) * 100, heur.overall)
+              : clampAtsScore(heur.extractedSkills.length * 8, heur.overall),
           feedback: `${heur.keywordsFound.length} relevant keywords found`,
         },
         education: { score: heur.education, feedback: heur.educationFeedback },

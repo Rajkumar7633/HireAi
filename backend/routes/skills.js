@@ -83,6 +83,167 @@ function getQuestionsForSkill(rawName) {
 
 const COOLDOWN_HOURS = 24;
 
+function normalizeSkillEntry(raw) {
+  if (typeof raw === "string") {
+    return { name: raw.trim(), level: "intermediate", verified: false };
+  }
+  if (raw && typeof raw === "object" && raw.name) {
+    return {
+      name: String(raw.name).trim(),
+      level: raw.level || "intermediate",
+      verified: Boolean(raw.verified),
+      verifiedScore: typeof raw.verifiedScore === "number" ? raw.verifiedScore : undefined,
+      verifiedAt: raw.verifiedAt || undefined,
+    };
+  }
+  return null;
+}
+
+function mergeSkillsList(existing, incomingName, patch = {}) {
+  const list = (existing || []).map(normalizeSkillEntry).filter(Boolean);
+  const key = incomingName.toLowerCase().trim();
+  const idx = list.findIndex((s) => s.name.toLowerCase().trim() === key);
+  if (idx >= 0) {
+    list[idx] = { ...list[idx], ...patch, name: list[idx].name };
+  } else {
+    list.push({ name: incomingName.trim(), level: "intermediate", verified: false, ...patch });
+  }
+  return list;
+}
+
+// Dashboard: skills + stats + history + cooldowns
+router.get("/dashboard", auth, async (req, res) => {
+  try {
+    if (req.user.role !== "job_seeker") {
+      return res.status(403).json({ msg: "Only job seekers can access skills dashboard" });
+    }
+
+    const userId = req.user.id || req.user.userId || req.user._id;
+    const user = await User.findById(userId).select("skills").lean();
+    if (!user) return res.status(404).json({ msg: "User not found" });
+
+    const skills = (user.skills || []).map(normalizeSkillEntry).filter(Boolean);
+    const assessments = await SkillAssessment.find({ userId })
+      .sort({ createdAt: -1 })
+      .select("skillName score passed status attemptNumber createdAt completedAt")
+      .lean();
+
+    const verifiedSkills = skills.filter((s) => s.verified);
+    const scores = verifiedSkills
+      .map((s) => s.verifiedScore)
+      .filter((n) => typeof n === "number");
+    const avgScore = scores.length
+      ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+      : 0;
+
+    const completed = assessments.filter((a) => a.status === "completed");
+    const passedCount = completed.filter((a) => a.passed).length;
+    const passRate = completed.length ? Math.round((passedCount / completed.length) * 100) : 0;
+
+    const cooldowns = [];
+    const skillNames = [...new Set(skills.map((s) => s.name))];
+    for (const skillName of skillNames) {
+      const lastFailed = assessments.find(
+        (a) =>
+          a.skillName &&
+          a.skillName.toLowerCase() === skillName.toLowerCase() &&
+          a.status === "completed" &&
+          a.passed === false &&
+          a.completedAt,
+      );
+      if (lastFailed) {
+        const diffMs = Date.now() - new Date(lastFailed.completedAt).getTime();
+        const hours = diffMs / (1000 * 60 * 60);
+        if (hours < COOLDOWN_HOURS) {
+          cooldowns.push({
+            skillName,
+            hoursRemaining: Math.ceil(COOLDOWN_HOURS - hours),
+            retryAt: new Date(
+              new Date(lastFailed.completedAt).getTime() + COOLDOWN_HOURS * 60 * 60 * 1000,
+            ).toISOString(),
+          });
+        }
+      }
+    }
+
+    const bySkill = {};
+    for (const a of completed) {
+      const k = a.skillName.toLowerCase();
+      if (!bySkill[k]) bySkill[k] = { attempts: 0, bestScore: 0, lastScore: 0, passed: false };
+      bySkill[k].attempts += 1;
+      bySkill[k].lastScore = a.score || 0;
+      bySkill[k].bestScore = Math.max(bySkill[k].bestScore, a.score || 0);
+      if (a.passed) bySkill[k].passed = true;
+    }
+
+    return res.json({
+      skills,
+      stats: {
+        total: skills.length,
+        verified: verifiedSkills.length,
+        unverified: skills.length - verifiedSkills.length,
+        verificationRate: skills.length
+          ? Math.round((verifiedSkills.length / skills.length) * 100)
+          : 0,
+        avgScore,
+        passRate,
+        totalAttempts: completed.length,
+        passedAttempts: passedCount,
+      },
+      history: assessments,
+      cooldowns,
+      skillStats: bySkill,
+    });
+  } catch (err) {
+    console.error("skills dashboard error", err);
+    return res.status(500).json({ msg: "Server error" });
+  }
+});
+
+// Manage skills: add, update level, remove
+router.patch("/manage", auth, async (req, res) => {
+  try {
+    if (req.user.role !== "job_seeker") {
+      return res.status(403).json({ msg: "Only job seekers can manage skills" });
+    }
+
+    const { action, skillName, level } = req.body || {};
+    if (!isNonEmptyString(skillName)) {
+      return res.status(400).json({ msg: "skillName is required" });
+    }
+
+    const userId = req.user.id || req.user.userId || req.user._id;
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ msg: "User not found" });
+
+    const normalized = skillName.trim();
+    let skills = (user.skills || []).map(normalizeSkillEntry).filter(Boolean);
+
+    if (action === "remove") {
+      skills = skills.filter((s) => s.name.toLowerCase() !== normalized.toLowerCase());
+    } else if (action === "update") {
+      const validLevels = ["beginner", "intermediate", "advanced"];
+      const nextLevel = validLevels.includes(level) ? level : "intermediate";
+      skills = mergeSkillsList(skills, normalized, { level: nextLevel });
+    } else {
+      // add (default)
+      if (skills.some((s) => s.name.toLowerCase() === normalized.toLowerCase())) {
+        return res.status(409).json({ msg: "Skill already exists" });
+      }
+      skills.push({ name: normalized, level: "intermediate", verified: false });
+    }
+
+    user.skills = skills;
+    await user.save();
+    await invalidateCache("skills:*");
+
+    return res.json({ skills, msg: "Skills updated" });
+  } catch (err) {
+    console.error("manage skills error", err);
+    return res.status(500).json({ msg: "Server error" });
+  }
+});
+
 // Start a new skill assessment
 router.post("/start-assessment", auth, async (req, res) => {
   try {

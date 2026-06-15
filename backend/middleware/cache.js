@@ -1,87 +1,87 @@
-const redisClient = require('../config/redis');
+const redisClient = require("../config/redis");
+const isCacheEnabled = redisClient.isCacheEnabled;
 
 const CACHE_TTL = 300; // 5 minutes default TTL
 
+async function safeGet(key) {
+  if (!isCacheEnabled()) return null;
+  try {
+    return await redisClient.get(key);
+  } catch {
+    if (typeof redisClient.disableRedis === "function") {
+      redisClient.disableRedis("cache read failed");
+    }
+    return null;
+  }
+}
+
+async function safeSetEx(key, ttl, value) {
+  if (!isCacheEnabled()) return;
+  try {
+    await redisClient.setEx(key, ttl, value);
+  } catch {
+    if (typeof redisClient.disableRedis === "function") {
+      redisClient.disableRedis("cache write failed");
+    }
+  }
+}
+
 /**
  * Cache middleware for GET requests
- * Caches response data in Redis for faster subsequent requests
  */
 const cacheMiddleware = (keyPrefix, ttl = CACHE_TTL) => {
   return async (req, res, next) => {
-    // Only cache GET requests
-    if (req.method !== 'GET') {
+    if (req.method !== "GET" || !isCacheEnabled()) {
       return next();
     }
 
-    try {
-      const cacheKey = `${keyPrefix}:${req.originalUrl || req.url}`;
-      
-      // Try to get data from cache
-      const cachedData = await redisClient.get(cacheKey);
-      
-      if (cachedData) {
-        console.log(`Cache hit for: ${cacheKey}`);
+    const cacheKey = `${keyPrefix}:${req.originalUrl || req.url}`;
+    const cachedData = await safeGet(cacheKey);
+
+    if (cachedData) {
+      try {
         return res.json(JSON.parse(cachedData));
+      } catch {
+        return next();
       }
-      
-      // Cache miss - store original res.json function
-      const originalJson = res.json;
-      
-      // Override res.json to cache the response
-      res.json = function(data) {
-        // Cache the response
-        redisClient.setEx(cacheKey, ttl, JSON.stringify(data)).catch(err => {
-          console.error('Redis cache set error:', err);
-        });
-        
-        // Call original res.json
-        return originalJson.call(this, data);
-      };
-      
-      next();
-    } catch (error) {
-      console.error('Cache middleware error:', error);
-      // Continue without caching if Redis fails
-      next();
     }
+
+    const originalJson = res.json;
+
+    res.json = function (data) {
+      safeSetEx(cacheKey, ttl, JSON.stringify(data));
+      return originalJson.call(this, data);
+    };
+
+    next();
   };
 };
 
-/**
- * Invalidate cache for a specific key pattern
- */
 const invalidateCache = async (pattern) => {
+  if (!isCacheEnabled()) return;
+
   try {
     const keys = await redisClient.keys(pattern);
     if (keys.length > 0) {
       await redisClient.del(keys);
-      console.log(`Invalidated ${keys.length} cache keys matching pattern: ${pattern}`);
     }
-  } catch (error) {
-    console.error('Cache invalidation error:', error);
+  } catch {
+    if (typeof redisClient.disableRedis === "function") {
+      redisClient.disableRedis("cache invalidation failed");
+    }
   }
 };
 
-/**
- * Set cache manually
- */
 const setCache = async (key, data, ttl = CACHE_TTL) => {
-  try {
-    await redisClient.setEx(key, ttl, JSON.stringify(data));
-  } catch (error) {
-    console.error('Set cache error:', error);
-  }
+  await safeSetEx(key, ttl, JSON.stringify(data));
 };
 
-/**
- * Get cache manually
- */
 const getCache = async (key) => {
+  const data = await safeGet(key);
+  if (!data) return null;
   try {
-    const data = await redisClient.get(key);
-    return data ? JSON.parse(data) : null;
-  } catch (error) {
-    console.error('Get cache error:', error);
+    return JSON.parse(data);
+  } catch {
     return null;
   }
 };
@@ -90,5 +90,5 @@ module.exports = {
   cacheMiddleware,
   invalidateCache,
   setCache,
-  getCache
+  getCache,
 };

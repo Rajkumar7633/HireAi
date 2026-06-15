@@ -69,6 +69,7 @@ export interface IJobSeekerProfile extends Document {
   // ATS persistence
   lastAtsAnalysis?: any
   lastResumeFileName?: string
+  lastResumeText?: string
 
   createdAt: Date
   updatedAt: Date
@@ -255,6 +256,7 @@ const JobSeekerProfileSchema = new Schema<IJobSeekerProfile>(
     // ATS persistence
     lastAtsAnalysis: { type: Schema.Types.Mixed, default: undefined },
     lastResumeFileName: { type: String, trim: true },
+    lastResumeText: { type: String, default: undefined },
   },
   {
     timestamps: true,

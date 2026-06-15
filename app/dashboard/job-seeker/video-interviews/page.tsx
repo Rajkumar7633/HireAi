@@ -61,7 +61,26 @@ export default function JobSeekerVideoInterviewsPage() {
       const response = await fetch("/api/video-interviews");
       if (response.ok) {
         const data = await response.json();
-        setInterviews(data.interviews || []);
+        const normalized: VideoInterview[] = (data.interviews || []).map(
+          (it: Record<string, unknown>) => ({
+            id: String(it.id || it._id || ""),
+            recruiterName:
+              String(it.recruiterName || (it.recruiterId as { name?: string })?.name || "Recruiter"),
+            recruiterEmail:
+              String(it.recruiterEmail || (it.recruiterId as { email?: string })?.email || ""),
+            position: String(it.position || (it.jobId as { title?: string })?.title || "Interview"),
+            scheduledDate: String(it.scheduledDate || new Date().toISOString()),
+            duration: Number(it.duration) || 60,
+            status: (it.status as VideoInterview["status"]) || "scheduled",
+            meetingLink: it.meetingLink as string | undefined,
+            recordingUrl: it.recordingUrl as string | undefined,
+            notes: it.notes as string | undefined,
+            rating: it.rating as number | undefined,
+            avatar: it.avatar as string | undefined,
+            roomId: it.roomId as string | undefined,
+          }),
+        );
+        setInterviews(normalized);
       }
     } catch (error) {
       console.error("Error fetching interviews:", error);
@@ -151,12 +170,12 @@ export default function JobSeekerVideoInterviewsPage() {
   };
 
   const filteredInterviews = interviews.filter((interview) => {
+    const term = searchTerm.toLowerCase();
     const matchesSearch =
-      interview.recruiterName
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      interview.position.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      interview.recruiterEmail.toLowerCase().includes(searchTerm.toLowerCase());
+      !term ||
+      [interview.recruiterName, interview.position, interview.recruiterEmail].some(
+        (field) => (field || "").toLowerCase().includes(term),
+      );
 
     const matchesFilter =
       selectedFilter === "all" || interview.status === selectedFilter;
@@ -430,10 +449,11 @@ export default function JobSeekerVideoInterviewsPage() {
                   <Avatar className="w-12 h-12">
                     <AvatarImage src={interview.avatar || "/placeholder.svg"} />
                     <AvatarFallback>
-                      {interview.recruiterName
+                      {(interview.recruiterName || "R")
                         .split(" ")
                         .map((n) => n[0])
-                        .join("")}
+                        .join("")
+                        .slice(0, 2)}
                     </AvatarFallback>
                   </Avatar>
                   <div>

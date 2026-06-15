@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
 
       const enriched = items.map((it: any) => ({
         ...it,
+        id: String(it._id),
         candidateName: it.candidateId?.name || "",
         candidateEmail: it.candidateId?.email || "",
         position: it.jobId?.title || "",
@@ -43,6 +44,7 @@ export async function GET(request: NextRequest) {
     // job_seeker view
     const items = await VideoInterview.find({ candidateId: session.userId })
       .populate("candidateId", "name email")
+      .populate("recruiterId", "name email")
       .populate("jobId", "title")
       .sort({ scheduledDate: 1 })
       .limit(50)
@@ -50,9 +52,12 @@ export async function GET(request: NextRequest) {
 
     const enriched = items.map((it: any) => ({
       ...it,
+      id: String(it._id),
       candidateName: it.candidateId?.name || "",
       candidateEmail: it.candidateId?.email || "",
-      position: it.jobId?.title || "",
+      recruiterName: it.recruiterId?.name || "Recruiter",
+      recruiterEmail: it.recruiterId?.email || "",
+      position: it.jobId?.title || "Interview",
     }))
     return NextResponse.json({ success: true, interviews: enriched })
   } catch (error) {

@@ -39,6 +39,7 @@ import {
   Upload,
 } from "lucide-react";
 import Link from "next/link";
+import { normalizeAtsAnalysis } from "@/lib/normalize-ats-analysis";
 
 interface JobSeekerProfile {
   // Personal Information
@@ -193,6 +194,7 @@ export default function JobSeekerProfilePage() {
   const [scoring, setScoring] = useState<boolean>(false);
   const [resumeUploading, setResumeUploading] = useState<boolean>(false);
   const [uploadedResumeName, setUploadedResumeName] = useState<string>("");
+  const [lastResumeText, setLastResumeText] = useState<string>("");
   const [showStrengths, setShowStrengths] = useState(false);
   const [showImprovements, setShowImprovements] = useState(false);
   const [copying, setCopying] = useState(false);
@@ -216,12 +218,15 @@ export default function JobSeekerProfilePage() {
   // Load any persisted ATS analysis and filename from profile
   useEffect(() => {
     const la = (profile as any)?.lastAtsAnalysis;
-    if (la && !ats) setAts(la);
+    if (la && !ats) setAts(normalizeAtsAnalysis(la, profile.atsScore));
     const fname = (profile as any)?.lastResumeFileName;
     if (fname && !uploadedResumeName) setUploadedResumeName(String(fname));
-  }, [profile, ats, uploadedResumeName]);
+    const savedText = (profile as any)?.lastResumeText;
+    if (savedText && !lastResumeText) setLastResumeText(String(savedText));
+  }, [profile, ats, uploadedResumeName, lastResumeText]);
 
   const buildResumeText = useCallback(() => {
+    if (lastResumeText.trim().length >= 30) return lastResumeText.trim();
     const parts: string[] = [];
     parts.push(`${profile.firstName || ''} ${profile.lastName || ''}`.trim());
     parts.push(profile.email || "");
@@ -240,7 +245,7 @@ export default function JobSeekerProfilePage() {
     }
     if (profile.university) parts.push(`Education: ${profile.university}`);
     return parts.filter(Boolean).join("\n");
-  }, [profile]);
+  }, [profile, lastResumeText]);
 
   const scoreResume = useCallback(async () => {
     try {
@@ -252,13 +257,12 @@ export default function JobSeekerProfilePage() {
       });
       if (!res.ok) throw new Error('Failed to score');
       const j = await res.json();
-      const analysis = j.analysis || j;
+      const analysis = normalizeAtsAnalysis(j.analysis || j, j.analysis?.atsScore ?? j.atsScore);
       setAts(analysis);
-      if (typeof analysis?.atsScore === 'number') {
-        // update local profile and persist in background
+      if (analysis.atsScore > 0) {
         setProfile((p) => ({ ...p, atsScore: analysis.atsScore, lastAtsAnalysis: analysis } as any));
         try {
-          await fetch('/api/job-seeker/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...profile, atsScore: analysis.atsScore, lastAtsAnalysis: analysis }) });
+          await fetch('/api/job-seeker/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ atsScore: analysis.atsScore, lastAtsAnalysis: analysis, lastResumeText: lastResumeText || undefined }) });
         } catch {}
       }
     } catch (e) {
@@ -266,7 +270,7 @@ export default function JobSeekerProfilePage() {
     } finally {
       setScoring(false);
     }
-  }, [buildResumeText, jdText, toast]);
+  }, [buildResumeText, jdText, toast, lastResumeText]);
 
   const handleResumeUpload = async (file: File | null) => {
     if (!file) return;
@@ -278,8 +282,10 @@ export default function JobSeekerProfilePage() {
       if (!res.ok) throw new Error('Upload failed');
       const j = await res.json();
       setUploadedResumeName(j?.resume?.originalName || file.name);
-      const analysis = j?.resume?.analysis || j?.analysis;
-      if (analysis) setAts(analysis);
+      const extractedText = String(j?.resume?.extractedText || j?.resume?.rawText || "");
+      if (extractedText.trim().length >= 30) setLastResumeText(extractedText.trim());
+      const analysis = normalizeAtsAnalysis(j?.resume?.analysis || j?.analysis, j?.resume?.atsScore);
+      if (analysis.atsScore > 0) setAts(analysis);
       
       // Auto-fill profile with extracted data
       const extracted = j?.resume?.extractedData;
@@ -310,10 +316,10 @@ export default function JobSeekerProfilePage() {
         toast({ title: "Resume parsed successfully!", description: "Your profile has been auto-filled with resume data." });
       }
       
-      if (typeof j?.resume?.atsScore === 'number') {
-        setProfile((p) => ({ ...p, atsScore: j.resume.atsScore, lastResumeFileName: j?.resume?.originalName || file.name, lastAtsAnalysis: analysis } as any));
+      if (analysis.atsScore > 0) {
+        setProfile((p) => ({ ...p, atsScore: analysis.atsScore, lastResumeFileName: j?.resume?.originalName || file.name, lastAtsAnalysis: analysis, lastResumeText: extractedText.trim() || (p as any).lastResumeText } as any));
         try {
-          await fetch('/api/job-seeker/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ atsScore: j.resume.atsScore, lastResumeFileName: j?.resume?.originalName || file.name, lastAtsAnalysis: analysis }) });
+          await fetch('/api/job-seeker/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ atsScore: analysis.atsScore, lastResumeFileName: j?.resume?.originalName || file.name, lastAtsAnalysis: analysis, lastResumeText: extractedText.trim() || undefined }) });
         } catch {}
       }
     } catch (e) {
@@ -522,6 +528,11 @@ export default function JobSeekerProfilePage() {
           experiences: Array.isArray(data.experiences) ? data.experiences : [],
         } as JobSeekerProfile;
         setProfile(normalized);
+        if (data.lastAtsAnalysis) {
+          setAts(normalizeAtsAnalysis(data.lastAtsAnalysis, data.atsScore));
+        }
+        if (data.lastResumeText) setLastResumeText(String(data.lastResumeText));
+        if (data.lastResumeFileName) setUploadedResumeName(String(data.lastResumeFileName));
       } catch (error) {
         console.error("[v0] Error fetching profile:", error);
         toast({
@@ -1103,15 +1114,16 @@ export default function JobSeekerProfilePage() {
               <div className="relative w-28 h-28 rounded-full grid place-items-center"
                    style={{ background: `conic-gradient(${getBandColor(Number(ats?.atsScore||0))} ${(Number(ats?.atsScore||0)*3.6)}deg, #e5e7eb 0deg)` }}>
                 <div className="w-20 h-20 bg-white rounded-full grid place-items-center shadow-inner">
-                  <div className="text-3xl font-bold">{ats?.atsScore ?? '--'}</div>
+                  <div className="text-3xl font-bold">{ats?.atsScore ? `${ats.atsScore}` : scoring ? "…" : "—"}</div>
                 </div>
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-xs font-semibold text-muted-foreground">ATS Score</div>
-                <div className="text-base font-bold">{typeof ats?.atsScore === 'number' ? bandLabel(Number(ats.atsScore)) : '—'}</div>
-                {typeof ats?.matchScore === 'number' && (
-                  <div className="mt-1 text-sm">Match score: <span className="font-bold">{ats.matchScore}%</span></div>
-                )}
+                <div className="text-base font-bold">{ats?.atsScore ? `${bandLabel(Number(ats.atsScore))} · ${ats.atsScore}%` : "—"}</div>
+                <div className="mt-1 text-sm">
+                  Match score:{" "}
+                  <span className="font-bold">{typeof ats?.matchScore === "number" ? `${ats.matchScore}%` : jdText.trim() ? "—" : "Add a job description"}</span>
+                </div>
               </div>
             </div>
             {ats?.sections && (
@@ -1124,7 +1136,7 @@ export default function JobSeekerProfilePage() {
                   { k: 'Format', v: ats.formatting?.score },
                 ].map((row, i) => (
                   <div key={i} className="text-sm">
-                    <div className="flex justify-between font-medium"><span>{row.k}</span><span>{row.v ?? '--'}</span></div>
+                    <div className="flex justify-between font-medium"><span>{row.k}</span><span>{row.v != null && row.v > 0 ? `${row.v}%` : "—"}</span></div>
                     <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden mt-1">
                       <div className="h-full rounded-full" style={{ width: `${Math.min(100, Number(row.v||0))}%`, background: getBandColor(Number(row.v||0)) }} />
                     </div>

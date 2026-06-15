@@ -241,6 +241,9 @@ export async function PUT(req: NextRequest) {
       lastResumeFileName: typeof body.lastResumeFileName === 'string'
         ? body.lastResumeFileName
         : (existing as any)?.lastResumeFileName,
+      lastResumeText: typeof body.lastResumeText === 'string'
+        ? body.lastResumeText.slice(0, 50000)
+        : (existing as any)?.lastResumeText,
     }
 
     console.log("[v0] Updating profile for user:", session.userId)

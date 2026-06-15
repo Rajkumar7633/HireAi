@@ -315,20 +315,41 @@ export class AIService {
     jobRequirements: string,
     requiredSkills: string[],
   ): ResumeAnalysisResult {
-    const words = resumeText.toLowerCase().split(/\s+/)
-    const skillsMatch = requiredSkills.filter((skill) => resumeText.toLowerCase().includes(skill.toLowerCase()))
+    const words = resumeText.toLowerCase().split(/\s+/).filter(Boolean)
+    const skillsMatch =
+      requiredSkills.length > 0
+        ? requiredSkills.filter((skill) => resumeText.toLowerCase().includes(skill.toLowerCase()))
+        : []
 
-    const score = Math.min(100, (skillsMatch.length / requiredSkills.length) * 80 + 20)
+    let score: number
+    if (requiredSkills.length > 0) {
+      score = Math.min(100, (skillsMatch.length / requiredSkills.length) * 80 + 20)
+    } else {
+      const wordCount = words.length
+      const hasEmail = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i.test(resumeText)
+      const hasMetrics = /\d+(%|percent|k\b|million|years?)/i.test(resumeText)
+      score = Math.min(
+        92,
+        Math.max(
+          42,
+          Math.round(wordCount / 6) + (hasEmail ? 12 : 0) + (hasMetrics ? 10 : 0),
+        ),
+      )
+    }
+
+    const rounded = Math.round(score)
 
     return {
-      score: Math.round(score),
-      strengths: skillsMatch.length > 0 ? [`Matches ${skillsMatch.length} required skills`] : [],
-      weaknesses: skillsMatch.length < requiredSkills.length ? ["Missing some required skills"] : [],
+      score: rounded,
+      strengths: skillsMatch.length > 0 ? [`Matches ${skillsMatch.length} required skills`] : words.length > 150 ? ["Solid resume length and structure"] : [],
+      weaknesses: skillsMatch.length < requiredSkills.length && requiredSkills.length > 0 ? ["Missing some required skills"] : [],
       skillsMatch,
-      experienceMatch: words.some((w) => w.includes("year")) ? "Relevant experience found" : "Experience unclear",
-      recommendations: score > 70 ? ["Strong candidate"] : ["Consider for screening"],
-      atsScore: Math.round(score * 0.9),
-      suggestions: ["Optimize resume with more relevant keywords"],
+      experienceMatch: words.some((w) => w.includes("year") || w.includes("experience")) ? "Relevant experience found" : "Experience unclear",
+      recommendations: rounded > 70 ? ["Strong candidate profile"] : ["Consider adding more role-specific keywords"],
+      atsScore: Math.round(rounded * 0.92),
+      suggestions: jobRequirements
+        ? ["Tailor resume keywords to the pasted job description"]
+        : ["Optimize resume with more relevant keywords", "Ensure contact info includes both email and phone number"],
     }
   }
 
