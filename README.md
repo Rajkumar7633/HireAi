@@ -85,7 +85,7 @@ Authentication uses **JWT** (HttpOnly cookies) with **email OTP** login via the 
 | **Skill gap analyzer** | `skill-gap` | ✅ **Enhanced** — role presets, AI analysis, history, export |
 | **Interview coach** | `interview-coach` | ✅ **Enhanced** — STAR, filler detection, session stats |
 | Mock interview | `mock-interview` | ✅ Existing |
-| Coding tests (Monaco) | `tests`, `tests/[id]` | ✅ **Enhanced** — run/submit, Java fix, Judge0 |
+| Coding tests (Monaco) | `tests`, `tests/[id]` | ✅ **Enhanced** — proctored take flow, fullscreen preflight, Judge0 |
 | Assessments | `assessments` | ✅ Existing |
 | Campus drives (apply) | `campus-drives` | ✅ Existing |
 | Video interviews | `video-interviews` | ✅ Existing |
@@ -104,8 +104,8 @@ Authentication uses **JWT** (HttpOnly cookies) with **email OTP** login via the 
 | AI job description tailor | `job-description-tailor` | ✅ Existing |
 | Candidates & talent pool | `candidates`, `talent-pool` | ✅ Existing |
 | AI matching & screening | `ai-matching`, `ai-screening` | ✅ Existing |
-| **Coding tests** | `tests` | ✅ **Enhanced** — create, assign by email, preview |
-| **Test analytics** | `tests/[id]/analytics` | ✅ **Enhanced** — KPIs, deduped candidates, leaderboard |
+| **Coding tests** | `tests`, `tests/create/coding` | ✅ **Enhanced** — create with security suite toggles |
+| **Test analytics** | `tests/[id]/analytics` | ✅ **Enhanced** — KPIs, leaderboard, **live security dashboard** |
 | **Test assign** | `tests/[id]/assign` | ✅ **Enhanced** — email invite flow |
 | Assessments | `assessments` | ✅ Existing |
 | **Campus Drive Hub** | `campus-drives` | ✅ **New** — browse colleges, send/receive proposals |
@@ -141,6 +141,9 @@ Authentication uses **JWT** (HttpOnly cookies) with **email OTP** login via the 
 
 | Feature | Route | Status |
 |---------|-------|--------|
+| Login / Signup | `/login`, `/signup` | ✅ **Enhanced** — premium UI, OTP login, lightweight backdrop |
+| Forgot / reset password | `/auth/forgot-password`, `/auth/reset-password` | ✅ **New** — email link + OTP reset |
+| Terms & Privacy | `/terms`, `/privacy` | ✅ **New** — full legal content |
 | **Notification Center** | `/dashboard/notifications` | ✅ **Enhanced** — filters, bulk actions, deep links |
 | Messages | `/dashboard/messages` | ✅ Existing |
 | Calendar | `/dashboard/calendar` | ✅ Existing |
@@ -181,7 +184,7 @@ These were part of the original HireAI scope and remain available:
 14. **Email template system**  
 15. **Export reports (CSV/PDF)**  
 16. **Interview scorecards**  
-17. **Proctoring** — violations, screen recording, environment scan  
+17. **Proctoring** — BlazeFace face AI, COCO-SSD object detection, voice monitoring, fullscreen lock, periodic snapshots, tab-switch guard  
 18. **Video interviews** — rooms, feedback  
 19. **Social network** — posts, connections, endorsements  
 20. **Billing / Stripe** — subscription hooks (where configured)
@@ -216,17 +219,52 @@ Work completed in recent development cycles:
 - `/dashboard/job-seeker/skill-gap`
 - Role presets, match score, learning path, radar charts, analysis history, export
 
-### Coding Tests & Analytics
+### Auth, Password Recovery & Legal Pages
+
+- **Login** (`/login`) — split layout, OTP boxes, remember me, social “coming soon”, `AuthPageBackdrop` (CSS + light canvas, no Three.js)
+- **Signup** (`/signup`) — 3-step wizard (profile → security → role), password strength, secure password generator, role cards
+- **Forgot password** (`/auth/forgot-password`) — branded email with reset link + 6-digit OTP
+- **Reset password** (`/auth/reset-password`) — strength meter, OTP boxes, resend countdown
+- **Terms** (`/terms`) and **Privacy** (`/privacy`) — full sectioned legal content with table of contents
+- Middleware allows public access to `/auth/*`, `/terms`, `/privacy`
+
+### Live Coding Test Proctoring
+
+Multi-layer anti-cheat for candidate test-taking (`/dashboard/job-seeker/tests/[id]`):
+
+| Layer | Description |
+|-------|-------------|
+| **Fullscreen lock** | Required before start; exits logged |
+| **Face AI (BlazeFace)** | No face, multi-face, off-screen, movement |
+| **Object AI (COCO-SSD)** | Phone, book, extra person detection |
+| **Voice monitoring** | Mic level + sustained speech alerts |
+| **Tab switch guard** | Configurable limit; auto-terminate |
+| **Periodic snapshots** | Webcam stills every ~20s stored for review |
+| **Copy/paste block** | Clipboard + context menu blocked |
+| **Preflight wizard** | Fullscreen → camera/mic → face verify → consent |
+
+Recruiters configure security when creating tests at `/dashboard/recruiter/tests/create/coding` (Security tab). Settings persist on the test document (`settings` field).
+
+### Security Analytics Dashboard
+
+- **Route:** `/dashboard/recruiter/tests/[id]/analytics` → **Security** tab
+- **API:** `GET /api/tests/[id]/security`
+- Live data from `ProctorEvent` collection + submission `integrityAudit` logs
+- Per-candidate: integrity %, risk level, tab/face/audio/object/fullscreen counts, snapshot gallery, event timeline
+- Auto-refreshes every 10 seconds with the rest of analytics
+
+### Coding Tests & Analytics (existing enhancements)
 
 - **Judge0 CE** default for code execution (`JUDGE0_URL=https://ce.judge0.com`)
 - Java `Solution` → `Main` auto-rename for Judge0 compatibility
 - **Assign by email** — `/api/tests/[id]/invite` actually assigns tests
 - **Analytics deduplication** — one row per candidate (fixes duplicate leaderboard entries)
-- Recruiter analytics: Candidates, Leaderboard, Security tabs populated correctly
+- Recruiter analytics: Overview, Problems, Candidates, Leaderboard, Security tabs
 
 ### Auth & Session
 
 - OTP login via backend (`/api/auth/login` → `/api/auth/verify-otp`)
+- Password reset via link or OTP (`/api/auth/forgot-password`, `/api/auth/reset-password`)
 - HttpOnly `auth-token` cookie + refresh token
 - Normalized `userId` in session for consistent MongoDB queries
 
@@ -268,7 +306,7 @@ End-to-end flow:
 | Frontend | Next.js 14, React 18, TypeScript, Tailwind CSS, shadcn/ui, Radix UI |
 | Editor | Monaco Editor (coding tests) |
 | Charts | Recharts |
-| 3D (login) | Three.js, React Three Fiber |
+| Proctoring ML | BlazeFace + COCO-SSD (TensorFlow.js via CDN) |
 | Backend | Express.js, Node.js |
 | Database | MongoDB, Mongoose |
 | Cache | Redis (ioredis) |
@@ -347,7 +385,9 @@ See `.env.example` for the full list. Critical variables:
 | `JUDGE0_URL` | Code execution (default: `https://ce.judge0.com`) |
 | `SMTP_*` | Email for OTP and notifications |
 | `OPENAI_API_KEY` / Groq | AI features (skill gap, interview coach, JD tailor) |
-| `REDIS_URL` | Optional caching |
+| `REDIS_URL` / `REDIS_ENABLED` | Optional caching (`REDIS_ENABLED=false` for local dev) |
+| `NEXT_PUBLIC_COMPANY_NAME` | Brand name on auth/legal emails |
+| `NEXT_PUBLIC_SUPPORT_EMAIL` | Support contact on Terms/Privacy |
 
 ---
 
@@ -362,7 +402,9 @@ HireAi/
 │   │   ├── recruiter/          # Hiring features
 │   │   ├── college/            # Placement cell features
 │   │   └── admin/              # Admin panel
-│   ├── login/                  # Auth pages
+│   ├── login/                  # Auth pages (login, signup)
+│   ├── auth/                   # Forgot/reset password
+│   ├── terms/, privacy/        # Legal pages
 │   └── layout.tsx
 ├── backend/
 │   ├── routes/                 # Express routes
@@ -370,9 +412,14 @@ HireAi/
 │   ├── services/               # authService, etc.
 │   ├── middleware/             # auth, security, rate limit
 │   └── tests/                  # Jest tests
-├── components/                 # React UI components
+├── components/
+│   ├── proctor/                # FaceProctor, preflight, coding-test-proctor
+│   ├── analytics/              # Security analytics panels
+│   └── auth-page-backdrop.tsx  # Lightweight auth backgrounds
+├── lib/
+│   ├── proctor-*.ts            # Face/object detection, security analytics
+│   └── coding-test-security.ts # Security settings & integrity scoring
 ├── hooks/                      # useSession, useNotifications, etc.
-├── lib/                        # auth, mongodb, code-runner, utils
 ├── models/                     # Shared Mongoose models (Next.js)
 ├── public/
 ├── server.js                   # Optional custom server (Socket.IO)
@@ -390,8 +437,11 @@ HireAi/
 |--------|----------|-------------|
 | POST | `/api/auth/login` | Initiate OTP login (proxies to backend) |
 | POST | `/api/auth/verify-otp` | Verify OTP, set cookies |
+| POST | `/api/auth/forgot-password` | Send reset link + OTP email |
+| POST | `/api/auth/reset-password` | Reset password with token or OTP |
 | POST | `/api/auth/refresh` | Refresh access token |
 | GET | `/api/auth/me` | Current user profile |
+| GET | `/api/auth/client-token` | Sync token for client-side `authFetch` |
 
 ### Campus drives
 
@@ -411,7 +461,10 @@ HireAi/
 | GET/POST | `/api/tests` | List/create tests |
 | POST | `/api/tests/[id]/invite` | Assign test to candidates |
 | GET | `/api/tests/[id]/analytics` | Test analytics |
+| GET | `/api/tests/[id]/security` | Proctoring & integrity analytics |
 | GET | `/api/tests/[id]/submissions` | Submissions (deduped) |
+| POST | `/api/proctoring/event` | Record proctor violation/snapshot |
+| GET | `/api/proctoring/event` | List proctor events (recruiter) |
 | POST | `/api/code/execute` | Run code (Judge0) |
 
 ### Job seeker tools
@@ -434,7 +487,6 @@ Many features also expose routes under `backend/routes/` — job tailoring, refe
 |----------|-------------|
 | `DRAG_DROP_USER_GUIDE.md` | Drag-and-drop UI usage |
 | `.env.example` | Environment variable reference |
-| `public/models/README.md` | 3D model assets for login page |
 
 ---
 
@@ -470,4 +522,4 @@ For bugs and feature requests, open an issue on the repository.
 
 ---
 
-*Last updated: reflects campus drive hub, notification center, interview coach, skill gap, test analytics, and Judge0 integration enhancements.*
+*Last updated: auth UX overhaul, password recovery, terms/privacy, live proctoring (BlazeFace + COCO-SSD), security analytics dashboard, Three.js removed.*
