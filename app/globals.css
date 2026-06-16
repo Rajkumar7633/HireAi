@@ -120,24 +120,33 @@
   /* Dashboard shell utilities */
   @layer components {
     .dashboard-shell {
-      @apply relative min-h-full bg-slate-50/90;
+      @apply relative flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50/90;
     }
 
     .dashboard-shell::before {
       content: "";
-      @apply pointer-events-none fixed inset-0 -z-10;
+      @apply pointer-events-none absolute inset-0 -z-10;
       background:
         radial-gradient(ellipse 80% 50% at 20% -10%, rgba(139, 92, 246, 0.08), transparent),
         radial-gradient(ellipse 60% 40% at 90% 10%, rgba(99, 102, 241, 0.06), transparent),
         radial-gradient(ellipse 50% 30% at 50% 100%, rgba(16, 185, 129, 0.04), transparent);
     }
 
+    .dashboard-scroll {
+      @apply flex-1 min-h-0 overflow-y-auto overflow-x-hidden;
+    }
+
     .dashboard-page {
       @apply w-full px-4 py-5 sm:px-6 sm:py-6 space-y-5 lg:space-y-6;
     }
 
+  /* Sticky page sub-header — stays inside main scroll, below dashboard header */
+    .dashboard-subheader {
+      @apply sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-gray-200 shadow-sm;
+    }
+
     .dashboard-glass-header {
-      @apply bg-white/85 backdrop-blur-xl border-b border-slate-200/80 shadow-sm;
+      @apply shrink-0 bg-white/95 backdrop-blur-xl border-b border-slate-200/80 shadow-sm;
     }
   }
 

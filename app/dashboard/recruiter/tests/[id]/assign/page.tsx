@@ -368,7 +368,7 @@ export default function AssignCodingTestPage() {
     <div className="w-full bg-gray-50 pb-32">
 
       {/* ── Header ── */}
-      <div className="bg-white border-b border-gray-200 shadow-sm sticky top-14 z-30">
+      <div className="dashboard-subheader">
         <div className="w-full max-w-6xl mx-auto px-5 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-gray-500 hover:text-gray-900 shrink-0"
@@ -870,7 +870,7 @@ export default function AssignCodingTestPage() {
 
       {/* ── Sticky bottom CTA ── */}
       {totalPending > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 pointer-events-none">
+        <div className="sticky bottom-0 z-20 pointer-events-none pb-4 pt-2 bg-gradient-to-t from-gray-50 via-gray-50/95 to-transparent">
           <div className="max-w-6xl mx-auto px-5 pb-5 pointer-events-auto">
             <div className="bg-white border border-purple-200 rounded-2xl shadow-2xl shadow-purple-500/15 p-4 flex flex-wrap items-center gap-4">
               <div className="flex-1 min-w-0">

@@ -566,7 +566,7 @@ export default function CodingTestAnalyticsPage() {
     <div className="w-full bg-gray-50">
 
       {/* ── HEADER ─────────────────────────────────────────────────────────── */}
-      <div className="bg-white border-b border-gray-200 shadow-sm sticky top-14 z-30">
+      <div className="dashboard-subheader">
         <div className="w-full px-6 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-gray-500 hover:text-gray-900" onClick={() => router.back()}>

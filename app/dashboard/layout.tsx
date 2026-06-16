@@ -177,13 +177,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <SidebarProvider defaultOpen={true}>
+    <SidebarProvider defaultOpen={true} className="h-svh overflow-hidden">
       <AppSidebar />
-      <SidebarInset className="dashboard-shell text-gray-900">
+      <SidebarInset className="dashboard-shell text-gray-900 h-svh overflow-hidden">
         <CommandPalette />
 
-        {/* ── Top header bar ── */}
-        <header className="dashboard-glass-header sticky top-0 z-40 flex h-14 shrink-0 items-center gap-3 px-4">
+        {/* ── Top header bar (fixed above scroll area) ── */}
+        <header className="dashboard-glass-header z-40 flex h-14 shrink-0 items-center gap-3 px-4">
 
           {/* Left: trigger + breadcrumbs */}
           <SidebarTrigger className="-ml-1 text-muted-foreground hover:text-foreground" />
@@ -347,7 +347,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="flex flex-1 flex-col">
+        <main className="dashboard-scroll flex flex-col">
           {children}
         </main>
 
