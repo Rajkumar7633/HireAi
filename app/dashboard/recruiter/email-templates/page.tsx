@@ -467,7 +467,7 @@ export default function EmailTemplatesPage() {
 
   return (
     <div className="min-h-full bg-gradient-to-b from-violet-50/40 to-background">
-      <div className="border-b bg-white/80 backdrop-blur sticky top-0 z-10">
+      <div className="dashboard-subheader">
         <div className="max-w-7xl mx-auto px-6 py-5 flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">

@@ -17,7 +17,12 @@ export async function POST(
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
   }
 
-  let body: { answers?: unknown[]; tabSwitches?: number }
+  let body: {
+    answers?: unknown[]
+    tabSwitches?: number
+    integrityAudit?: Record<string, unknown>
+    activityLog?: unknown[]
+  }
   try {
     body = await req.json()
   } catch {
@@ -96,6 +101,7 @@ export async function POST(
     const submissionDoc = await TestSubmissionModel.create({
       testId: test._id,
       collegeAssignmentId: assignment._id,
+      applicationId: assignment._id,
       candidateId: userId,
       collegeId: assignment.collegeId,
       answers,
@@ -103,11 +109,12 @@ export async function POST(
       percentage: score,
       status: "completed",
       submittedAt,
-      integrityAudit: {
+      integrityAudit: body.integrityAudit || {
         score: 100,
         summary: "College test submission.",
         flags: [],
-        logs: [],
+        logs: body.activityLog || [],
+        tabSwitches: body.tabSwitches || 0,
       },
       tabSwitches: body.tabSwitches || 0,
     })

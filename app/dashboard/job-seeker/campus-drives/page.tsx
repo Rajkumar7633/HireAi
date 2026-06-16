@@ -72,7 +72,6 @@ export default function CampusDrivesPage() {
   )
 
   const eligible = drives.filter(d => d.eligible && d.status === "active")
-  const notEligible = drives.filter(d => !d.eligible && d.status === "active")
   const completed = drives.filter(d => d.status === "completed")
 
   return (
@@ -91,9 +90,11 @@ export default function CampusDrivesPage() {
 
       {student && (
         <div className="flex flex-wrap gap-3 text-sm">
-          {student.cgpa && <span className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full">CGPA: <strong>{student.cgpa}</strong></span>}
+          {student.cgpa != null && <span className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full">CGPA: <strong>{student.cgpa}</strong></span>}
           {student.department && <span className="px-3 py-1 bg-purple-50 text-purple-700 rounded-full">{student.department}</span>}
           {student.batch && <span className="px-3 py-1 bg-green-50 text-green-700 rounded-full">Batch {student.batch}</span>}
+          {student.currentYear != null && <span className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full">Year {student.currentYear}</span>}
+          {student.semester != null && <span className="px-3 py-1 bg-teal-50 text-teal-700 rounded-full">Sem {student.semester}</span>}
         </div>
       )}
 
@@ -107,22 +108,10 @@ export default function CampusDrivesPage() {
       {eligible.length > 0 && (
         <div>
           <h2 className="text-sm font-semibold text-green-700 flex items-center gap-1.5 mb-3">
-            <CheckCircle2 className="h-4 w-4" /> You are Eligible ({eligible.length})
+            <CheckCircle2 className="h-4 w-4" /> Open for You ({eligible.length})
           </h2>
           <div className="space-y-3">
             {eligible.map(drive => <DriveCard key={drive._id} drive={drive} onApply={applyToDrive} applying={applying} />)}
-          </div>
-        </div>
-      )}
-
-      {/* Not Eligible Drives */}
-      {notEligible.length > 0 && (
-        <div>
-          <h2 className="text-sm font-semibold text-red-600 flex items-center gap-1.5 mb-3">
-            <XCircle className="h-4 w-4" /> Not Eligible ({notEligible.length})
-          </h2>
-          <div className="space-y-3">
-            {notEligible.map(drive => <DriveCard key={drive._id} drive={drive} onApply={applyToDrive} applying={applying} />)}
           </div>
         </div>
       )}
@@ -142,8 +131,10 @@ export default function CampusDrivesPage() {
       {drives.length === 0 && (
         <div className="text-center py-16 text-gray-500">
           <Briefcase className="h-12 w-12 mx-auto mb-4 opacity-30" />
-          <p className="font-medium">No drives yet</p>
-          <p className="text-sm mt-1">Your college hasn't posted any campus drives yet</p>
+          <p className="font-medium">No drives for your profile</p>
+          <p className="text-sm mt-1 max-w-md mx-auto">
+            Drives are filtered by your batch, year, department, and semester. Contact your placement cell if you think something is missing.
+          </p>
         </div>
       )}
     </div>
@@ -184,9 +175,12 @@ function DriveCard({ drive, onApply, applying }: { drive: any; onApply: (id: str
                   ))}
                 </div>
               )}
-              {drive.eligibility?.branches?.length > 0 && (
+              {drive.eligibility && (
                 <div className="flex flex-wrap gap-1 mt-1.5">
-                  {drive.eligibility.branches.map((b: string) => <span key={b} className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{b}</span>)}
+                  {drive.eligibility.batches?.map((b: string) => <span key={b} className="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">Batch {b}</span>)}
+                  {drive.eligibility.years?.map((y: number) => <span key={y} className="text-xs bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded">Year {y}</span>)}
+                  {drive.eligibility.semesters?.map((s: number) => <span key={s} className="text-xs bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded">Sem {s}</span>)}
+                  {drive.eligibility.branches?.map((b: string) => <span key={b} className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{b}</span>)}
                   {drive.eligibility.minCGPA > 0 && <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">CGPA ≥{drive.eligibility.minCGPA}</span>}
                 </div>
               )}

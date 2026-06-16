@@ -14,7 +14,7 @@ import {
   Loader2, ArrowLeft, Code2, Save, Sparkles, Shield, Clock,
   Settings2, CalendarIcon, BookOpen, Zap, CheckCircle2, CheckCircle,
   Globe, Lock, Send, Download, Trophy, Target, FileText,
-  TestTube2, Timer, Layers, ChevronRight, Info, Users, BarChart3
+  TestTube2, Timer, Layers, ChevronRight, Info, Users, BarChart3, Eye
 } from "lucide-react"
 import { CodingTestCreator, type CodingProblem } from "@/components/assessment/CodingTestCreator"
 import { authFetch } from "@/lib/client-auth"
@@ -107,12 +107,16 @@ export default function CreateCodingTestPage() {
   const [availableFrom, setAvailableFrom] = useState("")
   const [availableTo, setAvailableTo] = useState("")
 
-  const [enableProctoring, setEnableProctoring] = useState(false)
+  const [enableProctoring, setEnableProctoring] = useState(true)
+  const [enableObjectDetection, setEnableObjectDetection] = useState(true)
   const [restrictCopyPaste, setRestrictCopyPaste] = useState(true)
   const [detectTabSwitch, setDetectTabSwitch] = useState(true)
-  const [webcamRequired, setWebcamRequired] = useState(false)
+  const [webcamRequired, setWebcamRequired] = useState(true)
+  const [requireFullscreen, setRequireFullscreen] = useState(true)
+  const [enableAudioMonitoring, setEnableAudioMonitoring] = useState(true)
+  const [enablePeriodicSnapshots, setEnablePeriodicSnapshots] = useState(true)
   const [shuffleProblems, setShuffleProblems] = useState(false)
-  const [maxTabSwitches, setMaxTabSwitches] = useState(3)
+  const [maxTabSwitches, setMaxTabSwitches] = useState(2)
 
   const [restrictLanguages, setRestrictLanguages] = useState(false)
   const [allowedLanguages, setAllowedLanguages] = useState<string[]>(["python", "javascript", "java", "cpp", "typescript"])
@@ -201,7 +205,12 @@ export default function CreateCodingTestPage() {
           testCases: p.testCases.map(tc => ({ input: tc.input, expectedOutput: tc.expectedOutput, hidden: tc.hidden, weight: tc.weight })),
           points: p.points, timeLimitMs: p.timeLimitMs, memoryLimitMb: p.memoryLimitMb, correctAnswer: "",
         })),
-        settings: { enableProctoring, restrictCopyPaste, detectTabSwitch, webcamRequired, shuffleProblems, maxTabSwitches, restrictLanguages, allowedLanguages: restrictLanguages ? allowedLanguages : [] },
+        settings: {
+          enableProctoring, enableObjectDetection, restrictCopyPaste, detectTabSwitch,
+          webcamRequired, requireFullscreen, enableAudioMonitoring, enablePeriodicSnapshots,
+          shuffleProblems, maxTabSwitches, restrictLanguages,
+          allowedLanguages: restrictLanguages ? allowedLanguages : [],
+        },
       }
       if (enableSchedule) { payload.availableFrom = availableFrom || null; payload.availableTo = availableTo || null }
       const res = await authFetch("/api/college/tests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
@@ -223,7 +232,7 @@ export default function CreateCodingTestPage() {
   ]
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 overflow-hidden">
+    <div className="flex flex-col h-full min-h-0 bg-gray-50 overflow-hidden">
 
       {/* ── SUCCESS BANNER ─────────────────────────────────────────────────── */}
       {savedTestId && (
@@ -232,12 +241,22 @@ export default function CreateCodingTestPage() {
             <CheckCircle className="h-5 w-5 text-white shrink-0" />
             <div>
               <p className="text-sm font-semibold">Test published successfully!</p>
-              <p className="text-xs text-emerald-100">"{title}" is live. Assign it to your students from Test Center.</p>
+              <p className="text-xs text-emerald-100">"{title}" is live. Assign it to students or view analytics.</p>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <Button size="sm" variant="outline"
               className="h-8 bg-white/10 hover:bg-white/20 border-white/30 text-white text-xs gap-1.5"
+              onClick={() => router.push(`/dashboard/college/tests/${savedTestId}/preview`)}>
+              <Eye className="h-3.5 w-3.5" />Preview Test
+            </Button>
+            <Button size="sm" variant="outline"
+              className="h-8 bg-white/10 hover:bg-white/20 border-white/30 text-white text-xs gap-1.5"
+              onClick={() => router.push(`/dashboard/college/tests/${savedTestId}/analytics`)}>
+              <BarChart3 className="h-3.5 w-3.5" />View Analytics
+            </Button>
+            <Button size="sm"
+              className="h-8 bg-white text-emerald-700 hover:bg-emerald-50 text-xs gap-1.5 font-semibold"
               onClick={() => router.push("/dashboard/college/assign-tests")}>
               <Users className="h-3.5 w-3.5" />Assign to Students
             </Button>
@@ -453,6 +472,10 @@ export default function CreateCodingTestPage() {
                 </div>
                 <div className="space-y-2">
                   {[
+                    { l: "Require Fullscreen", d: "Candidate must enter fullscreen before test", v: requireFullscreen, s: setRequireFullscreen },
+                    { l: "Voice / Audio monitoring", d: "Detect speech and background noise via mic", v: enableAudioMonitoring, s: setEnableAudioMonitoring },
+                    { l: "Periodic snapshots", d: "Capture webcam stills every 20s for review", v: enablePeriodicSnapshots, s: setEnablePeriodicSnapshots },
+                    { l: "Phone/Object AI (COCO-SSD)", d: "Detect phones, books, and extra persons via camera", v: enableObjectDetection, s: setEnableObjectDetection },
                     { l: "Restrict Copy-Paste", d: "Block clipboard in editor", v: restrictCopyPaste, s: setRestrictCopyPaste },
                     { l: "Tab Switch Detection", d: "Warn when leaving test window", v: detectTabSwitch, s: setDetectTabSwitch },
                     { l: "Webcam Required", d: "Candidate must enable camera", v: webcamRequired, s: setWebcamRequired },

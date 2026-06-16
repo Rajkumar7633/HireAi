@@ -58,7 +58,7 @@ export default function SupportRequestsPage() {
   const open = requests.filter(r => r.status === "open").length
   const inProgress = requests.filter(r => r.status === "in_progress").length
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-purple-600" /></div>
+  if (loading) return <div className="dashboard-loading"><Loader2 className="h-8 w-8 animate-spin text-purple-600" /></div>
 
   return (
     <div className="container mx-auto p-6 max-w-4xl space-y-6">

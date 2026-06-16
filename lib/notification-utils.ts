@@ -192,15 +192,26 @@ export function getNotificationLink(
     if (role === "recruiter" && entityId) {
       return `/dashboard/recruiter/tests/${entityId}/assign`
     }
+    if (entityType === "college_assignment" && entityId) {
+      return `/dashboard/job-seeker/tests/${entityId}?source=college`
+    }
+    if ((role === "college" || role === "college_admin") && entityId && entityType === "test") {
+      return `/dashboard/college/assign-tests`
+    }
     if (entityId) return `/dashboard/job-seeker/tests/${entityId}`
     return role === "recruiter"
       ? "/dashboard/recruiter/tests"
-      : "/dashboard/job-seeker/tests"
+      : role === "college" || role === "college_admin"
+        ? "/dashboard/college/assign-tests"
+        : "/dashboard/job-seeker/tests"
   }
 
   if (type === "test_completed") {
     if (role === "recruiter" && entityId) {
       return `/dashboard/recruiter/tests/${entityId}/analytics`
+    }
+    if ((role === "college" || role === "college_admin") && entityId) {
+      return `/dashboard/college/tests/${entityId}/analytics`
     }
     if (entityId) return `/dashboard/job-seeker/tests/${entityId}`
     return role === "recruiter"

@@ -6,6 +6,7 @@ import CampusDrive from "@/models/CampusDrive"
 import CampusDriveApplication from "@/models/CampusDriveApplication"
 import User from "@/models/User"
 import Notification from "@/models/Notification"
+import { studentMatchesDriveQuery, type CampusDriveStudent } from "@/lib/campus-drive-eligibility"
 
 export async function GET(req: NextRequest) {
   try {
@@ -72,6 +73,7 @@ export async function POST(req: NextRequest) {
         branches: body.eligibility?.branches || [],
         years: body.eligibility?.years || [],
         batches: body.eligibility?.batches || [],
+        semesters: body.eligibility?.semesters || [],
         skills: body.eligibility?.skills || [],
         backlogsAllowed: body.eligibility?.backlogsAllowed || false,
       },
@@ -105,16 +107,13 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function findEligibleStudents(collegeId: string, drive: any) {
-  const studentQuery: any = {
+export async function findEligibleStudents(collegeId: string, drive: { eligibility?: Record<string, unknown> }) {
+  const students = await User.find({
     onboardedByCollege: collegeId,
     role: "job_seeker",
-  }
+  })
+    .select("_id name email department batch cgpa currentYear semester skills backlogs placementStatus")
+    .lean()
 
-  const e = drive.eligibility
-  if (e?.minCGPA > 0) studentQuery.cgpa = { $gte: e.minCGPA }
-  if (e?.branches?.length > 0) studentQuery.department = { $in: e.branches }
-  if (e?.batches?.length > 0) studentQuery.batch = { $in: e.batches }
-
-  return await (User as any).find(studentQuery).select("_id name email").lean()
+  return students.filter((s) => studentMatchesDriveQuery(s as CampusDriveStudent, drive))
 }

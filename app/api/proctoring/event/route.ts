@@ -44,6 +44,14 @@ export async function POST(req: NextRequest) {
         message: message || type,
         at: at || new Date().toISOString(),
       })
+      io.to(`test:${testId}:colleges`).emit("test:proctor-event", {
+        testId,
+        applicationId: assessmentId,
+        candidateId,
+        type,
+        message: message || type,
+        at: at || new Date().toISOString(),
+      })
     }
 
     return NextResponse.json({ ok: true }, { status: 201 })

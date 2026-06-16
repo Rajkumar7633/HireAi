@@ -445,7 +445,7 @@ export default function RecruiterAIMatchingPage() {
   return (
     <div className="min-h-full bg-gradient-to-b from-slate-50 via-violet-50/30 to-background">
       {/* Hero */}
-      <div className="border-b bg-white/90 backdrop-blur sticky top-0 z-20">
+      <div className="dashboard-subheader">
         <div className="max-w-[1600px] mx-auto px-6 py-5">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>

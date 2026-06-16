@@ -20,7 +20,7 @@ import { useToast } from "@/hooks/use-toast"
 import {
   Loader2, ClipboardList, Users, Code2, FileText, Calendar,
   Plus, Trash2, CheckCircle2, Clock, Search, Send, BarChart3,
-  ListOrdered, Zap, Layers,
+  ListOrdered, Zap, Layers, Eye,
 } from "lucide-react"
 import { format } from "date-fns"
 import Link from "next/link"
@@ -413,10 +413,34 @@ export default function AssignTestsPage() {
                         </Button>
                       </div>
                     </CardHeader>
-                    <CardContent className="flex gap-2">
+                    <CardContent className="flex flex-col gap-2">
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" className="flex-1" asChild>
+                          <Link href={`/dashboard/college/tests/${t._id}/preview`}>
+                            <Eye className="h-3.5 w-3.5 mr-1" /> Preview
+                          </Link>
+                        </Button>
+                        <Button size="sm" variant="outline" className="flex-1" asChild>
+                          <Link href={`/dashboard/college/tests/${t._id}/analytics`}>
+                            <BarChart3 className="h-3.5 w-3.5 mr-1" /> Analytics
+                          </Link>
+                        </Button>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" className="flex-1" asChild>
+                          <Link href={`/dashboard/college/tests/${t._id}/edit`}>
+                            Edit
+                          </Link>
+                        </Button>
+                        <Button size="sm" variant="outline" className="flex-1" asChild>
+                          <Link href={`/dashboard/college/tests/${t._id}/results`}>
+                            Results
+                          </Link>
+                        </Button>
+                      </div>
                       <Button
                         size="sm"
-                        className="bg-purple-600 hover:bg-purple-700 flex-1"
+                        className="bg-purple-600 hover:bg-purple-700 w-full"
                         onClick={() => {
                           setSelectedTest(t)
                           setDialogOpen(true)
@@ -505,6 +529,19 @@ export default function AssignTestsPage() {
                         style={{ width: `${pct}%` }}
                       />
                     </div>
+                  </div>
+
+                  <div className="flex gap-2 pt-1">
+                    <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" asChild>
+                      <Link href={`/dashboard/college/tests/${a.testId}/analytics`}>
+                        <BarChart3 className="h-3 w-3 mr-1" /> Analytics
+                      </Link>
+                    </Button>
+                    <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" asChild>
+                      <Link href={`/dashboard/college/tests/${a.testId}/preview`}>
+                        <Eye className="h-3 w-3 mr-1" /> Preview
+                      </Link>
+                    </Button>
                   </div>
                 </CardContent>
               </Card>

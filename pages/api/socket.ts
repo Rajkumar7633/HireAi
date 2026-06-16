@@ -63,6 +63,9 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         if (role === "recruiter") {
           socket.join(`test:${testId}:recruiters`)
         }
+        if (role === "college" || role === "college_admin") {
+          socket.join(`test:${testId}:colleges`)
+        }
       })
 
       socket.on("test:monitor-leave", ({ testId }: { testId?: string }) => {
@@ -70,13 +73,19 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         if (!tid) return
         socket.leave(`test:${tid}`)
         socket.leave(`test:${tid}:recruiters`)
+        socket.leave(`test:${tid}:colleges`)
       })
 
       socket.on("test:proctor-event", (payload: Record<string, unknown>) => {
         const testId = payload.testId as string | undefined
         if (!testId) return
         io.to(`test:${testId}:recruiters`).emit("test:proctor-event", payload)
+        io.to(`test:${testId}:colleges`).emit("test:proctor-event", payload)
         io.to(`test:${testId}:recruiters`).emit("test:live-update", {
+          type: "proctor",
+          ...payload,
+        })
+        io.to(`test:${testId}:colleges`).emit("test:live-update", {
           type: "proctor",
           ...payload,
         })
@@ -86,7 +95,12 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         const testId = payload.testId as string | undefined
         if (!testId) return
         io.to(`test:${testId}:recruiters`).emit("test:submission", payload)
+        io.to(`test:${testId}:colleges`).emit("test:submission", payload)
         io.to(`test:${testId}:recruiters`).emit("test:live-update", {
+          type: "submission",
+          ...payload,
+        })
+        io.to(`test:${testId}:colleges`).emit("test:live-update", {
           type: "submission",
           ...payload,
         })

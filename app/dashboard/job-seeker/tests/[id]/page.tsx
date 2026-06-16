@@ -145,13 +145,15 @@ export default function TakeTestPage() {
   }, [appId])
 
   const beginTest = async () => {
-    if (!isCollegeMode) {
-      try {
+    try {
+      if (isCollegeMode) {
+        await authFetch(`/api/job-seeker/college-tests/${appId}/start`, { method: "POST" })
+      } else {
         await authFetch(`/api/applications/${appId}/start-test`, { method: "POST" })
-        setApp(prev => prev ? { ...prev, status: "in_progress" } : prev)
-      } catch {
-        /* allow local start if API unreachable */
       }
+      setApp(prev => prev ? { ...prev, status: "in_progress" } : prev)
+    } catch {
+      /* allow local start if API unreachable */
     }
     if (pendingDurationRef.current !== null) {
       setTimeLeft(pendingDurationRef.current)
@@ -354,6 +356,8 @@ export default function TakeTestPage() {
         title: testPayload.title || assignment.testTitle || "College Assessment",
         description: testPayload.description,
         durationMinutes,
+        passingScore: testPayload.passingScore ?? 60,
+        settings: testPayload.settings,
         questions: (testPayload.questions || []).map((q: Question, i: number) => ({
           ...q,
           _id: q._id?.toString?.() || q._id || String(i),

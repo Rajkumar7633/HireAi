@@ -94,6 +94,7 @@ export async function GET(req: NextRequest) {
         (c: { studentId?: string }) => String(c.studentId) === userId,
       )
       const completed = completion?.status === "completed"
+      const inProgress = completion?.status === "in_progress"
       return {
         _id: a.testId,
         testId: a.testId,
@@ -108,7 +109,7 @@ export async function GET(req: NextRequest) {
         applicationId: null,
         assignmentId: a._id,
         dueDate: a.dueDate,
-        status: completed ? "completed" : "pending",
+        status: completed ? "completed" : inProgress ? "in_progress" : "pending",
         score: completion?.score ?? null,
         completedAt: completion?.completedAt || null,
         assignedAt: a.assignedAt,

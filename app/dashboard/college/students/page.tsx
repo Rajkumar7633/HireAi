@@ -7,13 +7,16 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import {
   Users, UserPlus, Search, GraduationCap, Building2,
   CheckCircle2, Clock, Download, Upload, ChevronDown,
-  Loader2, Mail, Phone, BookOpen, Award, Pencil, X, Eye
+  Loader2, Mail, Phone, BookOpen, Award, Pencil, X, Eye,
+  Link2, Copy, ClipboardList, UserCheck, UserX, RefreshCw,
 } from "lucide-react"
 
 interface Student {
@@ -35,6 +38,28 @@ interface Student {
   createdAt: string
 }
 
+interface StudentApplication {
+  _id: string
+  name: string
+  email: string
+  phone?: string
+  rollNumber?: string
+  department?: string
+  batch?: string
+  cgpa?: number
+  marks10th?: number
+  marks12th?: number
+  backlogs?: number
+  skills: string[]
+  linkedinUrl?: string
+  githubUrl?: string
+  additionalInfo?: string
+  status: "pending" | "approved" | "rejected"
+  submittedAt?: string
+  createdAt: string
+  rejectionReason?: string
+}
+
 const DEPARTMENTS = ["Computer Science", "Electronics", "Mechanical", "Civil", "Chemical", "MBA", "MCA", "Other"]
 
 export default function CollegeStudentsPage() {
@@ -52,13 +77,136 @@ export default function CollegeStudentsPage() {
   const [collegeName, setCollegeName] = useState("")
   const csvRef = useRef<HTMLInputElement>(null)
 
+  const [activeTab, setActiveTab] = useState<"students" | "applications">("students")
+  const [shareUrl, setShareUrl] = useState("")
+  const [portalLoading, setPortalLoading] = useState(false)
+  const [applications, setApplications] = useState<StudentApplication[]>([])
+  const [pendingCount, setPendingCount] = useState(0)
+  const [appFilter, setAppFilter] = useState<"pending" | "all">("pending")
+  const [previewApp, setPreviewApp] = useState<StudentApplication | null>(null)
+  const [rejectApp, setRejectApp] = useState<StudentApplication | null>(null)
+  const [rejectReason, setRejectReason] = useState("")
+  const [reviewing, setReviewing] = useState(false)
+
   const [form, setForm] = useState({
     name: "", email: "", phone: "", department: "", batch: "",
     skills: "", cgpa: "", marks10th: "", marks12th: "", backlogs: "0",
     generatePassword: true, customPassword: "",
   })
 
-  useEffect(() => { fetchStudents() }, [])
+  useEffect(() => { fetchStudents(); fetchPortal(); fetchApplications() }, [])
+
+  const fetchPortal = async () => {
+    try {
+      const res = await fetch("/api/college/registration-portal", { credentials: "include" })
+      if (res.ok) {
+        const data = await res.json()
+        setShareUrl(data.shareUrl || "")
+      }
+    } catch {}
+  }
+
+  const fetchApplications = async () => {
+    try {
+      const res = await fetch("/api/college/student-applications?status=all", { credentials: "include" })
+      if (res.ok) {
+        const data = await res.json()
+        setApplications(data.applications || [])
+        setPendingCount(data.pendingCount ?? 0)
+      }
+    } catch {}
+  }
+
+  const copyShareLink = async () => {
+    if (!shareUrl) return
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+      toast({ title: "Link copied", description: "Share this URL with students to register." })
+    } catch {
+      toast({ title: "Copy failed", description: shareUrl, variant: "destructive" })
+    }
+  }
+
+  const regenerateLink = async () => {
+    setPortalLoading(true)
+    try {
+      const res = await fetch("/api/college/registration-portal", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ regenerate: true }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setShareUrl(data.shareUrl)
+        toast({ title: "New link generated", description: "Previous links will no longer work." })
+      } else {
+        toast({ title: "Error", description: data.message, variant: "destructive" })
+      }
+    } catch {
+      toast({ title: "Network error", variant: "destructive" })
+    } finally {
+      setPortalLoading(false)
+    }
+  }
+
+  const handleApprove = async (app: StudentApplication) => {
+    setReviewing(true)
+    try {
+      const res = await fetch(`/api/college/student-applications/${app._id}`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "approve" }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast({
+          title: "Student approved",
+          description: data.emailSent
+            ? `${app.name} onboarded — welcome email sent.`
+            : `${app.name} onboarded — share password manually.`,
+        })
+        if (data.temporaryPassword) setTempPass(data.temporaryPassword)
+        setPreviewApp(null)
+        fetchStudents()
+        fetchApplications()
+      } else {
+        toast({ title: "Error", description: data.message, variant: "destructive" })
+      }
+    } catch {
+      toast({ title: "Network error", variant: "destructive" })
+    } finally {
+      setReviewing(false)
+    }
+  }
+
+  const handleReject = async () => {
+    if (!rejectApp) return
+    setReviewing(true)
+    try {
+      const res = await fetch(`/api/college/student-applications/${rejectApp._id}`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reject", reason: rejectReason }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast({ title: "Application rejected", description: `${rejectApp.name} was not approved.` })
+        setRejectApp(null)
+        setRejectReason("")
+        setPreviewApp(null)
+        fetchApplications()
+      } else {
+        toast({ title: "Error", description: data.message, variant: "destructive" })
+      }
+    } catch {
+      toast({ title: "Network error", variant: "destructive" })
+    } finally {
+      setReviewing(false)
+    }
+  }
 
   useEffect(() => {
     let list = students
@@ -207,6 +355,9 @@ export default function CollegeStudentsPage() {
   const placementRate = stats.total ? Math.round(((stats.placed + stats.offers) / stats.total) * 100) : 0
 
   const uniqueDepts = Array.from(new Set(students.map(s => s.department).filter(Boolean))) as string[]
+  const filteredApps = appFilter === "pending"
+    ? applications.filter(a => a.status === "pending")
+    : applications
 
   if (loading) return (
     <div className="flex items-center justify-center h-96">
@@ -308,6 +459,56 @@ export default function CollegeStudentsPage() {
           </Dialog>
         </div>
       </div>
+
+      {/* Shareable registration link */}
+      <Card className="border-blue-200 bg-gradient-to-r from-blue-50/80 to-purple-50/80">
+        <CardContent className="py-4 flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
+          <div className="flex items-start gap-3">
+            <div className="rounded-lg bg-blue-600 p-2 text-white shrink-0">
+              <Link2 className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="font-semibold">Shareable Student Registration Form</p>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Students fill details here → you review & approve → they get HireAI login by email
+              </p>
+              {shareUrl && (
+                <code className="text-xs bg-white/80 border rounded px-2 py-1 mt-2 block break-all max-w-xl">{shareUrl}</code>
+              )}
+            </div>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <Button variant="outline" size="sm" onClick={copyShareLink} disabled={!shareUrl}>
+              <Copy className="h-4 w-4 mr-1" /> Copy Link
+            </Button>
+            <Button variant="outline" size="sm" onClick={regenerateLink} disabled={portalLoading}>
+              {portalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            </Button>
+            {shareUrl && (
+              <Button size="sm" asChild>
+                <Link href={shareUrl.includes("/register/college/") ? shareUrl.slice(shareUrl.indexOf("/register/college/")) : shareUrl} target="_blank">
+                  <Eye className="h-4 w-4 mr-1" /> Preview
+                </Link>
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Tabs value={activeTab} onValueChange={v => setActiveTab(v as "students" | "applications")}>
+        <TabsList>
+          <TabsTrigger value="students" className="gap-2">
+            <Users className="h-4 w-4" /> Registered Students
+          </TabsTrigger>
+          <TabsTrigger value="applications" className="gap-2">
+            <ClipboardList className="h-4 w-4" /> Pending Approvals
+            {pendingCount > 0 && (
+              <Badge className="ml-1 h-5 min-w-5 px-1 bg-amber-500">{pendingCount}</Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="students" className="space-y-6 mt-6">
 
       {/* Temporary password alert */}
       {tempPass && (
@@ -469,6 +670,90 @@ export default function CollegeStudentsPage() {
         </div>
       )}
 
+        </TabsContent>
+
+        <TabsContent value="applications" className="space-y-4 mt-6">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <p className="text-sm text-muted-foreground">
+              Review student submissions before creating their job seeker accounts
+            </p>
+            <Select value={appFilter} onValueChange={v => setAppFilter(v as "pending" | "all")}>
+              <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pending">Pending only</SelectItem>
+                <SelectItem value="all">All applications</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {filteredApps.length === 0 ? (
+            <Card>
+              <CardContent className="py-16 text-center">
+                <ClipboardList className="h-14 w-14 text-muted-foreground mx-auto mb-4 opacity-40" />
+                <h3 className="text-lg font-semibold mb-2">No pending applications</h3>
+                <p className="text-muted-foreground mb-4">Share the registration link with students to collect applications.</p>
+                <Button variant="outline" onClick={copyShareLink} disabled={!shareUrl}>
+                  <Copy className="h-4 w-4 mr-2" /> Copy Registration Link
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {filteredApps.map(app => (
+                <Card key={app._id} className="hover:shadow-md transition-shadow">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <CardTitle className="text-base">{app.name}</CardTitle>
+                        <CardDescription className="flex items-center gap-1 mt-0.5">
+                          <Mail className="h-3 w-3" /> {app.email}
+                        </CardDescription>
+                      </div>
+                      <Badge variant={app.status === "pending" ? "secondary" : app.status === "approved" ? "default" : "destructive"}>
+                        {app.status === "pending" ? "Pending" : app.status === "approved" ? "Approved" : "Rejected"}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                      {app.department && <span className="flex items-center gap-1"><BookOpen className="h-3 w-3" />{app.department}</span>}
+                      {app.batch && <span>Batch {app.batch}</span>}
+                      {app.cgpa != null && <span>CGPA {app.cgpa}</span>}
+                    </div>
+                    {app.skills?.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {app.skills.slice(0, 4).map((sk, i) => (
+                          <Badge key={i} variant="secondary" className="text-xs">{sk}</Badge>
+                        ))}
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      Submitted {new Date(app.submittedAt || app.createdAt).toLocaleDateString()}
+                    </p>
+                    <div className="flex gap-2 pt-1">
+                      <Button variant="outline" size="sm" className="flex-1" onClick={() => setPreviewApp(app)}>
+                        <Eye className="h-3 w-3 mr-1" /> Preview
+                      </Button>
+                      {app.status === "pending" && (
+                        <>
+                          <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleApprove(app)} disabled={reviewing}>
+                            <UserCheck className="h-3 w-3" />
+                          </Button>
+                          <Button size="sm" variant="destructive" onClick={() => { setRejectApp(app); setRejectReason("") }} disabled={reviewing}>
+                            <UserX className="h-3 w-3" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+
       {/* Edit / placement details dialog */}
       {editStudent && (
         <PlacementDialog
@@ -477,7 +762,108 @@ export default function CollegeStudentsPage() {
           onClose={() => setEditStudent(null)}
         />
       )}
+
+      {previewApp && (
+        <ApplicationPreviewDialog
+          app={previewApp}
+          reviewing={reviewing}
+          onClose={() => setPreviewApp(null)}
+          onApprove={() => handleApprove(previewApp)}
+          onReject={() => { setRejectApp(previewApp); setRejectReason("") }}
+        />
+      )}
+
+      {rejectApp && (
+        <Dialog open onOpenChange={() => setRejectApp(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Reject — {rejectApp.name}</DialogTitle>
+              <DialogDescription>The student will not receive a HireAI account.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <Label>Reason (optional)</Label>
+              <Textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="e.g. Invalid roll number, not enrolled in this batch..." />
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setRejectApp(null)}>Cancel</Button>
+              <Button variant="destructive" onClick={handleReject} disabled={reviewing}>
+                {reviewing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <UserX className="h-4 w-4 mr-2" />}
+                Reject Application
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
+  )
+}
+
+function ApplicationPreviewDialog({
+  app, reviewing, onClose, onApprove, onReject,
+}: {
+  app: StudentApplication
+  reviewing: boolean
+  onClose: () => void
+  onApprove: () => void
+  onReject: () => void
+}) {
+  const rows: { label: string; value?: string | number | null }[] = [
+    { label: "Email", value: app.email },
+    { label: "Phone", value: app.phone },
+    { label: "Roll Number", value: app.rollNumber },
+    { label: "Department", value: app.department },
+    { label: "Batch", value: app.batch },
+    { label: "CGPA", value: app.cgpa },
+    { label: "10th %", value: app.marks10th },
+    { label: "12th %", value: app.marks12th },
+    { label: "Backlogs", value: app.backlogs },
+    { label: "LinkedIn", value: app.linkedinUrl },
+    { label: "GitHub", value: app.githubUrl },
+  ]
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{app.name}</DialogTitle>
+          <DialogDescription>Review all submitted details before approval</DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-3 text-sm mt-2">
+          {rows.map(r => r.value != null && r.value !== "" && (
+            <div key={r.label}>
+              <p className="text-muted-foreground text-xs">{r.label}</p>
+              <p className="font-medium break-all">{r.value}</p>
+            </div>
+          ))}
+        </div>
+        {app.skills?.length > 0 && (
+          <div>
+            <p className="text-muted-foreground text-xs mb-1">Skills</p>
+            <div className="flex flex-wrap gap-1">
+              {app.skills.map((s, i) => <Badge key={i} variant="secondary">{s}</Badge>)}
+            </div>
+          </div>
+        )}
+        {app.additionalInfo && (
+          <div>
+            <p className="text-muted-foreground text-xs mb-1">Additional info</p>
+            <p className="text-sm bg-muted/50 rounded p-3">{app.additionalInfo}</p>
+          </div>
+        )}
+        {app.status === "pending" && (
+          <DialogFooter className="gap-2 flex-col sm:flex-row">
+            <Button variant="destructive" onClick={onReject} disabled={reviewing} className="sm:mr-auto">
+              <UserX className="h-4 w-4 mr-2" /> Reject
+            </Button>
+            <Button variant="outline" onClick={onClose}>Close</Button>
+            <Button onClick={onApprove} disabled={reviewing} className="bg-green-600 hover:bg-green-700">
+              {reviewing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <UserCheck className="h-4 w-4 mr-2" />}
+              Approve & Create Account
+            </Button>
+          </DialogFooter>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
 

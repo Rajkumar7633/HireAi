@@ -95,7 +95,7 @@ export default function DriveDetailPage() {
     URL.revokeObjectURL(url)
   }
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-purple-600" /></div>
+  if (loading) return <div className="dashboard-loading"><Loader2 className="h-8 w-8 animate-spin text-purple-600" /></div>
   if (!drive) return <div className="p-8 text-center text-gray-500">Drive not found</div>
 
   const statusCounts = applicants.reduce((acc: any, a) => { acc[a.status] = (acc[a.status]||0)+1; return acc }, {})

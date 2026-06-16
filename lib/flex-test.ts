@@ -25,6 +25,7 @@ export function sanitizeTestForCandidate(test: Record<string, unknown>) {
     ...test,
     durationMinutes,
     timeLimit: (test.timeLimit as number) ?? durationMinutes,
+    settings: test.settings || {},
     questions: ((test.questions as unknown[]) || []).map((q: any, i: number) => {
       const { correctAnswer, testCases, ...safeQuestion } = q
       return {

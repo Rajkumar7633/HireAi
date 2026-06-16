@@ -372,10 +372,10 @@ export default function RecruiterCampusDrivesPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    )
+    <div className="flex items-center justify-center h-96">
+      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+    </div>
+  )
   }
 
   const stats = data?.stats
@@ -384,11 +384,11 @@ export default function RecruiterCampusDrivesPage() {
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <GraduationCap className="h-8 w-8 text-purple-600" />
+      <div>
+        <h1 className="text-3xl font-bold flex items-center gap-2">
+          <GraduationCap className="h-8 w-8 text-purple-600" />
             Campus Drive Hub
-          </h1>
+        </h1>
           <p className="text-muted-foreground mt-1">
             Browse colleges, send drive proposals, and manage invitations from placement cells
           </p>
@@ -714,9 +714,9 @@ export default function RecruiterCampusDrivesPage() {
           </div>
 
           {filteredReceived.length === 0 ? (
-            <Card>
-              <CardContent className="py-16 text-center">
-                <GraduationCap className="h-14 w-14 text-muted-foreground mx-auto mb-4 opacity-40" />
+        <Card>
+          <CardContent className="py-16 text-center">
+            <GraduationCap className="h-14 w-14 text-muted-foreground mx-auto mb-4 opacity-40" />
                 <h3 className="text-lg font-semibold">No invitations yet</h3>
                 <p className="text-muted-foreground text-sm mt-1">
                   Colleges will invite you here, or browse colleges to send a proposal.
@@ -775,9 +775,9 @@ export default function RecruiterCampusDrivesPage() {
               <CardContent className="py-16 text-center">
                 <Handshake className="h-14 w-14 text-muted-foreground mx-auto mb-4 opacity-40" />
                 <p className="text-muted-foreground">Accept invitations to build active partnerships</p>
-              </CardContent>
-            </Card>
-          ) : (
+          </CardContent>
+        </Card>
+      ) : (
             <div className="grid md:grid-cols-2 gap-4">
               {(data?.partnerships || []).map((p: any) => (
                 <Card key={p._id}>
@@ -917,12 +917,12 @@ function InviteCard({
   const isPending = invite.status === "pending"
   return (
     <Card className={isPending ? "border-amber-200 bg-amber-50/30" : ""}>
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <CardTitle className="text-lg">{invite.driveTitle}</CardTitle>
-            <CardDescription className="flex items-center gap-1 mt-1">
-              <Building2 className="h-4 w-4" />
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <CardTitle className="text-lg">{invite.driveTitle}</CardTitle>
+                        <CardDescription className="flex items-center gap-1 mt-1">
+                          <Building2 className="h-4 w-4" />
               {invite.collegeName || invite.collegeId?.collegeName}
               {isSent && (
                 <Badge variant="outline" className="ml-2 text-xs">
@@ -934,20 +934,20 @@ function InviteCard({
                   College invited you
                 </Badge>
               )}
-            </CardDescription>
-          </div>
-          {statusBadge(invite.status)}
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <Calendar className="h-4 w-4" />
-            {format(new Date(invite.driveDate), "MMMM dd, yyyy")}
-          </span>
+                        </CardDescription>
+                      </div>
+                      {statusBadge(invite.status)}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Calendar className="h-4 w-4" />
+                        {format(new Date(invite.driveDate), "MMMM dd, yyyy")}
+                      </span>
           {invite.roles?.length > 0 && (
-            <span className="flex items-center gap-1">
-              <Users className="h-4 w-4" />
+                        <span className="flex items-center gap-1">
+                          <Users className="h-4 w-4" />
               {invite.roles.join(", ")}
             </span>
           )}
@@ -961,13 +961,13 @@ function InviteCard({
             <span className="flex items-center gap-1">
               <MapPin className="h-4 w-4" />
               {invite.location}
-            </span>
-          )}
+                        </span>
+                      )}
           <span className="text-xs">
             {formatDistanceToNow(new Date(invite.createdAt), { addSuffix: true })}
           </span>
-        </div>
-        {invite.description && (
+                    </div>
+                    {invite.description && (
           <p className="text-sm bg-white rounded-lg p-3 border">{invite.description}</p>
         )}
         <InvitePipelineProgress invite={invite} />
@@ -979,9 +979,9 @@ function InviteCard({
         )}
         {showActions && !isSent && onAccept && onDecline && (
           <div className="flex gap-2">
-            <Button
+                      <Button
               className="bg-green-600 hover:bg-green-700"
-              disabled={updating === invite._id}
+                        disabled={updating === invite._id}
               onClick={onAccept}
             >
               {updating === invite._id ? (
@@ -990,16 +990,16 @@ function InviteCard({
                 <CheckCircle2 className="h-4 w-4 mr-2" />
               )}
               Accept invitation
-            </Button>
-            <Button
-              variant="outline"
+                      </Button>
+                      <Button
+                        variant="outline"
               className="border-red-300 text-red-600"
-              disabled={updating === invite._id}
+                        disabled={updating === invite._id}
               onClick={onDecline}
-            >
-              <X className="h-4 w-4 mr-2" /> Decline
-            </Button>
-          </div>
+                      >
+                        <X className="h-4 w-4 mr-2" /> Decline
+                      </Button>
+                    </div>
         )}
         {showActions && isSent && onCancel && (
           <Button
@@ -1012,7 +1012,7 @@ function InviteCard({
             Withdraw proposal
           </Button>
         )}
-      </CardContent>
-    </Card>
+                  </CardContent>
+                </Card>
   )
 }

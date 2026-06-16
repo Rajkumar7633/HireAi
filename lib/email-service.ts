@@ -228,6 +228,17 @@ export async function sendInterviewEmail({ to, subject, template, data }: {
 }
 
 export async function sendEmail(options: SendEmailOptions) {
+  const host = process.env.SMTP_HOST || process.env.EMAIL_SERVICE_HOST
+  const user = process.env.SMTP_USER || process.env.EMAIL_SERVICE_USER
+  const pass = process.env.SMTP_PASS || process.env.EMAIL_SERVICE_PASS
+
+  if (!host || !user || !pass) {
+    console.warn("[email] SMTP not configured. Logging email instead of sending.")
+    console.warn("[email] To:", options.to)
+    console.warn("[email] Subject:", options.subject)
+    return { messageId: "dev-logged", accepted: [options.to] }
+  }
+
   try {
     const mailOptions = {
       from: process.env.SMTP_FROM || process.env.SMTP_USER,
@@ -235,14 +246,14 @@ export async function sendEmail(options: SendEmailOptions) {
       subject: options.subject,
       html: options.html,
       text: options.text,
-      attachments: options.attachments
-    };
+      attachments: options.attachments,
+    }
 
-    const result = await getTransporter().sendMail(mailOptions);
-    console.log('Email sent successfully:', result.messageId);
-    return result;
+    const result = await getTransporter().sendMail(mailOptions)
+    console.log("Email sent successfully:", result.messageId)
+    return result
   } catch (error) {
-    console.error('Error sending email:', error);
-    throw error;
+    console.error("Error sending email:", error)
+    throw error
   }
 }

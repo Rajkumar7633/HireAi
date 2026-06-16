@@ -51,18 +51,24 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     if (!isLoading && !session) router.push("/login");
   }, [session, isLoading, router]);
 
-  // Force light theme on all dashboard pages
+  // Force light theme on all dashboard pages + lock window scroll (main column scrolls only)
   useEffect(() => {
     try {
       const apply = () => {
+        document.documentElement.classList.add("dashboard-route");
         document.documentElement.classList.remove("dark");
         document.documentElement.setAttribute("data-theme", "light");
         document.body.style.backgroundColor = "#ffffff";
+        document.body.style.overflow = "hidden";
         document.body.classList.remove("dark");
       };
       apply();
       const id = setTimeout(apply, 0);
-      return () => clearTimeout(id);
+      return () => {
+        clearTimeout(id);
+        document.documentElement.classList.remove("dashboard-route");
+        document.body.style.overflow = "";
+      };
     } catch {}
   }, [pathname]);
 
@@ -177,9 +183,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <SidebarProvider defaultOpen={true} className="h-svh overflow-hidden">
+    <SidebarProvider defaultOpen={true}>
       <AppSidebar />
-      <SidebarInset className="dashboard-shell text-gray-900 h-svh overflow-hidden">
+      <SidebarInset className="dashboard-shell text-gray-900 h-svh max-h-svh overflow-hidden">
         <CommandPalette />
 
         {/* ── Top header bar (fixed above scroll area) ── */}
@@ -352,6 +358,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         </main>
 
         <style jsx global>{`
+          html.dashboard-route, html.dashboard-route body {
+            overflow: hidden !important;
+            height: 100%;
+          }
           html, body { background-color: #f8fafc !important; color: #111827; }
         `}</style>
       </SidebarInset>

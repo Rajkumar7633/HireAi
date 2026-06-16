@@ -120,7 +120,7 @@
   /* Dashboard shell utilities */
   @layer components {
     .dashboard-shell {
-      @apply relative flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50/90;
+      @apply relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-slate-50/90;
     }
 
     .dashboard-shell::before {
@@ -133,20 +133,52 @@
     }
 
     .dashboard-scroll {
-      @apply flex-1 min-h-0 overflow-y-auto overflow-x-hidden;
+      @apply flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden;
+    }
+
+    /* Keep page content inside the main column (never bleed over sidebar) */
+    .dashboard-scroll > * {
+      @apply min-w-0 max-w-full;
+    }
+
+    .dashboard-scroll .h-screen {
+      height: 100% !important;
+      max-height: 100%;
+    }
+
+    .dashboard-scroll .min-h-screen {
+      min-height: 100% !important;
+    }
+
+    .dashboard-scroll .sticky[class*="top-14"] {
+      top: 0 !important;
+    }
+
+    .dashboard-scroll .sticky[class*="top-0"] {
+      top: 0 !important;
+      z-index: 10 !important;
+    }
+
+    /* Never let in-page sticky bars sit above the app sidebar (z-30) */
+    .dashboard-scroll .sticky,
+    .dashboard-scroll [class*="sticky"] {
+      z-index: 10 !important;
     }
 
     .dashboard-page {
-      @apply w-full px-4 py-5 sm:px-6 sm:py-6 space-y-5 lg:space-y-6;
+      @apply w-full max-w-full px-4 py-5 sm:px-6 sm:py-6 space-y-5 lg:space-y-6;
     }
 
-  /* Sticky page sub-header — stays inside main scroll, below dashboard header */
     .dashboard-subheader {
       @apply sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-gray-200 shadow-sm;
     }
 
     .dashboard-glass-header {
       @apply shrink-0 bg-white/95 backdrop-blur-xl border-b border-slate-200/80 shadow-sm;
+    }
+
+    .dashboard-loading {
+      @apply flex min-h-[50vh] flex-1 items-center justify-center;
     }
   }
 

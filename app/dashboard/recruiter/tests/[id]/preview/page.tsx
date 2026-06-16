@@ -133,7 +133,7 @@ export default function TestPreviewPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* ── Top bar ─────────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-20 bg-white border-b shadow-sm px-6 py-3 flex items-center justify-between gap-4">
+      <div className="dashboard-subheader px-6 py-3 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Button variant="outline" size="sm" onClick={() => router.back()}>
             <ArrowLeft className="h-4 w-4 mr-1" /> Back

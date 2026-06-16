@@ -98,6 +98,8 @@ export function criteriaFromDrive(drive: {
     minCGPA?: number
     branches?: string[]
     batches?: string[]
+    years?: number[]
+    semesters?: number[]
     skills?: string[]
     backlogsAllowed?: boolean
   }
@@ -106,7 +108,7 @@ export function criteriaFromDrive(drive: {
 }): EligibilityCriteria {
   const e = drive.eligibility || {}
   return {
-    minCGPA: e.minCGPA > 0 ? e.minCGPA : undefined,
+    minCGPA: e.minCGPA && e.minCGPA > 0 ? e.minCGPA : undefined,
     branches: e.branches || [],
     batches: e.batches || [],
     requiredSkills: e.skills || [],

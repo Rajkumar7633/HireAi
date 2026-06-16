@@ -81,7 +81,19 @@ export default function CollegeCreateMcqPage() {
           title,
           description,
           durationMinutes,
+          passingScore: 60,
           questions: valid,
+          settings: {
+            enableProctoring: true,
+            restrictCopyPaste: true,
+            detectTabSwitch: true,
+            webcamRequired: true,
+            requireFullscreen: true,
+            enableAudioMonitoring: true,
+            enablePeriodicSnapshots: true,
+            enableObjectDetection: true,
+            maxTabSwitches: 2,
+          },
         }),
       })
       const data = await res.json()

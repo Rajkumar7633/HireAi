@@ -2,14 +2,23 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import mongoose from "mongoose"
+import { getFlexTestModel } from "@/lib/flex-test"
 
 function requireCollege(session: Awaited<ReturnType<typeof getSession>>) {
   return session && (session.role === "college" || session.role === "college_admin")
 }
 
-function getTestModel() {
-  const schema = new mongoose.Schema({}, { strict: false, timestamps: true })
-  return mongoose.models.CollegeOwnedTest || mongoose.model("CollegeOwnedTest", schema, "tests")
+function collegeOwnershipFilter(collegeId: string) {
+  const collegeOid = mongoose.Types.ObjectId.isValid(collegeId)
+    ? new mongoose.Types.ObjectId(collegeId)
+    : null
+  return {
+    $or: [
+      { collegeId },
+      ...(collegeOid ? [{ collegeId: collegeOid }] : []),
+      ...(collegeOid ? [{ ownerType: "college", createdBy: collegeOid }] : []),
+    ],
+  }
 }
 
 export async function GET(req: NextRequest) {
@@ -20,15 +29,8 @@ export async function GET(req: NextRequest) {
 
   try {
     await connectDB()
-    const TestModel = getTestModel()
-    const collegeId = session!.userId
-    const tests = await TestModel.find({
-      $or: [
-        { collegeId: collegeId },
-        { collegeId: new mongoose.Types.ObjectId(collegeId) },
-        { ownerType: "college", createdBy: new mongoose.Types.ObjectId(collegeId) },
-      ],
-    })
+    const FlexTest = getFlexTestModel()
+    const tests = await FlexTest.find(collegeOwnershipFilter(session!.userId))
       .sort({ createdAt: -1 })
       .lean()
 
@@ -58,7 +60,7 @@ export async function POST(req: NextRequest) {
 
   try {
     await connectDB()
-    const TestModel = getTestModel()
+    const FlexTest = getFlexTestModel()
     const questions = Array.isArray(body.questions) ? body.questions : []
 
     const testData = {
@@ -93,7 +95,7 @@ export async function POST(req: NextRequest) {
       createdAt: new Date(),
     }
 
-    const newTest = await TestModel.create(testData)
+    const newTest = await FlexTest.create(testData)
     return NextResponse.json({ message: "Test created", test: newTest }, { status: 201 })
   } catch (error: any) {
     console.error("[college/tests POST]", error)

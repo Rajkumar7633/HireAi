@@ -148,7 +148,7 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
-      <Card className="rounded-2xl border bg-card sticky top-0 z-10">
+      <Card className="rounded-2xl border bg-card dashboard-subheader">
         <CardHeader className="px-6 pt-6 pb-2">
           <CardTitle className="text-xl">Filters & Actions</CardTitle>
         </CardHeader>

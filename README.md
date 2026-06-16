@@ -503,7 +503,7 @@ Backend tests cover: job description tailoring, referrals, offer letters, studen
 
 ## Contributing
 
-1. Fork the repository  
+1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/your-feature`)  
 3. Commit changes  
 4. Push and open a Pull Request  

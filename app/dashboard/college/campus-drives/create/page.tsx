@@ -11,9 +11,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { Loader2, Plus, X, ArrowLeft, Building2 } from "lucide-react"
 
-const BRANCHES = ["CSE","IT","ECE","EEE","Mechanical","Civil","Chemical","Biotechnology","MBA","MCA","Other"]
-const BATCHES = ["2024","2025","2026","2027","2028"]
-const YEARS = [1,2,3,4]
+const BRANCHES = [
+  "Computer Science", "IT", "Electronics", "Mechanical", "Civil", "Chemical",
+  "Biotechnology", "MBA", "MCA", "CSE", "ECE", "EEE", "Other",
+]
+const BATCHES = ["2024", "2025", "2026", "2027", "2028", "2029", "2030", "2031"]
+const YEARS = [1, 2, 3, 4]
+const SEMESTERS = [1, 2, 3, 4, 5, 6, 7, 8]
 const JOB_TYPES = ["Full Time","Internship","Contract","PPO"]
 const ROUNDS = ["Resume Shortlisting","Aptitude Test","Technical Test","Group Discussion","Technical Interview","HR Interview","Managerial Round","Final Interview"]
 
@@ -25,7 +29,7 @@ export default function CreateCampusDrivePage() {
     companyName: "", role: "", description: "", jobType: "Full Time",
     location: "", venue: "", packageMin: "", packageMax: "",
     driveDate: "", applicationDeadline: "",
-    eligibility: { minCGPA: 0, branches: [] as string[], batches: [] as string[], years: [] as number[], skills: [] as string[], backlogsAllowed: false },
+    eligibility: { minCGPA: 0, branches: [] as string[], batches: [] as string[], years: [] as number[], semesters: [] as number[], skills: [] as string[], backlogsAllowed: false },
     rounds: [] as string[], status: "active",
   })
   const [skillInput, setSkillInput] = useState("")
@@ -162,13 +166,40 @@ export default function CreateCampusDrivePage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Eligible Batches (leave empty = all)</Label>
+              <Label>Eligible Batches / Passing Year (leave empty = all batches)</Label>
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                Select passing years so only matching students see this drive (e.g. 2026 — not 2030).
+              </p>
               <div className="flex flex-wrap gap-2">
                 {BATCHES.map(b => (
                   <button key={b} type="button"
                     onClick={() => toggleArr(form.eligibility.batches, b, v=>setE("batches",v))}
                     className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${form.eligibility.batches.includes(b) ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-300 hover:border-blue-400"}`}
                   >{b}</button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Eligible Academic Year (1st–4th year students)</Label>
+              <div className="flex flex-wrap gap-2">
+                {YEARS.map(y => (
+                  <button key={y} type="button"
+                    onClick={() => toggleArr(form.eligibility.years, y, v=>setE("years",v))}
+                    className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${form.eligibility.years.includes(y) ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-700 border-gray-300 hover:border-indigo-400"}`}
+                  >Year {y}</button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Eligible Semesters</Label>
+              <div className="flex flex-wrap gap-2">
+                {SEMESTERS.map(s => (
+                  <button key={s} type="button"
+                    onClick={() => toggleArr(form.eligibility.semesters, s, v=>setE("semesters",v))}
+                    className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${form.eligibility.semesters.includes(s) ? "bg-teal-600 text-white border-teal-600" : "bg-white text-gray-700 border-gray-300 hover:border-teal-400"}`}
+                  >Sem {s}</button>
                 ))}
               </div>
             </div>

@@ -5,23 +5,12 @@ import CampusDrive from "@/models/CampusDrive"
 import CampusDriveApplication from "@/models/CampusDriveApplication"
 import User from "@/models/User"
 import mongoose from "mongoose"
-
-function checkEligibility(student: any, drive: any): { eligible: boolean; reasons: string[] } {
-  const reasons: string[] = []
-  const e = drive.eligibility
-
-  if (e?.minCGPA > 0 && (student.cgpa || 0) < e.minCGPA) {
-    reasons.push(`Min CGPA required: ${e.minCGPA} (yours: ${student.cgpa || "N/A"})`)
-  }
-  if (e?.branches?.length > 0 && student.department && !e.branches.includes(student.department)) {
-    reasons.push(`Branch not eligible (allowed: ${e.branches.join(", ")})`)
-  }
-  if (e?.batches?.length > 0 && student.batch && !e.batches.includes(student.batch)) {
-    reasons.push(`Batch not eligible (allowed: ${e.batches.join(", ")})`)
-  }
-
-  return { eligible: reasons.length === 0, reasons }
-}
+import {
+  checkCampusDriveEligibility,
+  resolveStudentYear,
+  resolveStudentSemester,
+  shouldShowDriveToStudent,
+} from "@/lib/campus-drive-eligibility"
 
 // GET: drives for student's college with eligibility status
 export async function GET(req: NextRequest) {
@@ -32,42 +21,70 @@ export async function GET(req: NextRequest) {
     }
 
     await connectDB()
-    const student = await (User as any).findById(session.userId).lean() as any
+    const student = await User.findById(session.userId).lean() as {
+      cgpa?: number
+      department?: string
+      batch?: string
+      currentYear?: number
+      semester?: number
+      skills?: string[]
+      backlogs?: number
+      onboardedByCollege?: mongoose.Types.ObjectId
+    } | null
+
     if (!student?.onboardedByCollege) {
       return NextResponse.json({ drives: [], message: "No college linked" })
     }
 
     const collegeId = student.onboardedByCollege
-    const drives = await (CampusDrive as any)
-      .find({ collegeId: new mongoose.Types.ObjectId(collegeId), status: { $in: ["active", "completed"] } })
+    const drives = await CampusDrive.find({
+      collegeId: new mongoose.Types.ObjectId(collegeId),
+      status: { $in: ["active", "completed"] },
+    })
       .sort({ driveDate: 1 })
       .lean()
 
-    const driveIds = drives.map((d: any) => d._id)
-    const existingApps = await (CampusDriveApplication as any)
-      .find({ studentId: session.userId, driveId: { $in: driveIds } })
-      .lean()
-    const appliedMap: Record<string, any> = {}
-    for (const app of existingApps) appliedMap[app.driveId.toString()] = app
+    const driveIds = drives.map((d) => d._id)
+    const existingApps = await CampusDriveApplication.find({
+      studentId: session.userId,
+      driveId: { $in: driveIds },
+    }).lean()
+
+    const appliedMap: Record<string, { _id: mongoose.Types.ObjectId; status?: string }> = {}
+    for (const app of existingApps) {
+      appliedMap[app.driveId.toString()] = app
+    }
 
     const now = new Date()
-    const enriched = drives.map((drive: any) => {
-      const { eligible, reasons } = checkEligibility(student, drive)
-      const applied = appliedMap[drive._id.toString()] || null
-      const deadlinePassed = new Date(drive.applicationDeadline) < now
-      return {
-        ...drive,
-        eligible,
-        eligibilityReasons: reasons,
-        applied: !!applied,
-        applicationStatus: applied?.status || null,
-        applicationId: applied?._id || null,
-        deadlinePassed,
-        canApply: eligible && !applied && !deadlinePassed && drive.status === "active",
-      }
-    })
+    const enriched = drives
+      .map((drive) => {
+        const applied = appliedMap[drive._id.toString()] || null
+        const { eligible, reasons, missingFields } = checkCampusDriveEligibility(student, drive)
+        const deadlinePassed = new Date(drive.applicationDeadline) < now
+        return {
+          ...drive,
+          eligible,
+          eligibilityReasons: reasons,
+          missingFields,
+          applied: !!applied,
+          applicationStatus: applied?.status || null,
+          applicationId: applied?._id || null,
+          deadlinePassed,
+          canApply: eligible && !applied && !deadlinePassed && drive.status === "active",
+        }
+      })
+      .filter((drive) => shouldShowDriveToStudent(student, drive, drive.applied))
 
-    return NextResponse.json({ drives: enriched, student: { cgpa: student.cgpa, department: student.department, batch: student.batch } })
+    return NextResponse.json({
+      drives: enriched,
+      student: {
+        cgpa: student.cgpa,
+        department: student.department,
+        batch: student.batch,
+        currentYear: resolveStudentYear(student),
+        semester: resolveStudentSemester(student),
+      },
+    })
   } catch (error) {
     console.error("GET job-seeker campus-drives error:", error)
     return NextResponse.json({ drives: [] })

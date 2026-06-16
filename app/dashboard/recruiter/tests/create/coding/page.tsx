@@ -232,7 +232,7 @@ export default function CreateCodingTestPage() {
   ]
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 overflow-hidden">
+    <div className="flex flex-col h-full min-h-0 bg-gray-50 overflow-hidden">
 
       {/* ── SUCCESS BANNER ─────────────────────────────────────────────────── */}
       {savedTestId && (

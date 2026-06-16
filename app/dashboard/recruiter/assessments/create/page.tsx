@@ -249,9 +249,9 @@ export default function CreateAssessmentPage() {
   const secTotalCount   = securityFeatures.length
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white flex flex-col">
+    <div className="min-h-full bg-gradient-to-b from-slate-50 to-white flex flex-col">
       {/* ── Sticky top bar ──────────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-20 bg-white border-b shadow-sm">
+      <div className="dashboard-subheader">
         <div className="px-6 py-3 flex items-center gap-4">
           <Button variant="ghost" size="sm" onClick={() => router.back()} className="shrink-0">
             <ArrowLeft className="h-4 w-4 mr-1" /> Back

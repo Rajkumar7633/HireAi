@@ -86,6 +86,8 @@ export interface IUser extends Document {
   onboardedByCollege?: string
   department?: string
   batch?: string
+  currentYear?: number
+  semester?: number
   cgpa?: number
   placementStatus?: "unplaced" | "placed" | "offer_received"
   placedAt?: Date
@@ -226,6 +228,8 @@ const UserSchema = new Schema<IUser>(
     onboardedByCollege: { type: Schema.Types.ObjectId, ref: "User", index: true, sparse: true },
     department: String,
     batch: String,
+    currentYear: { type: Number, min: 1, max: 4 },
+    semester: { type: Number, min: 1, max: 8 },
     cgpa: Number,
     placementStatus: { type: String, enum: ["unplaced", "placed", "offer_received"], default: "unplaced" },
     placedAt: Date,

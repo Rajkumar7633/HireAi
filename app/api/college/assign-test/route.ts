@@ -139,8 +139,9 @@ export async function POST(req: NextRequest) {
           type: "test_assigned",
           message: notifyMessage,
           relatedEntity: {
-            id: new mongoose.Types.ObjectId(testId),
-            type: "test",
+            id: assignment._id,
+            type: "college_assignment",
+            testId: new mongoose.Types.ObjectId(testId),
           },
         }),
       ),

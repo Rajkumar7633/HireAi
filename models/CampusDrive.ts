@@ -15,6 +15,7 @@ export interface ICampusDrive extends Document {
     branches: string[]
     years: number[]
     batches: string[]
+    semesters: number[]
     skills: string[]
     backlogsAllowed: boolean
   }
@@ -45,6 +46,7 @@ const CampusDriveSchema = new Schema<ICampusDrive>(
       branches: { type: [String], default: [] },
       years: { type: [Number], default: [] },
       batches: { type: [String], default: [] },
+      semesters: { type: [Number], default: [] },
       skills: { type: [String], default: [] },
       backlogsAllowed: { type: Boolean, default: false },
     },

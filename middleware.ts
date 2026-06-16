@@ -16,9 +16,12 @@ export async function middleware(request: NextRequest) {
     "/privacy",
   ]
 
+  const isRegisterPath = pathname.startsWith("/register/")
+
   const isPublicPath =
     publicPaths.includes(pathname) ||
-    pathname.startsWith("/auth/")
+    pathname.startsWith("/auth/") ||
+    isRegisterPath
 
   // Skip middleware for API routes, static files, and Next.js internals
   if (
@@ -27,6 +30,11 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/favicon.ico") ||
     pathname.includes(".")
   ) {
+    return NextResponse.next()
+  }
+
+  // Student registration links must work without login (incognito / new students)
+  if (isRegisterPath) {
     return NextResponse.next()
   }
 
