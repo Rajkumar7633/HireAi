@@ -11,6 +11,7 @@ const jwt = require("jsonwebtoken")
 const crypto = require("crypto")
 const User = require("../models/User")
 const sendEmail = require("../utils/emailService")
+const { buildPasswordResetEmail, buildPasswordChangedEmail } = require("../utils/password-reset-email")
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -298,7 +299,7 @@ async function logoutAll({ userId }) {
 }
 
 /**
- * Send password reset email.
+ * Send password reset email with secure link + OTP code.
  */
 async function forgotPassword({ email }) {
   const cleanEmail = (email || "").toLowerCase().trim()
@@ -310,49 +311,70 @@ async function forgotPassword({ email }) {
 
   const user = await User.findOne({ email: cleanEmail })
   // Always return success to prevent email enumeration
-  if (!user) return { message: "If an account exists, a reset link has been sent." }
+  if (!user) return { message: "If an account exists, a reset link and verification code have been sent." }
 
   const rawToken = crypto.randomBytes(32).toString("hex")
+  const otp = ("000000" + Math.floor(Math.random() * 1_000_000)).slice(-6)
   const tokenHash = await bcrypt.hash(rawToken, 10)
-  user.passwordReset = { tokenHash, expiresAt: new Date(Date.now() + 15 * 60 * 1000) }
+  const otpHash = await bcrypt.hash(otp, 10)
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000)
+
+  user.passwordReset = {
+    tokenHash,
+    otpHash,
+    expiresAt,
+    attempts: 0,
+    devPlain: process.env.NODE_ENV !== "production" ? otp : undefined,
+    devToken: process.env.NODE_ENV !== "production" ? rawToken : undefined,
+  }
   await user.save()
 
-  const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/auth/reset-password?token=${rawToken}&email=${encodeURIComponent(cleanEmail)}`
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+  const resetUrl = `${appUrl}/auth/reset-password?token=${rawToken}&email=${encodeURIComponent(cleanEmail)}`
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`[password-reset] email=${cleanEmail} otp=${otp}`)
+    console.log(`[password-reset] link=${resetUrl}`)
+  }
 
   await sendEmail({
     to: user.email,
-    subject: "Reset Your HireAI Password",
-    html: `
-      <div style="font-family:sans-serif;max-width:480px;margin:auto">
-        <h2 style="color:#7c3aed">HireAI — Password Reset</h2>
-        <p>Hi ${user.name || "there"},</p>
-        <p>Click below to reset your password (expires in 15 minutes):</p>
-        <p style="text-align:center;margin:32px 0">
-          <a href="${resetUrl}" style="background:#7c3aed;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold">
-            Reset Password
-          </a>
-        </p>
-        <p style="color:#666;font-size:13px">If you didn't request this, ignore this email.</p>
-      </div>`,
+    subject: `Reset your HireAI password — code ${otp}`,
+    html: buildPasswordResetEmail({
+      name: user.name,
+      email: cleanEmail,
+      resetUrl,
+      otp,
+      expiresMinutes: 15,
+    }),
   })
 
-  return { message: "If an account exists, a reset link has been sent." }
+  return { message: "If an account exists, a reset link and verification code have been sent." }
 }
 
 /**
- * Reset password using the emailed token.
+ * Reset password using emailed token or OTP code.
  */
-async function resetPassword({ token, email, newPassword }) {
+async function resetPassword({ token, code, email, newPassword }) {
   const cleanEmail = (email || "").toLowerCase().trim()
-  if (!token || !isValidEmail(cleanEmail) || !isValidPassword(newPassword || "")) {
-    const err = new Error("Token, valid email, and new password (6+ chars) are required")
+  const cleanCode = String(code || "").trim()
+  const cleanToken = String(token || "").trim()
+
+  if (!isValidEmail(cleanEmail) || !isValidPassword(newPassword || "")) {
+    const err = new Error("Valid email and new password (6+ chars) are required")
+    err.statusCode = 400
+    throw err
+  }
+
+  if (!cleanToken && !isValidOtp(cleanCode)) {
+    const err = new Error("Reset link or 6-digit verification code is required")
     err.statusCode = 400
     throw err
   }
 
   const user = await User.findOne({ email: cleanEmail })
-  if (!user?.passwordReset?.tokenHash || !user?.passwordReset?.expiresAt) {
-    const err = new Error("Invalid or expired reset link")
+  if (!user?.passwordReset?.expiresAt) {
+    const err = new Error("Invalid or expired reset request. Please request a new one.")
     err.statusCode = 400
     throw err
   }
@@ -363,9 +385,42 @@ async function resetPassword({ token, email, newPassword }) {
     throw err
   }
 
-  const isValid = await bcrypt.compare(token, user.passwordReset.tokenHash)
-  if (!isValid) {
-    const err = new Error("Invalid reset link")
+  if ((user.passwordReset.attempts || 0) >= 5) {
+    const err = new Error("Too many attempts. Please request a new reset code.")
+    err.statusCode = 429
+    throw err
+  }
+
+  let verified = false
+
+  if (cleanToken) {
+    if (!user.passwordReset.tokenHash) {
+      const err = new Error("Invalid reset link")
+      err.statusCode = 400
+      throw err
+    }
+    if (process.env.NODE_ENV !== "production" && user.passwordReset.devToken && cleanToken === user.passwordReset.devToken) {
+      verified = true
+    } else {
+      verified = await bcrypt.compare(cleanToken, user.passwordReset.tokenHash)
+    }
+  } else if (isValidOtp(cleanCode)) {
+    if (!user.passwordReset.otpHash) {
+      const err = new Error("Invalid verification code")
+      err.statusCode = 400
+      throw err
+    }
+    if (process.env.NODE_ENV !== "production" && user.passwordReset.devPlain && cleanCode === String(user.passwordReset.devPlain)) {
+      verified = true
+    } else {
+      verified = await bcrypt.compare(cleanCode, user.passwordReset.otpHash)
+    }
+  }
+
+  if (!verified) {
+    user.passwordReset.attempts = (user.passwordReset.attempts || 0) + 1
+    await user.save()
+    const err = new Error(cleanToken ? "Invalid reset link" : "Invalid verification code")
     err.statusCode = 400
     throw err
   }
@@ -375,14 +430,14 @@ async function resetPassword({ token, email, newPassword }) {
   user.password = hash
   user.passwordHash = hash
   user.passwordReset = {}
-  user.refreshTokens = [] // force re-login everywhere
+  user.refreshTokens = []
 
   await user.save()
 
   await sendEmail({
     to: user.email,
-    subject: "HireAI Password Changed",
-    html: `<p>Hi ${user.name || "there"}, your HireAI password was successfully changed.</p>`,
+    subject: "Your HireAI password was changed",
+    html: buildPasswordChangedEmail({ name: user.name }),
   })
 
   return { message: "Password reset successfully. Please log in." }

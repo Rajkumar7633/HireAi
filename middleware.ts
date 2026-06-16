@@ -6,7 +6,19 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Public paths that don't require authentication
-  const publicPaths = ["/", "/login", "/signup", "/about", "/contact"]
+  const publicPaths = [
+    "/",
+    "/login",
+    "/signup",
+    "/about",
+    "/contact",
+    "/terms",
+    "/privacy",
+  ]
+
+  const isPublicPath =
+    publicPaths.includes(pathname) ||
+    pathname.startsWith("/auth/")
 
   // Skip middleware for API routes, static files, and Next.js internals
   if (
@@ -22,7 +34,7 @@ export async function middleware(request: NextRequest) {
   const cookieToken = request.cookies.get("auth-token")?.value
 
   // If user is already authenticated, redirect away from landing/login/signup to role dashboard
-  if (publicPaths.includes(pathname)) {
+  if (isPublicPath) {
     try {
       if (cookieToken) {
         const session = await verifyTokenEdge(cookieToken)

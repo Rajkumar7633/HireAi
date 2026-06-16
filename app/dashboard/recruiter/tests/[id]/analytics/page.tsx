@@ -25,6 +25,16 @@ import {
   extractCodeAnswers,
   extractSubmissionLanguage,
 } from "@/lib/submission-utils"
+import {
+  tabSwitchesFromSubmission,
+  integrityFromSubmission,
+  computeRiskLevel,
+  logsFromSubmission,
+} from "@/lib/proctor-analytics"
+import {
+  CodingTestSecurityPanel,
+  type SecurityAnalyticsPayload,
+} from "@/components/analytics/coding-test-security-panel"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -53,6 +63,9 @@ interface CodingSubmission {
     passRate: number
   }[]
   tabSwitches: number
+  integrityScore: number
+  securityEventCount: number
+  snapshotCount: number
   riskLevel: "low" | "medium" | "high"
   status: "passed" | "failed" | "pending"
   percentileRank: number
@@ -154,7 +167,7 @@ function submissionsFromInviteAssigned(assigned: any[]): any[] {
   }))
 }
 
-function mapSubmission(s: any, i: number, passingScore: number): CodingSubmission {
+function mapSubmission(s: any, i: number, passingScore: number, maxTabSwitches = 2): CodingSubmission {
   const { name, email, id } = extractCandidateInfo(s)
   const hasScore = s.score != null || s.percentage != null
   const score = hasScore ? (s.score ?? s.percentage ?? 0) : 0
@@ -175,6 +188,27 @@ function mapSubmission(s: any, i: number, passingScore: number): CodingSubmissio
       })
     : (s.problemResults || [])
 
+  const tabSwitches = tabSwitchesFromSubmission(s)
+  const logs = logsFromSubmission(s)
+  const integrityScore = integrityFromSubmission(s, maxTabSwitches)
+  const counts = {
+    face: logs.filter(l => ["no_face", "multi_face", "off_screen", "camera_blocked"].includes(l.type)).length,
+    audio: logs.filter(l => l.type === "audio_noise").length,
+    object: logs.filter(l => ["phone_detected", "book_detected", "suspicious_device", "extra_person"].includes(l.type)).length,
+    tab: tabSwitches,
+    clipboard: logs.filter(l => ["copy_paste", "context_menu"].includes(l.type)).length,
+    fullscreen: logs.filter(l => l.type === "fullscreen_exit").length,
+    motion: logs.filter(l => l.type === "movement").length,
+    snapshots: logs.filter(l => l.type === "periodic_snapshot").length,
+    terminated: logs.filter(l => l.type === "test_terminated").length,
+  }
+  const riskLevel = computeRiskLevel({
+    integrityScore,
+    tabSwitches,
+    counts,
+    flags: s.integrityAudit?.flags || logs.map(l => l.type),
+  })
+
   return {
     submissionId: s._id?.toString() || `sub-${i}`,
     candidateId: id || s._id?.toString() || `c${i}`,
@@ -187,8 +221,11 @@ function mapSubmission(s: any, i: number, passingScore: number): CodingSubmissio
     rawAnswers,
     codeSolutions,
     problemResults,
-    tabSwitches: s.tabSwitches || s.integrityAudit?.logs?.length || 0,
-    riskLevel: (s.tabSwitches || 0) > 5 ? "high" : (s.tabSwitches || 0) > 2 ? "medium" : "low",
+    tabSwitches,
+    integrityScore,
+    securityEventCount: logs.length,
+    snapshotCount: counts.snapshots,
+    riskLevel,
     status: !isCompleted ? "pending" : score >= passingScore ? "passed" : "failed",
     percentileRank: 0,
   }
@@ -197,9 +234,10 @@ function mapSubmission(s: any, i: number, passingScore: number): CodingSubmissio
 // Generate analytics from API data
 function buildAnalytics(raw: any, testId: string): TestAnalytics {
   const passingScore = raw.passingScore || 70
+  const maxTabSwitches = raw.settings?.maxTabSwitches ?? 2
   const submissions: CodingSubmission[] = normalizeSubmissionList(
     raw?.submissions ?? raw?.candidateResults ?? raw,
-  ).map((s: any, i: number) => mapSubmission(s, i, passingScore))
+  ).map((s: any, i: number) => mapSubmission(s, i, passingScore, maxTabSwitches))
 
   // Compute percentile ranks (scored submissions only)
   const scoredSubmissions = submissions.filter(s => s.status !== "pending")
@@ -374,6 +412,7 @@ export default function CodingTestAnalyticsPage() {
   const [statusFilter, setStatusFilter] = useState<"all" | "passed" | "failed" | "pending">("all")
   const [selectedSubmission, setSelectedSubmission] = useState<CodingSubmission | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [securityData, setSecurityData] = useState<SecurityAnalyticsPayload | null>(null)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
 
   const [countdown, setCountdown] = useState(AUTO_REFRESH_MS / 1000)
@@ -384,17 +423,19 @@ export default function CodingTestAnalyticsPage() {
     setError(null)
     try {
       const fetchOpts: RequestInit = { cache: "no-store", credentials: "include" }
-      const [analyticsRes, testRes, subRes, inviteRes] = await Promise.all([
+      const [analyticsRes, testRes, subRes, inviteRes, securityRes] = await Promise.all([
         fetch(`/api/tests/${testId}/analytics`, fetchOpts).catch(() => null),
         fetch(`/api/tests/${testId}`, fetchOpts).catch(() => null),
         fetch(`/api/tests/${testId}/submissions`, fetchOpts).catch(() => null),
         fetch(`/api/tests/${testId}/invite`, fetchOpts).catch(() => null),
+        fetch(`/api/tests/${testId}/security`, fetchOpts).catch(() => null),
       ])
 
       const analyticsData = analyticsRes?.ok ? await analyticsRes.json().catch(() => ({})) : {}
       const testData = testRes?.ok ? await testRes.json().catch(() => ({})) : {}
       const subPayload = subRes?.ok ? await subRes.json().catch(() => []) : []
       const inviteData = inviteRes?.ok ? await inviteRes.json().catch(() => ({})) : {}
+      const securityPayload = securityRes?.ok ? await securityRes.json().catch(() => null) : null
       const totalAssignedHeader = subRes?.headers?.get("X-Total-Assigned")
       const assignedFromInvite = Array.isArray(inviteData.assigned) ? inviteData.assigned : []
       const testObj = testData?.test || testData
@@ -427,8 +468,10 @@ export default function CodingTestAnalyticsPage() {
         ),
         completedCount: analyticsData?.completedCount ?? analyticsData?.totalAttempts ?? 0,
         submissions: submissionList,
+        settings: testObj?.settings || securityPayload?.settings || {},
       }
 
+      setSecurityData(securityPayload)
       setAnalytics(buildAnalytics(raw, testId))
       setLastRefreshed(new Date())
     } catch (e: any) {
@@ -503,7 +546,7 @@ export default function CodingTestAnalyticsPage() {
       const res = await fetch(`/api/tests/${testId}/submissions/${c.submissionId}`, { cache: "no-store" })
       if (res.ok) {
         const data = await res.json()
-        setSelectedSubmission(mapSubmission(data, 0, a.passingScore))
+        setSelectedSubmission(mapSubmission(data, 0, a.passingScore, securityData?.settings?.maxTabSwitches ?? 2))
       }
     } catch {
       /* keep list data */
@@ -1007,72 +1050,7 @@ export default function CodingTestAnalyticsPage() {
 
           {/* ── SECURITY TAB ──────────────────────────────────────────────────── */}
           <TabsContent value="security" className="mt-4 space-y-4">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              {[
-                { label: "Low Risk", count: a.submissions.filter(s => s.riskLevel === "low").length, color: "bg-emerald-50 border-emerald-200 text-emerald-700", icon: CheckCircle },
-                { label: "Medium Risk", count: a.submissions.filter(s => s.riskLevel === "medium").length, color: "bg-amber-50 border-amber-200 text-amber-700", icon: AlertTriangle },
-                { label: "High Risk", count: a.submissions.filter(s => s.riskLevel === "high").length, color: "bg-rose-50 border-rose-200 text-rose-700", icon: XCircle },
-              ].map(item => {
-                const IcoCmp = item.icon
-                return (
-                  <Card key={item.label} className={`border shadow-sm ${item.color}`}>
-                    <CardContent className="p-4 flex items-center gap-3">
-                      <IcoCmp className="h-8 w-8 opacity-60" />
-                      <div>
-                        <p className="text-2xl font-bold">{item.count}</p>
-                        <p className="text-xs font-medium opacity-80">{item.label}</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )
-              })}
-            </div>
-
-            <Card className="border-gray-200 shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                  <Shield className="h-4 w-4 text-red-500" />Tab Switch Analysis
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {a.submissions.length === 0 ? (
-                  <div className="text-center py-8 text-gray-400">
-                    <Shield className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                    <p className="text-xs">No security data yet</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto rounded-lg border border-gray-200">
-                    <table className="w-full text-xs">
-                      <thead className="bg-gray-50 border-b">
-                        <tr>
-                          {["Candidate", "Tab Switches", "Risk Level", "Score"].map(h => (
-                            <th key={h} className="px-4 py-3 text-left font-semibold text-gray-600">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {[...a.submissions].sort((a, b) => b.tabSwitches - a.tabSwitches).slice(0, 10).map(c => (
-                          <tr key={c.candidateId} className="border-b border-gray-100 hover:bg-gray-50">
-                            <td className="px-4 py-3 font-medium text-gray-800">{c.name}</td>
-                            <td className="px-4 py-3">
-                              <span className={`font-semibold ${c.tabSwitches > 5 ? "text-rose-600" : c.tabSwitches > 2 ? "text-amber-600" : "text-emerald-600"}`}>
-                                {c.tabSwitches}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border uppercase ${c.riskLevel === "high" ? "bg-rose-50 text-rose-700 border-rose-200" : c.riskLevel === "medium" ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}>
-                                {c.riskLevel}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 font-semibold" style={{ color: scoreCol(c.score) }}>{c.score}%</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <CodingTestSecurityPanel data={securityData} />
           </TabsContent>
         </Tabs>
       </div>

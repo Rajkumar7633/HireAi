@@ -99,6 +99,14 @@ const TestSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
+  passingScore: {
+    type: Number,
+    default: 70,
+  },
+  settings: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {},
+  },
   createdAt: {
     type: Date,
     default: Date.now,

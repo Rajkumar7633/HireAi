@@ -112,6 +112,9 @@ export default function CreateCodingTestPage() {
   const [restrictCopyPaste, setRestrictCopyPaste] = useState(true)
   const [detectTabSwitch, setDetectTabSwitch] = useState(true)
   const [webcamRequired, setWebcamRequired] = useState(true)
+  const [requireFullscreen, setRequireFullscreen] = useState(true)
+  const [enableAudioMonitoring, setEnableAudioMonitoring] = useState(true)
+  const [enablePeriodicSnapshots, setEnablePeriodicSnapshots] = useState(true)
   const [shuffleProblems, setShuffleProblems] = useState(false)
   const [maxTabSwitches, setMaxTabSwitches] = useState(2)
 
@@ -202,7 +205,12 @@ export default function CreateCodingTestPage() {
           testCases: p.testCases.map(tc => ({ input: tc.input, expectedOutput: tc.expectedOutput, hidden: tc.hidden, weight: tc.weight })),
           points: p.points, timeLimitMs: p.timeLimitMs, memoryLimitMb: p.memoryLimitMb, correctAnswer: "",
         })),
-        settings: { enableProctoring, enableObjectDetection, restrictCopyPaste, detectTabSwitch, webcamRequired, shuffleProblems, maxTabSwitches, restrictLanguages, allowedLanguages: restrictLanguages ? allowedLanguages : [] },
+        settings: {
+          enableProctoring, enableObjectDetection, restrictCopyPaste, detectTabSwitch,
+          webcamRequired, requireFullscreen, enableAudioMonitoring, enablePeriodicSnapshots,
+          shuffleProblems, maxTabSwitches, restrictLanguages,
+          allowedLanguages: restrictLanguages ? allowedLanguages : [],
+        },
       }
       if (enableSchedule) { payload.availableFrom = availableFrom || null; payload.availableTo = availableTo || null }
       const res = await authFetch("/api/tests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
@@ -459,6 +467,9 @@ export default function CreateCodingTestPage() {
                 </div>
                 <div className="space-y-2">
                   {[
+                    { l: "Require Fullscreen", d: "Candidate must enter fullscreen before test", v: requireFullscreen, s: setRequireFullscreen },
+                    { l: "Voice / Audio monitoring", d: "Detect speech and background noise via mic", v: enableAudioMonitoring, s: setEnableAudioMonitoring },
+                    { l: "Periodic snapshots", d: "Capture webcam stills every 20s for review", v: enablePeriodicSnapshots, s: setEnablePeriodicSnapshots },
                     { l: "Phone/Object AI (COCO-SSD)", d: "Detect phones, books, and extra persons via camera", v: enableObjectDetection, s: setEnableObjectDetection },
                     { l: "Restrict Copy-Paste", d: "Block clipboard in editor", v: restrictCopyPaste, s: setRestrictCopyPaste },
                     { l: "Tab Switch Detection", d: "Warn when leaving test window", v: detectTabSwitch, s: setDetectTabSwitch },

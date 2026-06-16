@@ -14,14 +14,14 @@ import {
   Loader2, Clock, CheckCircle2, AlertCircle, ChevronLeft, ChevronRight,
   Send, Trophy, Play, CheckCircle, XCircle, Tag, Info,
   Terminal, ZoomIn, ZoomOut, RotateCcw, BookOpen, Moon, Sun, Code2,
-  BarChart3, Timer, Shield, AlertTriangle, Camera,
+  BarChart3, Timer, Shield, AlertTriangle,
 } from "lucide-react"
 import { useSession } from "@/hooks/use-session"
 import { CodingTestProctor } from "@/components/proctor/coding-test-proctor"
+import { TestSecurityPreflight } from "@/components/proctor/test-security-preflight"
 import { MonacoCodeEditor } from "@/components/code/MonacoCodeEditor"
 import { authFetch } from "@/lib/client-auth"
 import {
-  CODING_SECURITY_LAYERS,
   mergeTestSecurity,
   computeIntegrityScore,
   type SecurityActivityLog,
@@ -126,14 +126,9 @@ export default function TakeTestPage() {
 
   // Security / proctoring
   const [securityReady, setSecurityReady] = useState(false)
-  const [cameraReady, setCameraReady] = useState(false)
-  const [agreedProctoring, setAgreedProctoring] = useState(false)
-  const [preflightError, setPreflightError] = useState("")
   const [securityLogs, setSecurityLogs] = useState<SecurityActivityLog[]>([])
   const [hiddenValidation, setHiddenValidation] = useState<Record<string, HiddenValidation>>({})
   const [validatingHidden, setValidatingHidden] = useState<string | null>(null)
-  const preflightVideoRef = useRef<HTMLVideoElement>(null)
-  const preflightStreamRef = useRef<MediaStream | null>(null)
   const pendingDurationRef = useRef<number | null>(null)
 
   const tabSwitches = useRef(0)
@@ -149,37 +144,7 @@ export default function TakeTestPage() {
     try { return localStorage.getItem(`draft-${appId}-${qId}`) } catch { return null }
   }, [appId])
 
-  useEffect(() => {
-    return () => {
-      preflightStreamRef.current?.getTracks().forEach(t => t.stop())
-      preflightStreamRef.current = null
-    }
-  }, [])
-
-  const enableCamera = async () => {
-    setPreflightError("")
-    try {
-      preflightStreamRef.current?.getTracks().forEach(t => t.stop())
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
-        audio: true,
-      })
-      preflightStreamRef.current = stream
-      if (preflightVideoRef.current) {
-        preflightVideoRef.current.srcObject = stream
-        await preflightVideoRef.current.play()
-      }
-      setCameraReady(true)
-    } catch {
-      setCameraReady(false)
-      setPreflightError("Camera/microphone access is required. Allow permissions in your browser and try again.")
-    }
-  }
-
   const beginTest = async () => {
-    if (!cameraReady || !agreedProctoring) return
-    preflightStreamRef.current?.getTracks().forEach(t => t.stop())
-    preflightStreamRef.current = null
     if (!isCollegeMode) {
       try {
         await authFetch(`/api/applications/${appId}/start-test`, { method: "POST" })
@@ -755,79 +720,13 @@ export default function TakeTestPage() {
     )
   }
 
-  if (!securityReady) {
+  if (!securityReady && test) {
     return (
-      <div className="min-h-screen bg-[#0d1117] flex items-center justify-center p-6">
-        <div className="w-full max-w-lg bg-[#161b22] border border-[#30363d] rounded-2xl overflow-hidden shadow-2xl">
-          <div className="px-6 py-5 border-b border-[#30363d] bg-gradient-to-r from-purple-900/40 to-[#161b22]">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-purple-600 flex items-center justify-center">
-                <Shield className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold text-white">Secure Test Environment</h1>
-                <p className="text-xs text-[#8b949e]">{test.title}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-6 space-y-5">
-            <div className="rounded-xl border border-[#30363d] bg-[#0d1117] p-4 space-y-3">
-              <p className="text-sm text-[#c9d1d9] font-medium flex items-center gap-2">
-                <Camera className="h-4 w-4 text-purple-400" /> Camera &amp; microphone check
-              </p>
-              <div className="aspect-video rounded-lg overflow-hidden bg-black border border-[#30363d] flex items-center justify-center">
-                {cameraReady ? (
-                  <video ref={preflightVideoRef} autoPlay muted playsInline className="w-full h-full object-cover scale-x-[-1]" />
-                ) : (
-                  <div className="text-center text-[#8b949e] text-sm px-4">
-                    <Camera className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                    Enable your webcam to continue
-                  </div>
-                )}
-              </div>
-              {preflightError && <p className="text-xs text-red-400">{preflightError}</p>}
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full border-[#30363d] text-white hover:bg-[#21262d]"
-                onClick={enableCamera}
-              >
-                {cameraReady ? "Re-check camera" : "Enable camera & microphone"}
-              </Button>
-            </div>
-
-            <ul className="text-xs text-[#8b949e] space-y-2">
-              {CODING_SECURITY_LAYERS.map(layer => (
-                <li key={layer.id} className="flex items-start gap-2">
-                  <Shield className="h-3.5 w-3.5 text-purple-400 mt-0.5 shrink-0" />
-                  <span><strong className="text-[#c9d1d9]">{layer.label}</strong> — {layer.description}</span>
-                </li>
-              ))}
-            </ul>
-
-            <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-[#30363d] p-3 hover:border-purple-700/50">
-              <input
-                type="checkbox"
-                checked={agreedProctoring}
-                onChange={e => setAgreedProctoring(e.target.checked)}
-                className="mt-0.5 accent-purple-600"
-              />
-              <span className="text-xs text-[#c9d1d9] leading-relaxed">
-                I agree to AI proctoring (webcam monitoring, tab-switch detection, and activity logging) for this coding test.
-              </span>
-            </label>
-
-            <Button
-              className="w-full bg-purple-600 hover:bg-purple-500 text-white font-semibold"
-              disabled={!cameraReady || !agreedProctoring}
-              onClick={beginTest}
-            >
-              <Play className="h-4 w-4 mr-2" /> Begin Test
-            </Button>
-          </div>
-        </div>
-      </div>
+      <TestSecurityPreflight
+        testTitle={test.title}
+        settings={testSettings}
+        onReady={beginTest}
+      />
     )
   }
 

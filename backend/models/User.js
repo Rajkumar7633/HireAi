@@ -85,10 +85,14 @@ const UserSchema = new mongoose.Schema({
     type: [String],
     default: [],
   },
-  // Password reset token (stored as bcrypt hash, 15-min expiry)
+  // Password reset token + OTP (stored as bcrypt hashes, 15-min expiry)
   passwordReset: {
     tokenHash: { type: String },
+    otpHash: { type: String },
     expiresAt: { type: Date },
+    attempts: { type: Number, default: 0 },
+    devPlain: { type: String },
+    devToken: { type: String },
   },
 
   // Billing fields

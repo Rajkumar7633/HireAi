@@ -1,527 +1,501 @@
-"use client";
+"use client"
 
-import React, { useEffect, useRef, useState } from "react";
-import { useToast } from "@/hooks/use-toast";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { authFetch } from "@/lib/client-auth";
-import { ProctorObjectDetector, drawObjectOverlay, type SuspiciousObjectHit } from "@/lib/proctor-object-detection";
-
-// Proctoring component using FaceDetector API and MediaPipe FaceMesh (CDN) fallback for landmarks.
-// Features
-// - Detects: no-face, multi-face, off-screen/occluded (low face size), excessive movement
-// - Landmark overlay (eyes/nose/chin) with small live preview
-// - Captures evidence snapshots (canvas) and POSTs to /api/proctoring/event
-// - Graceful degradation when neither API is supported
-
-// Notes
-// - Designed to be mounted on secure assessment pages. Minimal UI footprint.
-// - Does NOT record or store video; only captures still snapshots on violations.
-// - You should disclose monitoring to candidates (see your legal requirements).
+import React, { useEffect, useRef, useState, useCallback } from "react"
+import { useToast } from "@/hooks/use-toast"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { authFetch } from "@/lib/client-auth"
+import { ProctorObjectDetector, drawObjectOverlay, type SuspiciousObjectHit } from "@/lib/proctor-object-detection"
+import { ProctorFaceDetector, drawFaceBoxes } from "@/lib/proctor-face-detection"
 
 export type FaceProctorProps = {
-  assessmentId: string;
-  candidateId: string;
-  minFaceSizeRatio?: number; // fraction of frame width (e.g., 0.12)
-  maxFaces?: number; // default 1
-  movementThreshold?: number; // pixel delta threshold for movement warnings
-  checkIntervalMs?: number; // analysis cadence
-  evidence?: boolean; // capture base64 snapshot on violations
-  enableAudioMonitoring?: boolean; // detect conversations/background noise
-  enableObjectDetection?: boolean; // COCO-SSD phone/book/device detection
-  blockClipboard?: boolean; // prevent copy/paste/context menu
-  maxWarningsBeforePause?: number; // auto-pause after N warnings
-  onViolation?: (payload: { type: string; message: string }) => void; // callback to parent
-  onTabSwitch?: (count: number) => void;
-  maxTabSwitches?: number;
-  onTerminate?: (reason: string) => void;
-  autoStart?: boolean;
-  className?: string;
-};
+  assessmentId: string
+  candidateId: string
+  testId?: string
+  minFaceSizeRatio?: number
+  maxFaces?: number
+  movementThreshold?: number
+  checkIntervalMs?: number
+  evidence?: boolean
+  enableAudioMonitoring?: boolean
+  enableObjectDetection?: boolean
+  enablePeriodicSnapshots?: boolean
+  snapshotIntervalSec?: number
+  blockClipboard?: boolean
+  maxWarningsBeforePause?: number
+  onViolation?: (payload: { type: string; message: string }) => void
+  onTabSwitch?: (count: number) => void
+  maxTabSwitches?: number
+  onTerminate?: (reason: string) => void
+  onSnapshot?: (payload: { type: string; at: string }) => void
+  autoStart?: boolean
+  className?: string
+}
 
-// Basic type guard for navigator.mediaDevices
-const canGetUserMedia = () => typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
+const canGetUserMedia = () => typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia
+
+const WARN_COOLDOWN_MS: Record<string, number> = {
+  no_face: 5000,
+  multi_face: 8000,
+  off_screen: 6000,
+  movement: 7000,
+  audio_noise: 12000,
+  camera_blocked: 6000,
+  periodic_snapshot: 1000,
+  tab_switch: 2000,
+  window_blur: 3000,
+}
 
 export function FaceProctor({
   assessmentId,
   candidateId,
-  minFaceSizeRatio = 0.12,
+  testId,
+  minFaceSizeRatio = 0.1,
   maxFaces = 1,
-  movementThreshold = 28,
-  checkIntervalMs = 1200,
+  movementThreshold = 35,
+  checkIntervalMs = 800,
   evidence = true,
-  enableAudioMonitoring = false,
+  enableAudioMonitoring = true,
   enableObjectDetection = true,
+  enablePeriodicSnapshots = true,
+  snapshotIntervalSec = 20,
   blockClipboard = false,
-  maxWarningsBeforePause = 3,
+  maxWarningsBeforePause = 8,
   onViolation,
   onTabSwitch,
   maxTabSwitches = 2,
   onTerminate,
+  onSnapshot,
   autoStart = false,
   className,
 }: FaceProctorProps) {
-  const { toast } = useToast();
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [enabled, setEnabled] = useState(false);
-  const [supported, setSupported] = useState<boolean | null>(null);
-  const [warnings, setWarnings] = useState(0);
-  const [paused, setPaused] = useState(false);
-  const lastCenterRef = useRef<{ x: number; y: number } | null>(null);
-  const detectorRef = useRef<any>(null);
-  const timerRef = useRef<any>(null);
-  const [usingMesh, setUsingMesh] = useState(false);
-  const meshRef = useRef<any>(null);
-  const overlayRef = useRef<HTMLCanvasElement | null>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const audioSrcRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const tabSwitchCountRef = useRef(0);
-  const hadFaceRef = useRef(false);
-  const noFaceStreakRef = useRef(0);
-  const objectDetectorRef = useRef<ProctorObjectDetector>(new ProctorObjectDetector());
-  const objectFrameCounterRef = useRef(0);
-  const lastObjectHitsRef = useRef<SuspiciousObjectHit[]>([]);
-  const [objectAiReady, setObjectAiReady] = useState(false);
+  const { toast } = useToast()
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const overlayRef = useRef<HTMLCanvasElement | null>(null)
+  const [enabled, setEnabled] = useState(false)
+  const [warnings, setWarnings] = useState(0)
+  const warningsRef = useRef(0)
+  const [paused, setPaused] = useState(false)
+  const [faceAiReady, setFaceAiReady] = useState(false)
+  const [objectAiReady, setObjectAiReady] = useState(false)
+  const [audioLevel, setAudioLevel] = useState(0)
+  const [lastEvent, setLastEvent] = useState("")
+
+  const lastCenterRef = useRef<{ x: number; y: number } | null>(null)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const snapshotTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const analyserRef = useRef<AnalyserNode | null>(null)
+  const tabSwitchCountRef = useRef(0)
+  const hadFaceRef = useRef(false)
+  const noFaceStreakRef = useRef(0)
+  const audioSpikeStreakRef = useRef(0)
+  const lastWarnAtRef = useRef<Record<string, number>>({})
+  const faceDetectorRef = useRef(new ProctorFaceDetector())
+  const objectDetectorRef = useRef(new ProctorObjectDetector())
+  const lastObjectHitsRef = useRef<SuspiciousObjectHit[]>([])
+  const objectFrameCounterRef = useRef(0)
+  const legacyDetectorRef = useRef<any>(null)
 
   useEffect(() => {
-    // Check FaceDetector support
-    // @ts-ignore
-    const FaceDetectorCtor = typeof window !== "undefined" ? (window as any).FaceDetector : undefined;
-    setSupported(!!FaceDetectorCtor);
+    const FaceDetectorCtor = typeof window !== "undefined" ? (window as any).FaceDetector : undefined
     if (FaceDetectorCtor) {
-      // @ts-ignore
-      detectorRef.current = new FaceDetectorCtor({ fastMode: true, maxDetectedFaces: 5 });
+      legacyDetectorRef.current = new FaceDetectorCtor({ fastMode: true, maxDetectedFaces: 5 })
     }
-  }, []);
+  }, [])
 
-  // Tab/visibility & clipboard security (FaceProctor layer — parent may also track)
-  useEffect(() => {
-    const onVisibility = async () => {
-      if (document.hidden) {
-        tabSwitchCountRef.current += 1;
-        onTabSwitch?.(tabSwitchCountRef.current);
-        if (tabSwitchCountRef.current >= maxTabSwitches) {
-          onTerminate?.(`Tab switch limit reached (${maxTabSwitches})`);
-        }
-        await warn("tab_switch", "Tab switch detected. Please stay on the assessment tab.");
-      }
-    };
-    const onBlur = async () => {
-      await warn("window_blur", "Window focus lost. Please remain focused on the assessment.");
-    };
-    const prevent = (e: Event) => { e.preventDefault(); };
-    if (blockClipboard) {
-      document.addEventListener("copy", prevent);
-      document.addEventListener("cut", prevent);
-      document.addEventListener("paste", prevent);
-      document.addEventListener("contextmenu", prevent);
-    }
-    document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("blur", onBlur);
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("blur", onBlur);
-      if (blockClipboard) {
-        document.removeEventListener("copy", prevent);
-        document.removeEventListener("cut", prevent);
-        document.removeEventListener("paste", prevent);
-        document.removeEventListener("contextmenu", prevent);
-      }
-    };
-  }, [blockClipboard]);
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      const stream = videoRef.current?.srcObject as MediaStream | undefined;
-      stream?.getTracks().forEach((t) => t.stop());
-    };
-  }, []);
-
-  const start = async () => {
-    if (!canGetUserMedia()) {
-      toast({ title: "Camera Access", description: "Your browser does not support camera access.", variant: "destructive" });
-      return;
-    }
+  const captureSnapshot = useCallback((): string | null => {
+    if (!evidence) return null
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    if (!video || !canvas) return null
+    const w = video.videoWidth || 640
+    const h = video.videoHeight || 480
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return null
+    ctx.drawImage(video, 0, 0, w, h)
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }, audio: !!enableAudioMonitoring });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-      setEnabled(true);
-      // Try to load FaceMesh for robust landmark detection
-      await tryInitFaceMesh();
-      if (enableObjectDetection) {
-        const ok = await objectDetectorRef.current.init();
-        setObjectAiReady(ok);
-      }
-      if (enableAudioMonitoring) initAudio(stream);
-      scheduleChecks();
-      toast({
-        title: "Proctoring Enabled",
-        description: enableObjectDetection && objectDetectorRef.current.ready
-          ? "Face + phone/object AI monitoring active."
-          : "Webcam monitoring is active (face recognition & movement).",
-      });
-    } catch (e) {
-      toast({ title: "Camera Error", description: "Cannot access camera. Please allow permission and refresh.", variant: "destructive" });
-    }
-  };
-
-  const stop = () => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    const stream = videoRef.current?.srcObject as MediaStream | undefined;
-    stream?.getTracks().forEach((t) => t.stop());
-    if (audioCtxRef.current) {
-      audioCtxRef.current.close().catch(() => {});
-    }
-    setEnabled(false);
-  };
-
-  useEffect(() => {
-    if (autoStart && !enabled) {
-      start();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoStart]);
-
-  const scheduleChecks = () => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = setInterval(analyzeFrame, checkIntervalMs);
-  };
-
-  const loadScript = (src: string) =>
-    new Promise<void>((resolve, reject) => {
-      const existing = document.querySelector(`script[src="${src}"]`) as HTMLScriptElement | null;
-      if (existing) return resolve();
-      const s = document.createElement("script");
-      s.src = src;
-      s.async = true;
-      s.onload = () => resolve();
-      s.onerror = () => reject(new Error("Script load error"));
-      document.body.appendChild(s);
-    });
-
-  const tryInitFaceMesh = async () => {
-    try {
-      // Load MediaPipe FaceMesh from CDN only on demand (no bundler deps)
-      // @ts-ignore
-      if (!(window as any).FaceMesh) {
-        await loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js");
-      }
-      // @ts-ignore
-      const FaceMeshCtor = (window as any).FaceMesh;
-      if (!FaceMeshCtor) return;
-      meshRef.current = new FaceMeshCtor({ locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}` });
-      meshRef.current.setOptions({ maxNumFaces: 2, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
-      setUsingMesh(true);
+      return canvas.toDataURL("image/jpeg", 0.65)
     } catch {
-      // Ignore if CDN blocked
+      return null
     }
-  };
+  }, [evidence])
 
-  const captureSnapshot = (): string | null => {
-    if (!evidence) return null;
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    if (!video || !canvas) return null;
-    const w = video.videoWidth || 640;
-    const h = video.videoHeight || 480;
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return null;
-    ctx.drawImage(video, 0, 0, w, h);
-    try {
-      return canvas.toDataURL("image/jpeg", 0.7);
-    } catch {
-      return null;
-    }
-  };
-
-  const postEvent = async (type: string, message: string) => {
-    const payload: any = {
+  const postEvent = useCallback(async (type: string, message: string, includeSnapshot = true) => {
+    const payload: Record<string, unknown> = {
       assessmentId,
       candidateId,
       type,
       message,
       at: new Date().toISOString(),
-    };
-    const snap = captureSnapshot();
-    if (snap) payload.snapshot = snap;
-    try {
-      await authFetch("/api/proctoring/event", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-    } catch {}
-  };
-
-  const warn = async (type: string, message: string) => {
-    setWarnings((w) => w + 1);
-    toast({ title: "Proctoring Warning", description: message, variant: "destructive" });
-    await postEvent(type, message);
-    onViolation?.({ type, message });
-    if (maxWarningsBeforePause && warnings + 1 >= maxWarningsBeforePause && !paused) {
-      setPaused(true);
-      if (timerRef.current) clearInterval(timerRef.current);
-      toast({ title: "Assessment Paused", description: "Too many violations. Please acknowledge and resume." });
+      meta: { testId },
     }
-  };
+    if (includeSnapshot) {
+      const snap = captureSnapshot()
+      if (snap) payload.snapshot = snap
+    }
+    try {
+      await authFetch("/api/proctoring/event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+    } catch {}
+  }, [assessmentId, candidateId, captureSnapshot, testId])
+
+  const warn = useCallback(async (type: string, message: string, silent = false) => {
+    const now = Date.now()
+    const cooldown = WARN_COOLDOWN_MS[type] ?? 5000
+    if (now - (lastWarnAtRef.current[type] || 0) < cooldown) return
+    lastWarnAtRef.current[type] = now
+
+    warningsRef.current += 1
+    setWarnings(warningsRef.current)
+    setLastEvent(type)
+    if (!silent) {
+      toast({ title: "Security alert", description: message, variant: "destructive" })
+    }
+    await postEvent(type, message)
+    onViolation?.({ type, message })
+
+    if (maxWarningsBeforePause && warningsRef.current >= maxWarningsBeforePause && !paused) {
+      setPaused(true)
+      if (timerRef.current) clearInterval(timerRef.current)
+      toast({
+        title: "Assessment paused",
+        description: "Too many security violations. Acknowledge and resume when ready.",
+        variant: "destructive",
+      })
+    }
+  }, [maxWarningsBeforePause, onViolation, paused, postEvent, toast])
 
   const initAudio = (stream: MediaStream) => {
     try {
-      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const source = ctx.createMediaStreamSource(stream);
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 2048;
-      source.connect(analyser);
-      audioCtxRef.current = ctx; analyserRef.current = analyser; audioSrcRef.current = source;
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
+      const source = ctx.createMediaStreamSource(stream)
+      const analyser = ctx.createAnalyser()
+      analyser.fftSize = 2048
+      source.connect(analyser)
+      audioCtxRef.current = ctx
+      analyserRef.current = analyser
     } catch {}
-  };
+  }
 
-  const checkAudioLevel = () => {
-    const analyser = analyserRef.current;
-    if (!analyser) return false;
-    const data = new Uint8Array(analyser.fftSize);
-    analyser.getByteTimeDomainData(data);
-    // Rough energy estimate
-    let sum = 0;
+  const measureAudioRms = () => {
+    const analyser = analyserRef.current
+    if (!analyser) return 0
+    const data = new Uint8Array(analyser.fftSize)
+    analyser.getByteTimeDomainData(data)
+    let sum = 0
     for (let i = 0; i < data.length; i++) {
-      const v = (data[i] - 128) / 128;
-      sum += v * v;
+      const v = (data[i] - 128) / 128
+      sum += v * v
     }
-    const rms = Math.sqrt(sum / data.length);
-    return rms > 0.08; // tweak threshold for speaking/background noise
-  };
+    return Math.sqrt(sum / data.length)
+  }
 
   const runObjectDetection = async (video: HTMLVideoElement) => {
-    if (!enableObjectDetection || !objectDetectorRef.current.ready) return;
+    if (!enableObjectDetection || !objectDetectorRef.current.ready) return
+    objectFrameCounterRef.current += 1
+    if (objectFrameCounterRef.current % 3 !== 0) return
 
-    objectFrameCounterRef.current += 1;
-    if (objectFrameCounterRef.current % 2 !== 0) return;
-
-    const hits = await objectDetectorRef.current.detect(video);
-    lastObjectHitsRef.current = hits;
-
+    const hits = await objectDetectorRef.current.detect(video)
+    lastObjectHitsRef.current = hits
     for (const hit of hits) {
-      if (!objectDetectorRef.current.shouldWarn(hit.kind)) continue;
-      const violation = objectDetectorRef.current.violationMessage(hit);
-      await warn(violation.type, violation.message);
+      if (!objectDetectorRef.current.shouldWarn(hit.kind)) continue
+      const violation = objectDetectorRef.current.violationMessage(hit)
+      await warn(violation.type, violation.message)
     }
-  };
+  }
 
-  const analyzeFrame = async () => {
-    const video = videoRef.current;
-    if (!video || video.readyState < 2) return;
+  const detectFacesLegacy = async (video: HTMLVideoElement) => {
+    if (!legacyDetectorRef.current) return null
+    try {
+      const faces = await legacyDetectorRef.current.detect(video)
+      return Array.isArray(faces) ? faces : []
+    } catch {
+      return null
+    }
+  }
 
-    const vw = video.videoWidth || 640;
-    const vh = video.videoHeight || 480;
+  const analyzeFrame = useCallback(async () => {
+    const video = videoRef.current
+    if (!video || video.readyState < 2 || paused) return
 
-    // Optional audio spike detection
-    if (enableAudioMonitoring && checkAudioLevel()) {
-      await warn("audio_noise", "Significant audio detected. Please ensure a quiet environment.");
+    const vw = video.videoWidth || 640
+    const vh = video.videoHeight || 480
+    const canvas = overlayRef.current
+    const ctx = canvas?.getContext("2d") || null
+    if (canvas && ctx) {
+      canvas.width = vw
+      canvas.height = vh
+      ctx.clearRect(0, 0, vw, vh)
     }
 
-    await runObjectDetection(video);
-
-    // If FaceMesh is available, prefer it for robust detection and overlay
-    if (usingMesh && meshRef.current) {
-      try {
-        const canvas = overlayRef.current;
-        const ctx = canvas?.getContext("2d") || null;
-        if (canvas && ctx) {
-          canvas.width = vw; canvas.height = vh;
-          ctx.clearRect(0, 0, vw, vh);
+    if (enableAudioMonitoring) {
+      const rms = measureAudioRms()
+      setAudioLevel(rms)
+      if (rms > 0.055) {
+        audioSpikeStreakRef.current += 1
+        if (audioSpikeStreakRef.current >= 4) {
+          await warn("audio_noise", "Voice or background noise detected. Remain silent during the test.")
+          audioSpikeStreakRef.current = 0
         }
-        const results = await meshRef.current.send({ image: video });
-        // Some versions use callbacks, but recent builds support promises; if not, this will noop.
-      } catch {}
-      // Fallback: draw and check landmarks via FaceMesh solution API callbacks
-      // @ts-ignore
-      if (meshRef.current && typeof meshRef.current.onResults === "function") {
-        const canvas = overlayRef.current;
-        const ctx = canvas?.getContext("2d") || null;
-        meshRef.current.onResults(async (res: any) => {
-          const multi = res.multiFaceLandmarks || [];
-          const count = multi.length;
-          if (ctx && canvas) { ctx.clearRect(0, 0, canvas.width, canvas.height); }
-          if (count === 0) {
-            noFaceStreakRef.current += 1;
-            if (hadFaceRef.current && noFaceStreakRef.current >= 3) {
-              await warn("camera_blocked", "Camera may be covered or blocked. Uncover your camera to continue.");
-            } else {
-              await warn("no_face", "No face detected. Please stay in view of the camera.");
-            }
-            return;
-          }
-          hadFaceRef.current = true;
-          noFaceStreakRef.current = 0;
-          if (count > maxFaces) {
-            await warn("multi_face", "Multiple faces detected. Please ensure only you are in frame.");
-          }
-          const face = multi[0];
-          // Landmarks are normalized [0..1]; compute bbox and draw key points
-          const xs = face.map((p: any) => p.x * vw);
-          const ys = face.map((p: any) => p.y * vh);
-          const minX = Math.max(0, Math.min(...xs));
-          const maxX = Math.min(vw, Math.max(...xs));
-          const minY = Math.max(0, Math.min(...ys));
-          const maxY = Math.min(vh, Math.max(...ys));
-          const faceW = maxX - minX;
-          const faceRatio = faceW / vw;
-
-          if (faceRatio < minFaceSizeRatio) {
-            await warn("off_screen", "You appear far from camera or partially out of frame. Please stay centered.");
-          }
-
-          // Draw overlay: bbox and a subset of landmarks (eyes, nose tip, chin)
-          if (ctx && canvas) {
-            ctx.strokeStyle = "rgba(16,185,129,0.7)"; // emerald
-            ctx.lineWidth = 2;
-            ctx.strokeRect(minX, minY, faceW, maxY - minY);
-            ctx.fillStyle = "rgba(59,130,246,0.9)"; // blue
-            const keyIdx = [1, 33, 263, 168, 199]; // nose tip, left eye, right eye, forehead, chin-ish
-            keyIdx.forEach((i) => {
-              const p = face[i];
-              if (!p) return;
-              const x = p.x * vw, y = p.y * vh;
-              ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
-            });
-            if (lastObjectHitsRef.current.length) {
-              drawObjectOverlay(ctx, lastObjectHitsRef.current);
-            }
-          }
-
-          // Movement detection based on bbox center drift
-          const center = { x: minX + faceW / 2, y: minY + (maxY - minY) / 2 };
-          if (lastCenterRef.current) {
-            const dx = center.x - lastCenterRef.current.x;
-            const dy = center.y - lastCenterRef.current.y;
-            const dist = Math.hypot(dx, dy);
-            if (dist > movementThreshold) {
-              await warn("movement", "Excessive movement detected. Please remain steady during the assessment.");
-            }
-          }
-          lastCenterRef.current = center;
-        });
-        // Kick one frame through the graph via HTMLVideoElement
-        try { await meshRef.current.send({ image: video }); } catch {}
-        return;
+      } else {
+        audioSpikeStreakRef.current = Math.max(0, audioSpikeStreakRef.current - 1)
       }
     }
 
-    if (detectorRef.current) {
-      try {
-        const faces = await detectorRef.current.detect(video);
-        const count = Array.isArray(faces) ? faces.length : 0;
-        if (count === 0) {
-          noFaceStreakRef.current += 1;
-          if (hadFaceRef.current && noFaceStreakRef.current >= 3) {
-            await warn("camera_blocked", "Camera may be covered or blocked. Uncover your camera to continue.");
-          } else {
-            await warn("no_face", "No face detected. Please stay in view of the camera.");
-          }
-          return;
-        }
-        hadFaceRef.current = true;
-        noFaceStreakRef.current = 0;
-        if (count > maxFaces) {
-          await warn("multi_face", "Multiple faces detected. Please ensure only you are in frame.");
-        }
-        // Use the largest face as primary
-        const largest = faces.reduce((m: any, f: any) => {
-          const area = f.boundingBox?.width * f.boundingBox?.height;
-          const mArea = m ? m.boundingBox?.width * m.boundingBox?.height : -1;
-          return area > mArea ? f : m;
-        }, null);
-        if (largest?.boundingBox) {
-          const bb = largest.boundingBox as DOMRectReadOnly;
-          const faceRatio = bb.width / vw;
-          if (faceRatio < minFaceSizeRatio) {
-            await warn("off_screen", "You appear far from camera or partially out of frame. Please stay centered.");
-          }
-          // Movement detection based on face center drift
-          const center = { x: bb.x + bb.width / 2, y: bb.y + bb.height / 2 };
-          if (lastCenterRef.current) {
-            const dx = center.x - lastCenterRef.current.x;
-            const dy = center.y - lastCenterRef.current.y;
-            const dist = Math.hypot(dx, dy);
-            if (dist > movementThreshold) {
-              await warn("movement", "Excessive movement detected. Please remain steady during the assessment.");
-            }
-          }
-          lastCenterRef.current = center;
-          // Draw basic bbox overlay if FaceMesh not used
-          const canvas = overlayRef.current;
-          const ctx = canvas?.getContext("2d") || null;
-          if (canvas && ctx) {
-            canvas.width = vw; canvas.height = vh;
-            ctx.clearRect(0, 0, vw, vh);
-            ctx.strokeStyle = "rgba(16,185,129,0.7)";
-            ctx.lineWidth = 2;
-            ctx.strokeRect(bb.x, bb.y, bb.width, bb.height);
-            if (lastObjectHitsRef.current.length) {
-              drawObjectOverlay(ctx, lastObjectHitsRef.current);
-            }
-          }
-        }
-      } catch (e) {
-        // Detection failed this frame; ignore
+    await runObjectDetection(video)
+
+    let faceCount = 0
+    let primaryFaceW = 0
+    let center: { x: number; y: number } | null = null
+
+    if (faceDetectorRef.current.ready) {
+      const faces = await faceDetectorRef.current.detect(video)
+      faceCount = faces.length
+      if (ctx) drawFaceBoxes(ctx, faces)
+      if (faces.length > 0) {
+        const f = faces.reduce((a, b) => (a.width > b.width ? a : b))
+        primaryFaceW = f.width
+        center = { x: f.x + f.width / 2, y: f.y + f.height / 2 }
       }
     } else {
-      // Fallback: no face APIs, emit periodic soft warning once
-      await postEvent("no_face_api", "Face detection not supported. Limited proctoring active.");
-      setSupported(false);
-      if (timerRef.current) clearInterval(timerRef.current);
+      const legacy = await detectFacesLegacy(video)
+      if (legacy) {
+        faceCount = legacy.length
+        if (legacy.length > 0) {
+          const largest = legacy.reduce((m: any, f: any) => {
+            const area = (f.boundingBox?.width || 0) * (f.boundingBox?.height || 0)
+            const mArea = m ? (m.boundingBox?.width || 0) * (m.boundingBox?.height || 0) : -1
+            return area > mArea ? f : m
+          }, null)
+          if (largest?.boundingBox) {
+            const bb = largest.boundingBox
+            primaryFaceW = bb.width
+            center = { x: bb.x + bb.width / 2, y: bb.y + bb.height / 2 }
+            if (ctx) {
+              ctx.strokeStyle = "rgba(16,185,129,0.85)"
+              ctx.strokeRect(bb.x, bb.y, bb.width, bb.height)
+            }
+          }
+        }
+      }
     }
-  };
+
+    if (ctx && lastObjectHitsRef.current.length) {
+      drawObjectOverlay(ctx, lastObjectHitsRef.current)
+    }
+
+    if (faceCount === 0 && !faceDetectorRef.current.ready && !legacyDetectorRef.current) {
+      await warn("no_face_api", "Face AI loading… limited monitoring until model is ready.", true)
+      return
+    }
+
+    if (faceCount === 0) {
+      noFaceStreakRef.current += 1
+      if (hadFaceRef.current && noFaceStreakRef.current >= 2) {
+        await warn("camera_blocked", "Camera blocked or covered. Uncover your camera immediately.")
+      } else if (noFaceStreakRef.current >= 3) {
+        await warn("no_face", "No face detected. Stay centered in front of the camera.")
+      }
+      return
+    }
+
+    hadFaceRef.current = true
+    noFaceStreakRef.current = 0
+
+    if (faceCount > maxFaces) {
+      await warn("multi_face", "Multiple people detected. Only you may be in the frame.")
+    }
+
+    const faceRatio = primaryFaceW / vw
+    if (faceRatio > 0 && faceRatio < minFaceSizeRatio) {
+      await warn("off_screen", "You are too far or partially out of frame. Move closer to the camera.")
+    }
+
+    if (center && lastCenterRef.current) {
+      const dist = Math.hypot(center.x - lastCenterRef.current.x, center.y - lastCenterRef.current.y)
+      if (dist > movementThreshold) {
+        await warn("movement", "Excessive movement detected. Keep your head steady.")
+      }
+    }
+    if (center) lastCenterRef.current = center
+  }, [
+    enableAudioMonitoring,
+    enableObjectDetection,
+    maxFaces,
+    minFaceSizeRatio,
+    movementThreshold,
+    paused,
+    warn,
+  ])
+
+  const start = async () => {
+    if (!canGetUserMedia()) {
+      toast({ title: "Camera required", description: "Your browser does not support webcam access.", variant: "destructive" })
+      return
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: enableAudioMonitoring,
+      })
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        await videoRef.current.play()
+      }
+      setEnabled(true)
+
+      const faceOk = await faceDetectorRef.current.init()
+      setFaceAiReady(faceOk)
+
+      if (enableObjectDetection) {
+        const objOk = await objectDetectorRef.current.init()
+        setObjectAiReady(objOk)
+      }
+
+      if (enableAudioMonitoring) initAudio(stream)
+
+      if (timerRef.current) clearInterval(timerRef.current)
+      timerRef.current = setInterval(() => { analyzeFrame().catch(() => {}) }, checkIntervalMs)
+
+      if (enablePeriodicSnapshots) {
+        const intervalMs = Math.max(10, snapshotIntervalSec) * 1000
+        if (snapshotTimerRef.current) clearInterval(snapshotTimerRef.current)
+        snapshotTimerRef.current = setInterval(async () => {
+          const at = new Date().toISOString()
+          await postEvent("periodic_snapshot", "Routine proctoring snapshot", true)
+          onSnapshot?.({ type: "periodic_snapshot", at })
+        }, intervalMs)
+      }
+
+      await postEvent("proctor_started", "Live proctoring session started", true)
+      toast({
+        title: "Proctoring active",
+        description: [
+          faceOk ? "Face AI" : null,
+          objectDetectorRef.current.ready ? "Object AI" : null,
+          enableAudioMonitoring ? "Audio" : null,
+        ].filter(Boolean).join(" · ") || "Monitoring enabled",
+      })
+    } catch {
+      toast({ title: "Camera error", description: "Allow camera and microphone permissions, then retry.", variant: "destructive" })
+    }
+  }
+
+  const stop = () => {
+    if (timerRef.current) clearInterval(timerRef.current)
+    if (snapshotTimerRef.current) clearInterval(snapshotTimerRef.current)
+    const stream = videoRef.current?.srcObject as MediaStream | undefined
+    stream?.getTracks().forEach((t) => t.stop())
+    audioCtxRef.current?.close().catch(() => {})
+    setEnabled(false)
+  }
+
+  useEffect(() => {
+    const onVisibility = async () => {
+      if (document.hidden) {
+        tabSwitchCountRef.current += 1
+        onTabSwitch?.(tabSwitchCountRef.current)
+        if (tabSwitchCountRef.current >= maxTabSwitches) {
+          onTerminate?.(`Tab switch limit reached (${maxTabSwitches})`)
+        }
+        await warn("tab_switch", `Tab switch #${tabSwitchCountRef.current} — stay on the test window.`)
+      }
+    }
+    const onBlur = async () => {
+      await warn("window_blur", "Window focus lost. Return to the test immediately.")
+    }
+    const prevent = (e: Event) => e.preventDefault()
+
+    document.addEventListener("visibilitychange", onVisibility)
+    window.addEventListener("blur", onBlur)
+    if (blockClipboard) {
+      document.addEventListener("copy", prevent)
+      document.addEventListener("cut", prevent)
+      document.addEventListener("paste", prevent)
+      document.addEventListener("contextmenu", prevent)
+    }
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility)
+      window.removeEventListener("blur", onBlur)
+      if (blockClipboard) {
+        document.removeEventListener("copy", prevent)
+        document.removeEventListener("cut", prevent)
+        document.removeEventListener("paste", prevent)
+        document.removeEventListener("contextmenu", prevent)
+      }
+    }
+  }, [blockClipboard, maxTabSwitches, onTabSwitch, onTerminate, warn])
+
+  useEffect(() => {
+    if (autoStart && !enabled) start()
+    return () => stop()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart])
 
   return (
-    <div className={"fixed z-40 right-4 bottom-4 w-[280px] select-none " + (className || "") }>
-      <div className="rounded-lg border bg-background shadow-md p-3">
+    <div className={"fixed z-40 right-4 bottom-4 w-[300px] select-none " + (className || "")}>
+      <div className="rounded-lg border border-[#30363d] bg-[#161b22] shadow-xl p-3">
         <div className="flex items-center justify-between mb-2">
-          <div className="text-sm font-medium">AI Proctoring</div>
+          <div className="text-sm font-medium text-white">Live Proctor</div>
           <div className="flex items-center gap-1">
-            {objectAiReady && (
-              <Badge variant="outline" className="text-[9px] px-1.5">Object AI</Badge>
-            )}
-            <Badge variant={enabled ? "default" : "secondary"}>{enabled ? "On" : "Off"}</Badge>
+            {faceAiReady && <Badge variant="outline" className="text-[9px] px-1 border-emerald-700 text-emerald-300">Face</Badge>}
+            {objectAiReady && <Badge variant="outline" className="text-[9px] px-1 border-amber-700 text-amber-300">Object</Badge>}
+            {enableAudioMonitoring && <Badge variant="outline" className="text-[9px] px-1 border-blue-700 text-blue-300">Audio</Badge>}
+            <Badge variant={enabled ? "default" : "secondary"}>{enabled ? "ON" : "OFF"}</Badge>
           </div>
         </div>
-        {supported === false && (
-          <div className="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded p-2 mb-2">
-            Limited monitoring: browser lacks FaceDetector.
-          </div>
-        )}
-        {/* Live preview with overlay */}
-        <div className="relative rounded overflow-hidden bg-black mb-2">
-          <video ref={videoRef} playsInline muted className="w-full h-auto opacity-70" />
-          <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" />
-          {/* Hidden evidence canvas */}
+
+        <div className="relative rounded overflow-hidden bg-black mb-2 border border-[#30363d]">
+          <video ref={videoRef} playsInline muted className="w-full h-auto scale-x-[-1]" />
+          <canvas ref={overlayRef} className="absolute inset-0 w-full h-full pointer-events-none scale-x-[-1]" />
           <canvas ref={canvasRef} className="hidden" />
           {paused && (
-            <div className="absolute inset-0 bg-black/70 flex items-center justify-center text-center p-3">
+            <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-3 text-center">
               <div>
-                <div className="text-white font-semibold mb-2">Assessment Paused</div>
-                <div className="text-white/80 text-xs mb-3">Too many violations detected. Please ensure proper conditions and resume.</div>
-                <Button size="sm" onClick={() => { setPaused(false); scheduleChecks(); }}>I Understand, Resume</Button>
+                <p className="text-white font-semibold text-sm mb-2">Paused — violations</p>
+                <Button size="sm" onClick={() => { setPaused(false); timerRef.current = setInterval(() => analyzeFrame().catch(() => {}), checkIntervalMs) }}>
+                  Resume
+                </Button>
               </div>
             </div>
           )}
         </div>
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>Warnings</span>
-          <span className="font-medium text-foreground">{warnings}</span>
+
+        {enableAudioMonitoring && enabled && (
+          <div className="mb-2">
+            <div className="flex justify-between text-[10px] text-[#8b949e] mb-1">
+              <span>Mic level</span>
+              <span>{audioLevel > 0.055 ? "Voice detected" : "Quiet"}</span>
+            </div>
+            <div className="h-1.5 bg-[#21262d] rounded-full overflow-hidden">
+              <div
+                className={`h-full transition-all ${audioLevel > 0.055 ? "bg-red-500" : "bg-emerald-500"}`}
+                style={{ width: `${Math.min(100, audioLevel * 400)}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-between text-xs text-[#8b949e]">
+          <span>Warnings: <strong className="text-white">{warnings}</strong></span>
+          {lastEvent && <span className="truncate max-w-[140px] text-amber-400">{lastEvent}</span>}
         </div>
-        <div className="mt-2 flex items-center gap-2">
+
+        <div className="mt-2">
           {!enabled ? (
-            <Button size="sm" className="w-full" onClick={start}>Enable Camera</Button>
+            <Button size="sm" className="w-full bg-purple-600 hover:bg-purple-500" onClick={start}>Start monitoring</Button>
           ) : (
-            <Button size="sm" variant="outline" className="w-full" onClick={stop}>Stop</Button>
+            <Button size="sm" variant="outline" className="w-full border-[#30363d]" onClick={stop}>Stop</Button>
           )}
         </div>
       </div>
     </div>
-  );
+  )
 }

@@ -3,13 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { FaceProctor } from "@/components/proctor/face-proctor"
 import { Badge } from "@/components/ui/badge"
-import { Shield, ShieldAlert } from "lucide-react"
+import { Shield, ShieldAlert, Maximize } from "lucide-react"
 import {
   CODING_SECURITY_LAYERS,
   type SecurityActivityLog,
   type MotionSample,
   type TestSecuritySettings,
   mergeTestSecurity,
+  isFullscreenActive,
+  requestTestFullscreen,
 } from "@/lib/coding-test-security"
 import { getTestSocket } from "@/lib/test-socket-client"
 import { authFetch } from "@/lib/client-auth"
@@ -38,9 +40,12 @@ export function CodingTestProctor({
   const settings = mergeTestSecurity(rawSettings)
   const [tabSwitches, setTabSwitches] = useState(0)
   const tabSwitchesRef = useRef(0)
+  const fullscreenExitsRef = useRef(0)
   const [violations, setViolations] = useState<SecurityActivityLog[]>([])
   const [motionSamples, setMotionSamples] = useState<MotionSample[]>([])
   const [layerStatus, setLayerStatus] = useState<Record<string, "ok" | "warn" | "fail">>({})
+  const [snapshotCount, setSnapshotCount] = useState(0)
+  const [inFullscreen, setInFullscreen] = useState(true)
   const terminatedRef = useRef(false)
 
   const pushActivity = useCallback((type: string, message: string, layer?: string) => {
@@ -87,12 +92,15 @@ export function CodingTestProctor({
     onTabSwitchParent?.(count)
     pushActivity("tab_switch", `Tab switch #${count} detected`, "tab")
     if (settings.detectTabSwitch && count >= settings.maxTabSwitches!) {
-      handleTerminate(`Test ended: ${count} tab switches detected (limit: ${settings.maxTabSwitches})`)
+      handleTerminate(`Test ended: ${count} tab switches (limit: ${settings.maxTabSwitches})`)
     }
   }, [handleTerminate, onTabSwitchParent, pushActivity, settings.detectTabSwitch, settings.maxTabSwitches])
 
   const handleViolation = useCallback((payload: { type: string; message: string }) => {
-    if (payload.type === "tab_switch" || payload.type === "window_blur") return
+    if (payload.type === "tab_switch" || payload.type === "window_blur" || payload.type === "periodic_snapshot") {
+      if (payload.type === "periodic_snapshot") return
+      if (payload.type === "tab_switch") return
+    }
     const layerMap: Record<string, string> = {
       no_face: "face",
       multi_face: "multi_face",
@@ -107,6 +115,7 @@ export function CodingTestProctor({
       suspicious_device: "object",
       extra_person: "multi_face",
       suspicious_object: "object",
+      fullscreen_exit: "fullscreen",
     }
     const layer = layerMap[payload.type] || payload.type
 
@@ -121,6 +130,11 @@ export function CodingTestProctor({
 
     pushActivity(payload.type, payload.message, layer)
   }, [pushActivity, violations])
+
+  const handleSnapshot = useCallback(() => {
+    setSnapshotCount((c) => c + 1)
+    setLayerStatus((prev) => ({ ...prev, snapshots: "ok" }))
+  }, [])
 
   useEffect(() => {
     const socket = getTestSocket()
@@ -149,18 +163,24 @@ export function CodingTestProctor({
       e.preventDefault()
       pushActivity("copy_paste", "Cut blocked", "clipboard")
     }
+    const onCtx = (e: MouseEvent) => {
+      e.preventDefault()
+      pushActivity("context_menu", "Right-click blocked", "clipboard")
+    }
     document.addEventListener("copy", onCopy)
     document.addEventListener("paste", onPaste)
     document.addEventListener("cut", onCut)
+    document.addEventListener("contextmenu", onCtx)
     return () => {
       document.removeEventListener("copy", onCopy)
       document.removeEventListener("paste", onPaste)
       document.removeEventListener("cut", onCut)
+      document.removeEventListener("contextmenu", onCtx)
     }
   }, [pushActivity, settings.restrictCopyPaste])
 
   useEffect(() => {
-    if (!settings.detectTabSwitch || settings.webcamRequired) return
+    if (!settings.detectTabSwitch) return
     const onVisibility = () => {
       if (document.hidden) {
         const next = tabSwitchesRef.current + 1
@@ -169,24 +189,79 @@ export function CodingTestProctor({
     }
     document.addEventListener("visibilitychange", onVisibility)
     return () => document.removeEventListener("visibilitychange", onVisibility)
-  }, [handleTabSwitch, settings.detectTabSwitch, settings.webcamRequired])
+  }, [handleTabSwitch, settings.detectTabSwitch])
+
+  useEffect(() => {
+    if (settings.requireFullscreen === false) return
+
+    const onFullscreen = () => {
+      const active = isFullscreenActive()
+      setInFullscreen(active)
+      if (!active) {
+        fullscreenExitsRef.current += 1
+        pushActivity(
+          "fullscreen_exit",
+          `Exited fullscreen (${fullscreenExitsRef.current}x). Return to fullscreen immediately.`,
+          "fullscreen",
+        )
+        if (fullscreenExitsRef.current >= 3) {
+          handleTerminate("Test ended: repeated fullscreen exits")
+        }
+      }
+    }
+
+    document.addEventListener("fullscreenchange", onFullscreen)
+    if (!isFullscreenActive()) {
+      requestTestFullscreen().catch(() => {})
+    }
+    return () => document.removeEventListener("fullscreenchange", onFullscreen)
+  }, [handleTerminate, pushActivity, settings.requireFullscreen])
+
+  useEffect(() => {
+    const blockKeys = (e: KeyboardEvent) => {
+      if (e.key === "F12" || (e.ctrlKey && e.shiftKey && ["I", "J", "C"].includes(e.key.toUpperCase()))) {
+        e.preventDefault()
+        pushActivity("devtools_attempt", "Developer tools shortcut blocked", "tab")
+      }
+    }
+    window.addEventListener("keydown", blockKeys)
+    return () => window.removeEventListener("keydown", blockKeys)
+  }, [pushActivity])
 
   if (!settings.enableProctoring) return null
 
+  const activeLayers = CODING_SECURITY_LAYERS.filter((l) => {
+    if (l.id === "fullscreen") return settings.requireFullscreen !== false
+    if (l.id === "object") return settings.enableObjectDetection
+    if (l.id === "audio") return settings.enableAudioMonitoring !== false
+    if (l.id === "snapshots") return settings.enablePeriodicSnapshots !== false
+    if (l.id === "clipboard") return settings.restrictCopyPaste
+    if (l.id === "tab") return settings.detectTabSwitch
+    return true
+  })
+
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-[300px]">
+    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-[320px]">
       <div className="rounded-lg border border-[#30363d] bg-[#161b22] p-3 shadow-xl">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
             <Shield className="h-3.5 w-3.5 text-purple-400" />
-            AI Security (COCO-SSD)
+            Security monitor
           </div>
-          <Badge variant="outline" className="text-[10px] border-purple-700 text-purple-300">
-            {tabSwitches}/{settings.maxTabSwitches} tabs
-          </Badge>
+          <div className="flex gap-1">
+            {settings.requireFullscreen !== false && (
+              <Badge variant="outline" className={`text-[9px] ${inFullscreen ? "border-emerald-700 text-emerald-300" : "border-red-700 text-red-300"}`}>
+                <Maximize className="h-2.5 w-2.5 mr-0.5" />
+                {inFullscreen ? "FS" : "!"}
+              </Badge>
+            )}
+            <Badge variant="outline" className="text-[10px] border-purple-700 text-purple-300">
+              {tabSwitches}/{settings.maxTabSwitches} tabs
+            </Badge>
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-1">
-          {CODING_SECURITY_LAYERS.map(layer => {
+          {activeLayers.slice(0, 8).map(layer => {
             const status = layerStatus[layer.id] || "ok"
             return (
               <div
@@ -202,10 +277,8 @@ export function CodingTestProctor({
             )
           })}
         </div>
-        {motionSamples.length > 0 && (
-          <p className="text-[9px] text-[#8b949e] mt-2">
-            Motion events: {motionSamples.length}/5 logged
-          </p>
+        {settings.enablePeriodicSnapshots !== false && (
+          <p className="text-[9px] text-[#8b949e] mt-2">Snapshots captured: {snapshotCount}</p>
         )}
         {violations.length > 0 && (
           <div className="mt-2 flex items-center gap-1 text-[10px] text-amber-400">
@@ -219,16 +292,20 @@ export function CodingTestProctor({
         <FaceProctor
           assessmentId={applicationId}
           candidateId={candidateId}
+          testId={testId}
           blockClipboard={settings.restrictCopyPaste}
-          enableAudioMonitoring
+          enableAudioMonitoring={settings.enableAudioMonitoring !== false}
           enableObjectDetection={settings.enableObjectDetection ?? true}
+          enablePeriodicSnapshots={settings.enablePeriodicSnapshots !== false}
+          snapshotIntervalSec={settings.snapshotIntervalSec ?? 20}
           evidence
           autoStart
-          maxWarningsBeforePause={5}
+          maxWarningsBeforePause={10}
           onViolation={handleViolation}
           onTabSwitch={handleTabSwitch}
           maxTabSwitches={settings.maxTabSwitches}
           onTerminate={handleTerminate}
+          onSnapshot={handleSnapshot}
           className="!relative !bottom-0 !right-0 !w-full"
         />
       )}

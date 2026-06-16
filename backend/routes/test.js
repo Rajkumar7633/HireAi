@@ -112,7 +112,7 @@ router.post("/", auth, async (req, res) => {
     return res.status(403).json({ msg: "Access denied. Only recruiters can create tests." })
   }
 
-  const { title, description, questions, durationMinutes } = req.body
+  const { title, description, questions, durationMinutes, passingScore, settings } = req.body
 
   if (!title || !questions || !durationMinutes) {
     return res.status(400).json({ msg: "Please provide title, questions, and duration for the test." })
@@ -125,6 +125,8 @@ router.post("/", auth, async (req, res) => {
       description,
       questions,
       durationMinutes,
+      passingScore: passingScore ?? 70,
+      settings: settings || {},
       createdAt: new Date(),
     })
 
