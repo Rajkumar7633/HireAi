@@ -10,7 +10,7 @@ const mongoSanitize = require("express-mongo-sanitize");
 const { v4: uuidv4 } = require("uuid");
 
 const dotenv = require("dotenv");
-dotenv.config({ path: "./.env" });
+dotenv.config({ path: path.join(__dirname, "../.env") });
 
 // ─── Startup: validate required env vars ───────────────────────────────────
 const REQUIRED_ENV = ["JWT_SECRET", "MONGODB_URI"];
