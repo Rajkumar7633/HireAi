@@ -4,6 +4,8 @@ import { connectDB } from "@/lib/mongodb"
 import ProctorEvent from "@/models/ProctorEvent"
 import { mergeTestSecurity } from "@/lib/coding-test-security"
 import {
+export { dynamic } from "@/lib/api-dynamic"
+
   aggregateSecuritySummary,
   buildCandidateSecurityProfile,
   type ProctorEventRow,

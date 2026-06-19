@@ -5,6 +5,8 @@ import CollegeStudentRegistration from "@/models/CollegeStudentRegistration"
 import User from "@/models/User"
 import Notification from "@/models/Notification"
 import {
+export { dynamic } from "@/lib/api-dynamic"
+
   createCollegeStudentAccount,
   sendCollegeStudentWelcomeEmail,
 } from "@/lib/college-onboard-student"

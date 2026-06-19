@@ -4,6 +4,8 @@ import { getSession } from "@/lib/auth"
 import { CollegeInterview } from "@/models/CollegeInterview"
 import User from "@/models/User"
 import Notification from "@/models/Notification"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function PUT(
   req: NextRequest,

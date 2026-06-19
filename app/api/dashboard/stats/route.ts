@@ -4,6 +4,8 @@ import { connectDB } from "@/lib/mongodb"
 import User from "@/models/User"
 import Application from "@/models/Application"
 import JobDescription from "@/models/JobDescription"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function GET(request: NextRequest) {
   try {

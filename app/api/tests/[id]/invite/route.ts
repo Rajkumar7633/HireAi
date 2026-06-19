@@ -9,6 +9,8 @@ import Resume from "@/models/Resume"
 import Notification from "@/models/Notification"
 import { sendEmail } from "@/lib/email-service"
 import { getAssignedApplicationsForTest } from "@/lib/test-assignment-stats"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 type InviteStatus = "notified" | "not_registered" | "already_assigned" | "error"
 

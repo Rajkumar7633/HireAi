@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import Application from "@/models/Application"
 import JobDescription from "@/models/JobDescription"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 // GET /api/job-descriptions/[id]/shortlisted
 // Lists shortlisted candidates (status == "Shortlisted" or shortlisted == true) for a job

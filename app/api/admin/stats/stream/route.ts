@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export const runtime = "nodejs"
 

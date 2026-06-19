@@ -4,6 +4,8 @@ import { getSession } from "@/lib/auth"
 import User from "@/models/User"
 import Application from "@/models/Application"
 import { CollegePlacement } from "@/models/CollegePlacement"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function GET(req: NextRequest) {
   try {

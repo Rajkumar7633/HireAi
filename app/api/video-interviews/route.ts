@@ -6,6 +6,8 @@ import User from "@/models/User"
 import VideoInterview from "@/models/VideoInterview"
 import Notification from "@/models/Notification"
 import { sendStatusChangeEmail } from "@/lib/status-change-email"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 type Provider = "in_app" | "external"
 

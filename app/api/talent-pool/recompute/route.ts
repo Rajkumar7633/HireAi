@@ -3,6 +3,8 @@ import { executeQuery } from "@/lib/mongodb"
 import User from "@/models/User"
 import { getSession } from "@/lib/auth"
 import { computeProfileScore } from "@/lib/scoring"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function POST(request: NextRequest) {
   try {

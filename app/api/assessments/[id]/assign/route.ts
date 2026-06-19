@@ -6,6 +6,8 @@ import Application from "@/models/Application"
 import Notification from "@/models/Notification"
 import User from "@/models/User"
 import { sendAssessmentEmail } from "@/lib/email-service"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {

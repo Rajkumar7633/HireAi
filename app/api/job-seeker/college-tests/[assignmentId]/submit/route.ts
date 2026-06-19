@@ -7,6 +7,8 @@ import User from "@/models/User"
 import { getCollegeAssignmentModel, getFlexTestModel } from "@/lib/flex-test"
 import { getTestSubmissionModel } from "@/lib/test-submission"
 import { scoreTestAnswers } from "@/lib/score-test-answers"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function POST(
   req: NextRequest,

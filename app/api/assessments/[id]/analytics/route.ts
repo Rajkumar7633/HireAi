@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import Assessment from "@/models/Assessment"
 import Application from "@/models/Application"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 function computeMedian(arr: number[]): number {
   if (arr.length === 0) return 0

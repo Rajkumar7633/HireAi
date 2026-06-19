@@ -7,6 +7,8 @@ import User from "@/models/User"
 import Notification from "@/models/Notification"
 import mongoose from "mongoose"
 import {
+export { dynamic } from "@/lib/api-dynamic"
+
   checkCampusDriveEligibility,
   type CampusDriveStudent,
 } from "@/lib/campus-drive-eligibility"

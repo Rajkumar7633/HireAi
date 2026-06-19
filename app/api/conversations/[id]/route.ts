@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { connectDB } from "@/lib/mongodb";
 import Conversation from "@/models/Conversation";
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
     try {

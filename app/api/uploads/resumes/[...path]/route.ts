@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { existsSync, createReadStream } from "fs"
 import { join, normalize } from "path"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function GET(req: NextRequest, { params }: { params: { path: string[] } }) {
   try {

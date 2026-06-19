@@ -4,6 +4,8 @@ import { connectDB } from "@/lib/mongodb"
 import { aiService } from "@/lib/ai-service"
 import Resume from "@/models/Resume"
 import JobSeekerProfile from "@/models/JobSeekerProfile"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 function normalizeSkills(input: string[] | undefined | null): string[] {
   const set = new Set<string>()

@@ -3,6 +3,8 @@ import { connectDB } from "@/lib/mongodb"
 import { resolvePortalByToken } from "@/lib/college-registration-portal"
 import CollegeStudentRegistration from "@/models/CollegeStudentRegistration"
 import User from "@/models/User"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function GET(
   _request: NextRequest,

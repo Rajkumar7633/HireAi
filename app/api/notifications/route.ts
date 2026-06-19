@@ -4,6 +4,8 @@ import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import Notification from "@/models/Notification"
 import { NOTIFICATION_CATEGORIES } from "@/lib/notification-utils"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function GET(request: NextRequest) {
   try {

@@ -1,4 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5001"
 

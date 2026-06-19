@@ -5,6 +5,8 @@ import { sendEmail } from "@/lib/email-service"
 import { renderTemplate } from "@/lib/template-render"
 import EmailTemplate from "@/models/EmailTemplate"
 import User from "@/models/User"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 type UserEmailLean = { email?: string; name?: string } | null
 

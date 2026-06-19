@@ -1,4 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function POST(request: NextRequest) {
   try {

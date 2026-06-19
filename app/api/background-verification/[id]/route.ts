@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import { formatVerificationRow } from "@/lib/background-verification"
 import BackgroundVerification from "@/models/BackgroundVerification"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function GET(
   _req: NextRequest,

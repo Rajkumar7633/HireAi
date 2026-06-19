@@ -4,6 +4,8 @@ import { connectDB } from "@/lib/mongodb"
 import Test from "@/models/Test"
 import Application from "@/models/Application"
 import { getCollegeAssignmentModel, getFlexTestModel } from "@/lib/flex-test"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5001"
 

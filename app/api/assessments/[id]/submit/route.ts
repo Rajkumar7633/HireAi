@@ -6,6 +6,8 @@ import Notification from "@/models/Notification"
 import Application from "@/models/Application"
 import User from "@/models/User"
 import { computeProfileScore } from "@/lib/scoring"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {

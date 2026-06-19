@@ -6,6 +6,8 @@ import Resume from "@/models/Resume"
 import JobSeekerProfile from "@/models/JobSeekerProfile"
 import mongoose from "mongoose"
 import { extractSkillsFromText } from "@/lib/skill-gap-utils"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 function getSkillGapModel() {
   if (mongoose.models.SkillGapAnalysis) return mongoose.models.SkillGapAnalysis

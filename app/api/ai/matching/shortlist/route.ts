@@ -8,6 +8,8 @@ import JobDescription from "@/models/JobDescription"
 import { sendEmail } from "@/lib/email-service"
 import { renderTemplate } from "@/lib/template-render"
 import Resume from "@/models/Resume"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function POST(request: NextRequest) {
   try {

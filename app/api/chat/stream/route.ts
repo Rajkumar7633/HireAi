@@ -2,6 +2,8 @@ import { NextRequest } from "next/server"
 import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import mongoose from "mongoose"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 // ─── Chat log model (same as /api/chat/route.ts) ─────────────────────────────
 function getChatLogModel() {

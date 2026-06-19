@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import User from "@/models/User"
 import {
+export { dynamic } from "@/lib/api-dynamic"
+
   createCollegeStudentAccount,
   sendCollegeStudentWelcomeEmail,
 } from "@/lib/college-onboard-student"

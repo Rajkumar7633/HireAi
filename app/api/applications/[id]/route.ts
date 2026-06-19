@@ -4,6 +4,8 @@ import { connectDB } from "@/lib/mongodb"
 import Application from "@/models/Application"
 import Notification from "@/models/Notification"
 import { sendStatusChangeEmail } from "@/lib/status-change-email"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 function getIdString(value: unknown): string {
   if (!value) return ""

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
+export { dynamic } from "@/lib/api-dynamic"
+
 
 // Simple in-memory execution cache (in production, use Redis or similar)
 const executionCache = new Map<string, any>();

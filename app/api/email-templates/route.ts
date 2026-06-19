@@ -4,6 +4,8 @@ import EmailTemplate from "@/models/EmailTemplate"
 import { getSession } from "@/lib/auth"
 
 import { DEFAULT_EMAIL_TEMPLATES } from "@/lib/email-default-templates"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 const defaultTemplates = DEFAULT_EMAIL_TEMPLATES.map((t) => ({
   name: t.name,

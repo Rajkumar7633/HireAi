@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth";
 import { connectDB } from "@/lib/mongodb";
 import Conversation from "@/models/Conversation";
 import User from "@/models/User";
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function GET(req: Request) {
   try {

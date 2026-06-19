@@ -2,6 +2,8 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import {
+export { dynamic } from "@/lib/api-dynamic"
+
   applicationToSubmissionRow,
   dedupeApplicationsByCandidate,
   getAssignedApplicationsForTest,

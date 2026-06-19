@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import { CollegeMeeting } from "@/models/CollegeMeeting"
 import { computeMeetingStatus } from "@/lib/college-meeting-utils"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 type AttendeeDoc = {
   studentId: string

@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function GET() {
   const hasKey = !!process.env.GEMINI_API_KEY;

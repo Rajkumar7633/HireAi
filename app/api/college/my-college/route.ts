@@ -9,6 +9,8 @@ import { CollegeMeeting } from "@/models/CollegeMeeting"
 import mongoose from "mongoose"
 import { getCollegeAssignmentModel, getFlexTestModel } from "@/lib/flex-test"
 import {
+export { dynamic } from "@/lib/api-dynamic"
+
   checkCampusDriveEligibility,
   resolveStudentYear,
   resolveStudentSemester,

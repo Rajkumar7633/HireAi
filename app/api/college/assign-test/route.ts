@@ -5,6 +5,8 @@ import mongoose from "mongoose"
 import User from "@/models/User"
 import Notification from "@/models/Notification"
 import { getFlexTestModel } from "@/lib/flex-test"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 // Lightweight schema — stored in Next.js MongoDB
 const assignmentSchema = new mongoose.Schema(

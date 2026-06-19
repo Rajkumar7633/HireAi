@@ -2,6 +2,8 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
 import { aiService } from "@/lib/ai-service"
 import { clampAtsScore } from "@/lib/normalize-ats-analysis"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 // Real-time NLP utilities for ATS analysis
 class TextProcessor {

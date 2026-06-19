@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import User from "@/models/User"
 import JobSeekerProfile from "@/models/JobSeekerProfile"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function POST(req: NextRequest) {
   try {

@@ -4,6 +4,8 @@ import { connectDB } from "@/lib/mongodb";
 import Invite from "@/models/Invite";
 import { sendEmail } from "@/lib/email-service";
 import { buildProfessionalTemplate } from "@/lib/email-templates";
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function GET(request: NextRequest) {
   try {

@@ -4,6 +4,8 @@ import User from "@/models/User"
 import JobDescription from "@/models/JobDescription"
 import { getSession } from "@/lib/auth"
 import { computeProfileScore, getLatestAssessmentScore } from "@/lib/scoring"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function GET(request: NextRequest) {
   try {

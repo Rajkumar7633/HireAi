@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import Application from "@/models/Application"
 import {
+export { dynamic } from "@/lib/api-dynamic"
+
   getApplicationCompletedAt,
   getApplicationTestScore,
   isApplicationTestCompleted,

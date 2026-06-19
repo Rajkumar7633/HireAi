@@ -2,6 +2,8 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import { buildCsv, listVerificationsForRecruiter } from "@/lib/background-verification"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function GET(req: NextRequest) {
   try {

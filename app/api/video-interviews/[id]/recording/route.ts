@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import VideoInterview from "@/models/VideoInterview"
 import { v2 as cloudinary } from "cloudinary"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,

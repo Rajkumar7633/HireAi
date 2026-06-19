@@ -4,6 +4,8 @@ import { connectDB } from "@/lib/mongodb"
 import User from "@/models/User"
 import CampusDrive from "@/models/CampusDrive"
 import {
+export { dynamic } from "@/lib/api-dynamic"
+
   evaluateStudent,
   criteriaFromDrive,
   type EligibilityCriteria,

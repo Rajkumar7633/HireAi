@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import Assessment from "@/models/Assessment"
 import Application from "@/models/Application"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function POST(request: NextRequest) {
   try {

@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth"
 import { aiService } from "@/lib/ai-service"
 import { connectDB } from "@/lib/mongodb"
 import Job from "@/models/Job"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function POST(request: NextRequest) {
   try {

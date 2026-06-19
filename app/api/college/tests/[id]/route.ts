@@ -4,6 +4,8 @@ import { connectDB } from "@/lib/mongodb"
 import { getFlexTestModel } from "@/lib/flex-test"
 import { assertCollegeOwnsTest } from "@/lib/college-test-stats"
 import mongoose from "mongoose"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 function requireCollege(session: Awaited<ReturnType<typeof getSession>>) {
   return session && (session.role === "college" || session.role === "college_admin")

@@ -1,5 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 /** Returns the current access token for client-side Authorization headers (sessionStorage sync). */
 export async function GET(request: NextRequest) {

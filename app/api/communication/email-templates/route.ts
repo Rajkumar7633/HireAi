@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import EmailTemplate from "@/models/EmailTemplate"
 import { DEFAULT_EMAIL_TEMPLATES } from "@/lib/email-default-templates"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 async function seedDefaultsIfNeeded(userId: string) {
   const count = await EmailTemplate.countDocuments({ isDefault: true })

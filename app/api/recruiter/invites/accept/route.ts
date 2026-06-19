@@ -6,6 +6,8 @@ import { hashPassword } from "@/lib/auth";
 import jwt from "jsonwebtoken";
 import { sendEmail } from "@/lib/email-service";
 import { buildProfessionalTemplate } from "@/lib/email-templates";
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function GET(request: NextRequest) {
   try {

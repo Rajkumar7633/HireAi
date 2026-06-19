@@ -4,6 +4,8 @@ import { getSession } from "@/lib/auth"
 import { CollegeInterview } from "@/models/CollegeInterview"
 import Notification from "@/models/Notification"
 import CampusDrive from "@/models/CampusDrive"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function GET(req: NextRequest) {
   try {

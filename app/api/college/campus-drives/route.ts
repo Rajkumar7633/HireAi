@@ -7,6 +7,8 @@ import CampusDriveApplication from "@/models/CampusDriveApplication"
 import User from "@/models/User"
 import Notification from "@/models/Notification"
 import { studentMatchesDriveQuery, type CampusDriveStudent } from "@/lib/campus-drive-eligibility"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function GET(req: NextRequest) {
   try {

@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import Company from "@/models/Company"
 import User from "@/models/User"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 // GET current recruiter's company profile
 export async function GET(request: NextRequest) {

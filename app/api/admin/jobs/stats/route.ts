@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server"
 import { connectDB } from "@/lib/mongodb"
 import JobDescription from "@/models/JobDescription"
 import Application from "@/models/Application"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function GET(req: NextRequest) {
     try {

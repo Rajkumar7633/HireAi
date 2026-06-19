@@ -5,6 +5,8 @@ import mongoose from "mongoose"
 import { CollegeMeeting } from "@/models/CollegeMeeting"
 import Notification from "@/models/Notification"
 import {
+export { dynamic } from "@/lib/api-dynamic"
+
   computeMeetingStatus,
   resolveCollegeMeetingInvitees,
 } from "@/lib/college-meeting-utils"

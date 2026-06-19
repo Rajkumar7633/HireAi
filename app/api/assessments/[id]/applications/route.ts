@@ -2,6 +2,8 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import Application from "@/models/Application"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {

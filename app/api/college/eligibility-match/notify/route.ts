@@ -5,6 +5,8 @@ import User from "@/models/User"
 import CampusDrive from "@/models/CampusDrive"
 import Notification from "@/models/Notification"
 import { sendEmail } from "@/lib/email-service"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 function requireCollege(session: Awaited<ReturnType<typeof getSession>>) {
   return session && (session.role === "college" || session.role === "college_admin")

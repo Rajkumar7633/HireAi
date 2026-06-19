@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import { aiService } from "@/lib/ai-service"
 import mongoose from "mongoose"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 // Lazy-register a lightweight AI chat log collection
 function getChatLogModel() {

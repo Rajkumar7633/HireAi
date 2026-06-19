@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+export { dynamic } from "@/lib/api-dynamic"
+
 
 // Map monaco label -> Judge0 language IDs (fallback accepts languageId directly)
 const DEFAULT_TIMEOUT_MS = 20000;

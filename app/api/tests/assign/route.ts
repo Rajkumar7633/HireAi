@@ -4,6 +4,8 @@ import { connectDB } from "@/lib/mongodb"
 import Application from "@/models/Application"
 import Test from "@/models/Test"
 import Notification from "@/models/Notification"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function POST(request: NextRequest) {
   try {

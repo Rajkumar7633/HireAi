@@ -7,6 +7,8 @@ import { CampusDriveInvite } from "@/models/CampusDriveInvite"
 import { CollegePartnership } from "@/models/CollegePartnership"
 import { collegeLabel, recruiterLabel, shapeInvite } from "@/lib/campus-drive-utils"
 import { createDriveFromAcceptedInvite } from "@/lib/campus-drive-pipeline"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 async function upsertPartnership(invite: any) {
   const companyName =

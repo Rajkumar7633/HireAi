@@ -6,6 +6,8 @@ import CampusDriveApplication from "@/models/CampusDriveApplication"
 import User from "@/models/User"
 import mongoose from "mongoose"
 import {
+export { dynamic } from "@/lib/api-dynamic"
+
   checkCampusDriveEligibility,
   resolveStudentYear,
   resolveStudentSemester,

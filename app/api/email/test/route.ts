@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server"
 import { getSession } from "@/lib/auth"
 import { sendEmail } from "@/lib/email-service"
 import { buildProfessionalTemplate } from "@/lib/email-templates"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function POST(request: NextRequest) {
   try {

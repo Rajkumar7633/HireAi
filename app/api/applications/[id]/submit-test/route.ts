@@ -6,6 +6,8 @@ import Notification from "@/models/Notification"
 import JobDescription from "@/models/JobDescription"
 import mongoose from "mongoose"
 import {
+export { dynamic } from "@/lib/api-dynamic"
+
   findAnswerForQuestion,
   isCodingQuestionType,
   scoreCodingAnswer,

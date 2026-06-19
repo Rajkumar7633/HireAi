@@ -8,6 +8,8 @@ import { autoInitiateBackgroundForOffer } from "@/lib/background-verification"
 import { normalizeOfferCompensation } from "@/lib/offer-letter-normalize"
 import { resolveOfferCompanyBranding } from "@/lib/offer-letter-company"
 import { sendStatusChangeEmail } from "@/lib/status-change-email"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 // ── POST: create / send / withdraw ─────────────────────────────────────────
 export async function POST(req: NextRequest) {

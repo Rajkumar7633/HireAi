@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 function sseResponse(setup: (send: (data: any) => void) => () => void) {
   const stream = new ReadableStream({

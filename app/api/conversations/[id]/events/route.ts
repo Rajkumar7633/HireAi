@@ -1,4 +1,6 @@
 import { NextRequest } from "next/server";
+export { dynamic } from "@/lib/api-dynamic"
+
 
 // In-memory subscribers map per conversation (dev/demo; not for multi-instance)
 const subscribers: Map<string, Set<(data: string) => void>> = (global as any).__convSubs || new Map();

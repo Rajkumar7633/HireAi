@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function GET(request: Request) {
   // Optional S3 presign support; falls back to 501 when SDK/ENV not present.

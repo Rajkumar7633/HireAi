@@ -5,6 +5,8 @@ import { connectDB } from "@/lib/mongodb"
 import { CollegeMeeting } from "@/models/CollegeMeeting"
 import { getLiveKitConfig } from "@/lib/livekit-config"
 import { COLLEGE_MEETING_MAX_PARTICIPANTS } from "@/lib/college-meeting-shared"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 async function authorizeMeetingAccess(
   session: NonNullable<Awaited<ReturnType<typeof getSession>>>,

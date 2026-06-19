@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import { CollegeMeeting } from "@/models/CollegeMeeting"
 import { buildCollegeMeetingJoinPath, generateHireAiRoomId } from "@/lib/hireai-room"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 function requireCollege(session: Awaited<ReturnType<typeof getSession>>) {
   return session && (session.role === "college" || session.role === "college_admin")

@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import { CollegeMeeting } from "@/models/CollegeMeeting"
 import { buildCollegeMeetingJoinPath, generateHireAiRoomId } from "@/lib/hireai-room"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 async function ensureRoomId(meetingId: string, existingRoomId?: string) {
   if (existingRoomId) return existingRoomId

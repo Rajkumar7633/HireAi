@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 // GET /api/college/students - Get all students for college
 export async function GET(req: NextRequest) {

@@ -5,6 +5,8 @@ import SupportRequest from "@/models/SupportRequest"
 import User from "@/models/User"
 import Notification from "@/models/Notification"
 import mongoose from "mongoose"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 // GET: college admin reads all their support requests
 export async function GET(req: NextRequest) {

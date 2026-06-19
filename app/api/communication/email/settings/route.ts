@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import EmailLog from "@/models/EmailLog"
 import { isAutoEmailEnabled } from "@/lib/status-change-email"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 function mask(value: string | undefined): string {
   if (!value) return ""

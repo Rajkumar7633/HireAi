@@ -2,6 +2,8 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import EmailTemplate from "@/models/EmailTemplate"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function PUT(
   request: NextRequest,

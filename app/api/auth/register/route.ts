@@ -3,6 +3,8 @@ import { connectDB } from "@/lib/mongodb"
 import User from "@/models/User"
 import bcrypt from "bcryptjs"
 import jwt from "jsonwebtoken"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 const JWT_SECRET = process.env.JWT_SECRET
 if (!JWT_SECRET) throw new Error("JWT_SECRET environment variable is not set")

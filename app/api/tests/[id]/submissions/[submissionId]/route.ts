@@ -5,6 +5,8 @@ import { enrichSubmissionRecord, populateSubmissionPeople } from "@/lib/enrich-s
 import { getTestSubmissionModel } from "@/lib/test-submission"
 import mongoose from "mongoose"
 import Application from "@/models/Application"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function GET(
   request: NextRequest,

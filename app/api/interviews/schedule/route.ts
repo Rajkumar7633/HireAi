@@ -3,6 +3,8 @@ import { connectDB } from "@/lib/mongodb";
 import Interview from "@/models/Interview";
 import User from "@/models/User";
 import { sendInterviewEmail } from "@/lib/email-service";
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function POST(request: NextRequest) {
   try {

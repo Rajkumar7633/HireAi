@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
 import { extractResumeText, detectMimeType } from "@/lib/resume-text-extract"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 const ALLOWED_TYPES = [
   "application/pdf",

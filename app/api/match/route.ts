@@ -4,6 +4,8 @@ import { connectDB } from "@/lib/mongodb"
 import Resume from "@/models/Resume"
 import JobDescription from "@/models/JobDescription"
 import { aiService } from "@/lib/ai-service"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 type MatchPayload = {
   _id: string

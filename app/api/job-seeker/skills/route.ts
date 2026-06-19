@@ -3,6 +3,8 @@ import { cookies } from "next/headers";
 import { getSession } from "@/lib/auth";
 import { connectDB } from "@/lib/mongodb";
 import JobSeekerProfile from "@/models/JobSeekerProfile";
+export { dynamic } from "@/lib/api-dynamic"
+
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5001";
 

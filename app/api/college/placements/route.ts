@@ -3,6 +3,8 @@ import { connectDB } from "@/lib/mongodb"
 import { getSession } from "@/lib/auth"
 import { CollegePlacement } from "@/models/CollegePlacement"
 import User from "@/models/User"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function GET(req: NextRequest) {
   try {

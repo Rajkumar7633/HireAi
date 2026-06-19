@@ -4,6 +4,8 @@ import { connectDB } from "@/lib/mongodb"
 import mongoose from "mongoose"
 import CampusDrive from "@/models/CampusDrive"
 import CampusDriveApplication from "@/models/CampusDriveApplication"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {

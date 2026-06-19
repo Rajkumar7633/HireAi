@@ -6,6 +6,8 @@ import CampusDriveApplication from "@/models/CampusDriveApplication"
 import Notification from "@/models/Notification"
 import User from "@/models/User"
 import mongoose from "mongoose"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 // GET: list all applicants for a drive (college admin)
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {

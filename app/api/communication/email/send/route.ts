@@ -10,6 +10,8 @@ import jwt from "jsonwebtoken";
 import EmailLog from "@/models/EmailLog";
 import Application from "@/models/Application";
 import User from "@/models/User";
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function POST(request: NextRequest) {
   try {

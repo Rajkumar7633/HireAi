@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
 import {
+export { dynamic } from "@/lib/api-dynamic"
+
   findAnswerForQuestion,
   isCodingQuestionType,
   normalizeOutput,

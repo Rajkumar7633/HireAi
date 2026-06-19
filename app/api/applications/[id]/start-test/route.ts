@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import Application from "@/models/Application"
 import { getIO } from "@/lib/socket-server"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 const COMPLETED = new Set([
   "Test Passed", "Test Failed", "Test Completed", "test_completed", "Reviewed",

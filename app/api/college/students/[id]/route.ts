@@ -4,6 +4,8 @@ import { connectDB } from "@/lib/mongodb"
 import User from "@/models/User"
 import Application from "@/models/Application"
 import mongoose from "mongoose"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5001"
 

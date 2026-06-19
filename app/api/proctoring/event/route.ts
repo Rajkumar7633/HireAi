@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import ProctorEvent from "@/models/ProctorEvent"
 import { getIO } from "@/lib/socket-server"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function POST(req: NextRequest) {
   try {

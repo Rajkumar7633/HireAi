@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import mongoose from "mongoose"
 import Notification from "@/models/Notification"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 function getSkillGapModel() {
   if (mongoose.models.SkillGapAnalysis) return mongoose.models.SkillGapAnalysis

@@ -1,5 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getBackendUrl } from "@/lib/backend-url"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 // Block personal email providers for recruiters
 const PERSONAL_EMAIL_DOMAINS = [

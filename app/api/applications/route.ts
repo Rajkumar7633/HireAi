@@ -5,6 +5,8 @@ import { aiService } from "@/lib/ai-service"
 import Application from "@/models/Application"
 import Resume from "@/models/Resume"
 import JobDescription from "@/models/JobDescription"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function POST(request: NextRequest) {
   try {

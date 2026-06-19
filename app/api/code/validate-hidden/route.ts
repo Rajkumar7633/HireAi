@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import mongoose from "mongoose"
 import { runCode, isCodingQuestionType, normalizeOutput } from "@/lib/code-runner"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 /**
  * POST /api/code/validate-hidden

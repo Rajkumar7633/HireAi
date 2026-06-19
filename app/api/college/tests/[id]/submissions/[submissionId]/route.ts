@@ -5,6 +5,8 @@ import { enrichSubmissionRecord, populateSubmissionPeople } from "@/lib/enrich-s
 import { getTestSubmissionModel } from "@/lib/test-submission"
 import { assertCollegeOwnsTest, getCollegeAssignedCandidates } from "@/lib/college-test-stats"
 import mongoose from "mongoose"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 function requireCollege(session: Awaited<ReturnType<typeof getSession>>) {
   return session && (session.role === "college" || session.role === "college_admin")

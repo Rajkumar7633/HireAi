@@ -1,4 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 const BASE = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5001"
 

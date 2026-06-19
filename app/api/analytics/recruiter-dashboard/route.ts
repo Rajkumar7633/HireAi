@@ -5,6 +5,8 @@ import { connectDB } from "@/lib/mongodb"
 import JobDescription from "@/models/JobDescription"
 import Application from "@/models/Application"
 import { cacheGet, cacheSet, cacheKey } from "@/lib/redis-cache"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function GET(request: NextRequest) {
   try {

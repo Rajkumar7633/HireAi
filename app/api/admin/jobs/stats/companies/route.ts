@@ -3,6 +3,8 @@ import { connectDB } from "@/lib/mongodb"
 import JobDescription from "@/models/JobDescription"
 import Application from "@/models/Application"
 import Company from "@/models/Company"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function GET(_req: NextRequest) {
   try {

@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import EmailLog from "@/models/EmailLog";
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function GET(request: NextRequest) {
   try {

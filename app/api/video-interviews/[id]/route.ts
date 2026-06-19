@@ -5,6 +5,8 @@ import VideoInterview from "@/models/VideoInterview"
 import Application from "@/models/Application"
 import Notification from "@/models/Notification"
 import { sendStatusChangeEmail } from "@/lib/status-change-email"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 function nanoid(len = 12) {
   const alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
