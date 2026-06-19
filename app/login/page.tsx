@@ -171,8 +171,8 @@ export default function LoginPage() {
         return
       }
       persistAuthToken(data.accessToken || data.token)
+      await refreshSession?.()
       redirectByRole(router, data?.user?.role || "", redirectPath)
-      setTimeout(() => refreshSession?.(), 500)
     } catch {
       setOtpError("Verification failed. Try again.")
     } finally {

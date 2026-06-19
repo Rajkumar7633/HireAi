@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
+import { useSession } from "@/hooks/use-session"
 import { persistAuthToken } from "@/lib/client-auth"
 import {
   Loader2,
@@ -101,6 +102,7 @@ function completionPercent(step: Step, name: string, email: string, password: st
 export default function SignupPage() {
   const router = useRouter()
   const { toast } = useToast()
+  const { refreshSession } = useSession() as { refreshSession?: () => void }
 
   const [step, setStep] = useState<Step>(1)
   const [name, setName] = useState("")
@@ -195,6 +197,7 @@ export default function SignupPage() {
 
       if (data.token) persistAuthToken(data.token)
       sessionStorage.removeItem(DRAFT_KEY)
+      await refreshSession?.()
       toast({ title: "Account created!", description: "Welcome to " + BRAND })
 
       const r = data.user?.role
