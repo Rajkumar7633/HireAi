@@ -145,8 +145,9 @@ export default function LoginPage() {
       if (response.ok) {
         const token = data.token || data.accessToken || data.jwt || data.access_token
         if (token) persistAuthToken(token)
+        toast({ title: "Welcome back!", description: "Signed in successfully." })
+        await refreshSession?.()
         redirectByRole(router, data?.user?.role || "", redirectPath)
-        setTimeout(() => refreshSession?.(), 500)
         return
       }
 

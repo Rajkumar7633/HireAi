@@ -68,6 +68,39 @@ async function sendLoginOtpEmail(user, otp) {
   ])
 }
 
+function hasSmtpConfig() {
+  return (
+    !!process.env.EMAIL_SERVICE_HOST &&
+    !!process.env.EMAIL_SERVICE_USER &&
+    !!process.env.EMAIL_SERVICE_PASS
+  )
+}
+
+/** OTP only when explicitly enabled AND SMTP is configured. Default = fast direct login. */
+function isOtpLoginEnabled() {
+  return process.env.LOGIN_REQUIRE_OTP === "true" && hasSmtpConfig()
+}
+
+async function issueLoginTokens(user) {
+  user.loginOtp = { codeHash: undefined, expiresAt: undefined, attempts: 0 }
+  user.emailVerified = true
+
+  const payload = buildTokenPayload(user)
+  const accessToken = signAccessToken(payload)
+  const refreshToken = signRefreshToken(payload)
+
+  if (!Array.isArray(user.refreshTokens)) user.refreshTokens = []
+  user.refreshTokens.push(refreshToken)
+  await user.save()
+
+  return {
+    accessToken,
+    refreshToken,
+    token: accessToken,
+    user: { id: user.id, role: user.role, email: user.email },
+  }
+}
+
 // ─── Service functions ────────────────────────────────────────────────────────
 
 /**
@@ -179,7 +212,13 @@ async function initiateLogin({ email, password }) {
     throw err
   }
 
-  // Generate OTP
+  // Fast path: direct login (default). OTP only when LOGIN_REQUIRE_OTP=true + SMTP works.
+  if (!isOtpLoginEnabled()) {
+    console.log(`[login] direct sign-in for ${user.email}`)
+    return issueLoginTokens(user)
+  }
+
+  // OTP path (optional extra security)
   const otp = ("000000" + Math.floor(Math.random() * 1_000_000)).slice(-6)
   const otpHash = await bcrypt.hash(otp, 10)
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000)
@@ -199,16 +238,11 @@ async function initiateLogin({ email, password }) {
   try {
     await sendLoginOtpEmail(user, otp)
     console.log(`[otp] email sent to ${user.email}`)
+    return { status: "otp_sent", message: "Verification code sent to email" }
   } catch (err) {
-    console.error(`[otp-email] FAILED for ${user.email}:`, err.message)
-    const error = new Error(
-      "Could not send verification email. Check your spam folder, wait one minute, and try again."
-    )
-    error.statusCode = 503
-    throw error
+    console.error(`[otp-email] FAILED for ${user.email}, using direct login:`, err.message)
+    return issueLoginTokens(user)
   }
-
-  return { status: "otp_sent", message: "Verification code sent to email" }
 }
 
 /**
@@ -259,23 +293,7 @@ async function verifyOtp({ email, code }) {
     throw err
   }
 
-  // Clear OTP and mark email verified
-  user.loginOtp = { codeHash: undefined, expiresAt: undefined, attempts: 0 }
-  user.emailVerified = true
-
-  const payload = buildTokenPayload(user)
-  const accessToken = signAccessToken(payload)
-  const refreshToken = signRefreshToken(payload)
-
-  if (!Array.isArray(user.refreshTokens)) user.refreshTokens = []
-  user.refreshTokens.push(refreshToken)
-  await user.save()
-
-  return {
-    accessToken,
-    refreshToken,
-    user: { id: user.id, role: user.role, email: user.email },
-  }
+  return issueLoginTokens(user)
 }
 
 /**

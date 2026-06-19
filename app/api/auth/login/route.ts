@@ -56,6 +56,16 @@ export async function POST(req: Request) {
           path: "/",
         })
       }
+
+      if (data.refreshToken) {
+        response.cookies.set("refresh-token", data.refreshToken, {
+          httpOnly: true,
+          sameSite: "lax",
+          secure: process.env.NODE_ENV === "production",
+          maxAge: 60 * 60 * 24 * 14,
+          path: "/",
+        })
+      }
     }
 
     return response
