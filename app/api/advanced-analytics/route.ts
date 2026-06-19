@@ -1,14 +1,16 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { getBackendUrl } from "@/lib/backend-url"
 
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5001"
+export { dynamic } from "@/lib/api-dynamic"
 
 export async function GET(request: NextRequest) {
   try {
-    const response = await fetch(`${BACKEND_URL}/api/advanced-analytics`, {
+    const response = await fetch(`${getBackendUrl()}/api/advanced-analytics`, {
       method: "GET",
       headers: {
         Authorization: request.headers.get("Authorization") || "",
       },
+      cache: "no-store",
     })
 
     const data = await response.json()

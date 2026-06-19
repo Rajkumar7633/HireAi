@@ -26,6 +26,8 @@ import {
   Eye, CheckCircle2, TrendingUp, MessageSquarePlus,
 } from "lucide-react";
 
+export const dynamic = "force-dynamic";
+
 // ─── auth ─────────────────────────────────────────────────────────────────────
 
 async function getMyId(): Promise<string> {

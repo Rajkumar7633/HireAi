@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
 
+export { dynamic } from "@/lib/api-dynamic"
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getSession(req)

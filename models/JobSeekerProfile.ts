@@ -263,8 +263,6 @@ const JobSeekerProfileSchema = new Schema<IJobSeekerProfile>(
   },
 )
 
-// Index for faster queries
-JobSeekerProfileSchema.index({ userId: 1 })
 JobSeekerProfileSchema.index({ email: 1 })
 
 export default mongoose.models.JobSeekerProfile ||

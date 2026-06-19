@@ -9,7 +9,7 @@ export interface ISocialConversation extends Document {
 
 const SocialConversationSchema = new Schema<ISocialConversation>(
   {
-    participants: { type: [Schema.Types.ObjectId], ref: "User", required: true, index: true },
+    participants: { type: [Schema.Types.ObjectId], ref: "User", required: true },
     lastMessageAt: { type: Date },
   },
   { timestamps: true },

@@ -5,6 +5,8 @@ import jwt from "jsonwebtoken"
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key"
 
+export { dynamic } from "@/lib/api-dynamic"
+
 export async function GET(request: NextRequest) {
   try {
     // Get token from cookie or Authorization header
