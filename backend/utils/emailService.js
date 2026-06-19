@@ -33,13 +33,16 @@ function createTransporter() {
 let transporter = null
 if (hasSmtpConfig()) {
   transporter = createTransporter()
-  transporter.verify().then(() => {
-    console.log("✅ SMTP ready:", getSmtpSettings().host)
-  }).catch((err) => {
-    console.error("❌ SMTP verification failed:", err.message)
-  })
-} else {
-  console.warn("⚠️  SMTP not configured — set EMAIL_SERVICE_* or SMTP_* on Render")
+  // Non-blocking verify — Gmail often times out from cloud hosts; Resend is preferred
+  setTimeout(() => {
+    transporter.verify().then(() => {
+      console.log("✅ SMTP ready:", getSmtpSettings().host)
+    }).catch((err) => {
+      console.warn("⚠️  SMTP verify skipped:", err.message, "— use RESEND_API_KEY on Render for reliable email")
+    })
+  }, 2000)
+} else if (!process.env.RESEND_API_KEY) {
+  console.warn("⚠️  Email not configured — set RESEND_API_KEY or SMTP_* on Render")
 }
 
 async function sendViaResend({ to, subject, html }) {
@@ -69,6 +72,7 @@ async function sendViaResend({ to, subject, html }) {
 }
 
 const sendEmail = async ({ to, subject, html }) => {
+  // Resend (HTTP) works on Render; Gmail SMTP often times out on cloud hosts
   if (process.env.RESEND_API_KEY) {
     try {
       return await sendViaResend({ to, subject, html })

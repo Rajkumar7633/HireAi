@@ -6,6 +6,11 @@ import JobSeekerProfile from "@/models/JobSeekerProfile"
 import { writeFile, mkdir } from "fs/promises"
 import { join } from "path"
 import { existsSync } from "fs"
+import { tmpdir } from "os"
+
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+export const maxDuration = 60
 
 // ─── Text Extraction ──────────────────────────────────────────────────────────
 
@@ -230,15 +235,21 @@ export async function POST(req: NextRequest) {
 
     await connectDB()
 
-    // Save file to disk
-    const uploadsDir = join(process.cwd(), "uploads", "resumes")
-    if (!existsSync(uploadsDir)) await mkdir(uploadsDir, { recursive: true })
-
-    const savedName = `${session.userId}_${Date.now()}_${resumeFile.name}`
-    const filePath = join(uploadsDir, savedName)
+    // Vercel serverless: only /tmp is writable — skip disk save if it fails
     const bytes = await resumeFile.arrayBuffer()
     const buffer = Buffer.from(bytes)
-    await writeFile(filePath, buffer)
+    let savedName = `${session.userId}_${Date.now()}_${resumeFile.name}`
+
+    try {
+      const uploadsDir = process.env.VERCEL
+        ? join(tmpdir(), "hireai-resumes")
+        : join(process.cwd(), "uploads", "resumes")
+      if (!existsSync(uploadsDir)) await mkdir(uploadsDir, { recursive: true })
+      await writeFile(join(uploadsDir, savedName), buffer)
+    } catch (fsErr) {
+      console.warn("Resume file disk save skipped (serverless):", fsErr)
+      savedName = resumeFile.name
+    }
 
     // Extract real text from document
     const parsedText = await extractText(buffer, resumeFile.type)
@@ -276,11 +287,14 @@ export async function POST(req: NextRequest) {
     const resume = new Resume({
       userId: session.userId,
       fileName: resumeFile.name,
-      fileUrl: `/api/uploads/resumes/${savedName}`,
+      fileUrl: process.env.VERCEL ? undefined : `/api/uploads/resumes/${savedName}`,
       rawText: parsedText || resumeFile.name,
       parsedSkills: skills,
       atsScore: finalScore,
-      analysis,
+      analysis: {
+        strengths,
+        improvements: analysis.improvements,
+      },
       extractedData: { skills },
       status: "processed",
       size: resumeFile.size,
@@ -320,7 +334,11 @@ export async function POST(req: NextRequest) {
         atsScore: finalScore,
         extractedText: parsedText.slice(0, 50000),
         extractedData: { skills },
-        analysis,
+        analysis: {
+          ...analysis,
+          strengths,
+          improvements: analysis.improvements,
+        },
       },
     })
   } catch (error) {

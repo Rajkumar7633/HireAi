@@ -33,6 +33,10 @@ require("./models/indexes").ensureIndexes().catch((e) =>
 );
 
 const app = express();
+
+// Render/Railway/Heroku sit behind a reverse proxy — required for rate-limit + client IP
+app.set("trust proxy", 1);
+
 const server = http.createServer(app);
 
 // ─── Health check endpoint for keep-alive ────────────────────────────────────
