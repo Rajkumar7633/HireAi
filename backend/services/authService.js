@@ -114,13 +114,10 @@ async function register({ email, password, role, name }) {
   })
   await user.save()
 
-  const token = jwt.sign(
-    { user: { id: user.id, role: user.role, email: user.email } },
-    process.env.JWT_SECRET,
-    { expiresIn: "1h" }
-  )
+  const payload = buildTokenPayload(user)
+  const token = signAccessToken(payload)
 
-  return { token, user: { id: user.id, role: user.role, email: user.email } }
+  return { token, accessToken: token, user: { id: user.id, role: user.role, email: user.email } }
 }
 
 /**
@@ -183,11 +180,12 @@ async function initiateLogin({ email, password }) {
     console.log(`[otp] login code for ${user.email}: ${otp}`)
   }
 
-  await sendEmail({
+  // Do not block login on SMTP — OTP email sends in background (avoids Render/Vercel timeouts)
+  void sendEmail({
     to: user.email,
     subject: "Your HireAI Login Code",
     html: `<p>Your verification code is <b>${otp}</b>. It expires in 10 minutes.</p>`,
-  })
+  }).catch((err) => console.error("[otp-email] send failed:", err?.message || err))
 
   return { status: "otp_sent", message: "Verification code sent to email" }
 }

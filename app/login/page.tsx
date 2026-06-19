@@ -124,12 +124,14 @@ export default function LoginPage() {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ email: email.trim(), password }),
       })
       const data = await response.json()
 
       if (response.ok && data?.status === "otp_sent") {
         setOtpPhase(true)
+        setLoading(false)
         toast({ title: "Verification code sent", description: "Check your email for the 6-digit code." })
         return
       }
@@ -163,6 +165,7 @@ export default function LoginPage() {
       const r = await fetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ email: email.trim(), code: otpCode }),
       })
       const data = await r.json()

@@ -1,11 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5001"
+import { getBackendUrl } from "@/lib/backend-url"
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const r = await fetch(`${BACKEND_URL}/api/auth/verify-otp`, {
+    const r = await fetch(`${getBackendUrl()}/api/auth/verify-otp`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),

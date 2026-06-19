@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { getBackendUrl } from "@/lib/backend-url"
 
 // Block personal email providers for recruiters
 const PERSONAL_EMAIL_DOMAINS = [
@@ -43,8 +44,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Call backend API
-    const backendUrl = process.env.BACKEND_URL || "http://localhost:5001"
-    const response = await fetch(`${backendUrl}/api/auth/register`, {
+    const response = await fetch(`${getBackendUrl()}/api/auth/register`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -67,13 +67,16 @@ export async function POST(request: NextRequest) {
       user: data.user,
     })
 
-    apiResponse.cookies.set("auth-token", data.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-      path: "/",
-    })
+    const token = data.token || data.accessToken
+    if (token) {
+      apiResponse.cookies.set("auth-token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 60 * 60 * 24 * 7,
+        path: "/",
+      })
+    }
 
     return apiResponse
   } catch (error) {

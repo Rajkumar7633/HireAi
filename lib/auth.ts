@@ -114,29 +114,26 @@ export async function getSession(request: NextRequest): Promise<Session | null> 
     if (!token) token = request.cookies.get("access_token")?.value
 
     if (!token) {
-      console.log("No auth token in header or cookies")
       return null
     }
 
     // Verify
     const session = await verifyTokenUniversal(token)
     if (!session) {
-      console.log("Token verification failed")
       return null
     }
 
-    const raw = session as Session & { user?: { id?: string } }
+    const raw = session as Session & { user?: { id?: string; email?: string; role?: string; name?: string } }
     const userId = normalizeUserId(raw.userId ?? raw.user?.id)
     if (!userId) {
-      console.log("Token missing userId")
       return null
     }
 
     return {
       userId,
-      email: raw.email ?? "",
-      name: raw.name ?? "",
-      role: raw.role,
+      email: raw.email ?? raw.user?.email ?? "",
+      name: raw.name ?? raw.user?.name ?? "",
+      role: (raw.role ?? raw.user?.role) as Session["role"],
     }
   } catch (error) {
     console.error("getSession error:", error)
