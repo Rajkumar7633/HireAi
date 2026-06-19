@@ -1,12 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
 
-const GROQ_API_KEY = process.env.GROQ_API_KEY
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY
 
 /**
  * POST /api/ai/generate-problem
- * Generates a coding problem from a prompt using AI (Groq/OpenAI).
+ * Generates a coding problem from a prompt using AI (Gemini/OpenAI).
  * Falls back to a template-based generation if AI is not available.
  */
 export async function POST(req: NextRequest) {
@@ -25,18 +25,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: "Prompt is required" }, { status: 400 })
   }
 
-  // Try Groq (fastest, free tier available)
-  if (GROQ_API_KEY) {
+  // Try Gemini (fastest, free tier available)
+  if (GEMINI_API_KEY) {
     try {
-      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${process.env.GEMINI_MODEL || "gemini-1.5-pro"}:generateContent?key=${GEMINI_API_KEY}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${GROQ_API_KEY}` },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "llama3-8b-8192",
-          messages: [
-            {
-              role: "system",
-              content: `You are an expert competitive programming problem setter. Generate a coding problem based on the user's description.
+          contents: [{
+            parts: [{
+              text: `You are an expert competitive programming problem setter. Generate a coding problem based on the user's description.
 Return ONLY valid JSON (no markdown, no explanation) in this exact format:
 {
   "title": "Problem Title",
@@ -52,19 +50,22 @@ Return ONLY valid JSON (no markdown, no explanation) in this exact format:
     { "input": "test input 2", "output": "expected output 2", "hidden": true }
   ],
   "starterCode": "Python starter code using sys.stdin"
-}`,
-            },
-            { role: "user", content: `Generate a coding problem for: ${prompt}` },
-          ],
-          temperature: 0.7,
-          max_tokens: 2048,
+}
+
+Generate a coding problem for: ${prompt}`
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 2048,
+          }
         }),
         signal: AbortSignal.timeout(15_000),
       })
 
       if (res.ok) {
         const data = await res.json()
-        const content = data.choices?.[0]?.message?.content || ""
+        const content = data.candidates?.[0]?.content?.parts?.[0]?.text || ""
         // Extract JSON from response
         const jsonMatch = content.match(/\{[\s\S]*\}/)
         if (jsonMatch) {
@@ -73,7 +74,7 @@ Return ONLY valid JSON (no markdown, no explanation) in this exact format:
         }
       }
     } catch (e) {
-      console.error("[generate-problem] Groq error:", e)
+      console.error("[generate-problem] Gemini error:", e)
     }
   }
 

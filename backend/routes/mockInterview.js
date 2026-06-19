@@ -15,27 +15,29 @@ function makeError(message, status = 400) {
   return err
 }
 
-// Helper to interact with Groq API
-async function callGroqAI(prompt, responseJson = true) {
-  if (!process.env.GROQ_API_KEY) {
+// Helper to interact with Gemini API
+async function callGeminiAI(prompt, responseJson = true) {
+  if (!process.env.GEMINI_API_KEY) {
     throw makeError("AI API key not configured on server", 503)
   }
   try {
     const payload = {
-      model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.3,
-      max_tokens: 1000,
+      contents: [{
+        parts: [{ text: prompt }]
+      }],
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: 1000,
+      }
     }
     if (responseJson) {
-      payload.response_format = { type: "json_object" }
+      payload.generationConfig.responseMimeType = "application/json"
     }
 
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${process.env.GEMINI_MODEL || "gemini-1.5-pro"}:generateContent?key=${process.env.GEMINI_API_KEY}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
       },
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(20_000),
@@ -43,16 +45,16 @@ async function callGroqAI(prompt, responseJson = true) {
 
     if (!response.ok) {
       const errText = await response.text()
-      console.error("[Groq Error]", errText)
+      console.error("[Gemini Error]", errText)
       throw makeError("Error calling AI agent engine", 502)
     }
 
     const data = await response.json()
-    const content = data.choices?.[0]?.message?.content
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text
     if (!content) throw makeError("Empty response from AI engine", 502)
     return responseJson ? JSON.parse(content) : content
   } catch (err) {
-    console.error("Groq integration failed:", err.message)
+    console.error("Gemini integration failed:", err.message)
     throw err.statusCode ? err : makeError("AI request timeout or failure", 504)
   }
 }
@@ -82,7 +84,7 @@ Return ONLY a JSON object with this exact shape:
 }
 Be precise and technical. Return valid JSON.`
 
-    const aiResult = await callGroqAI(prompt, true)
+    const aiResult = await callGeminiAI(prompt, true)
     const questionsList = aiResult.questions || []
     if (questionsList.length === 0) {
       questionsList.push(
@@ -214,7 +216,7 @@ Return valid JSON.`
 
     let finalSummary = "Interview completed successfully."
     try {
-      const aiResult = await callGroqAI(prompt, true)
+      const aiResult = await callGeminiAI(prompt, true)
       finalSummary = aiResult.summary || finalSummary
     } catch (aiErr) {
       console.warn("AI finalization failed:", aiErr.message)

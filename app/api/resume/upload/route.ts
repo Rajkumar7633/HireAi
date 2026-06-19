@@ -47,26 +47,26 @@ async function extractText(buffer: Buffer, mimeType: string): Promise<string> {
 // ─── Real ATS Scoring ─────────────────────────────────────────────────────────
 
 const ACTION_VERBS = [
-  "led","built","developed","designed","implemented","managed","created","improved",
-  "increased","reduced","launched","delivered","optimized","architected","mentored",
-  "collaborated","established","deployed","automated","streamlined","achieved",
-  "spearheaded","coordinated","analyzed","engineered","integrated","executed",
-  "transformed","drove","generated","negotiated","published","authored",
+  "led", "built", "developed", "designed", "implemented", "managed", "created", "improved",
+  "increased", "reduced", "launched", "delivered", "optimized", "architected", "mentored",
+  "collaborated", "established", "deployed", "automated", "streamlined", "achieved",
+  "spearheaded", "coordinated", "analyzed", "engineered", "integrated", "executed",
+  "transformed", "drove", "generated", "negotiated", "published", "authored",
 ]
 
 const SECTION_KEYWORDS = [
-  "experience","work experience","employment","professional experience",
-  "education","academic","skills","technical skills","core skills",
-  "summary","objective","profile","about","projects","certifications",
-  "achievements","awards","languages",
+  "experience", "work experience", "employment", "professional experience",
+  "education", "academic", "skills", "technical skills", "core skills",
+  "summary", "objective", "profile", "about", "projects", "certifications",
+  "achievements", "awards", "languages",
 ]
 
 const TECH_KEYWORDS = [
-  "javascript","typescript","python","java","c++","c#","go","rust","swift","kotlin",
-  "react","vue","angular","next.js","node.js","express","django","fastapi","spring",
-  "sql","mysql","postgresql","mongodb","redis","elasticsearch","aws","gcp","azure",
-  "docker","kubernetes","terraform","ci/cd","git","linux","agile","scrum","rest","graphql",
-  "machine learning","ai","data science","tensorflow","pytorch","html","css","tailwind",
+  "javascript", "typescript", "python", "java", "c++", "c#", "go", "rust", "swift", "kotlin",
+  "react", "vue", "angular", "next.js", "node.js", "express", "django", "fastapi", "spring",
+  "sql", "mysql", "postgresql", "mongodb", "redis", "elasticsearch", "aws", "gcp", "azure",
+  "docker", "kubernetes", "terraform", "ci/cd", "git", "linux", "agile", "scrum", "rest", "graphql",
+  "machine learning", "ai", "data science", "tensorflow", "pytorch", "html", "css", "tailwind",
 ]
 
 function scoreResume(text: string): {
@@ -147,24 +147,24 @@ function scoreResume(text: string): {
   return { score, breakdown, strengths, improvements, skills, wordCount }
 }
 
-// ─── Optional: Groq AI enhanced analysis ─────────────────────────────────────
+// ─── Optional: Gemini AI enhanced analysis ─────────────────────────────────────
 
-async function groqEnhancedAnalysis(
+async function geminiEnhancedAnalysis(
   text: string,
   baseScore: number
 ): Promise<{ score: number; strengths: string[]; improvements: string[]; skills: string[] } | null> {
-  const apiKey = process.env.GROQ_API_KEY
+  const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) return null
 
   try {
-    const { createGroq } = await import("@ai-sdk/groq")
+    const { google } = await import("@ai-sdk/google")
     const { generateText } = await import("ai")
 
-    const groq = createGroq({ apiKey })
+    const model = google(process.env.GEMINI_MODEL || "gemini-1.5-pro")
     const truncated = text.slice(0, 4000) // stay within token limits
 
     const { text: aiText } = await generateText({
-      model: groq(process.env.GROQ_MODEL || "llama-3.3-70b-versatile"),
+      model,
       prompt: `You are an expert ATS resume analyzer. Analyze this resume and return ONLY valid JSON with this exact structure:
 {
   "score": <integer 0-100 representing ATS compatibility>,
@@ -178,7 +178,7 @@ Base your score on real ATS criteria. My rule-based score was ${baseScore}.
 
 Resume text:
 ${truncated}`,
-      maxTokens: 600,
+      maxOutputTokens: 600,
     })
 
     const jsonMatch = aiText.match(/\{[\s\S]*\}/)
@@ -187,7 +187,7 @@ ${truncated}`,
     if (typeof parsed.score !== "number") return null
     return parsed
   } catch (err) {
-    console.error("Groq analysis error:", err)
+    console.error("Gemini analysis error:", err)
     return null
   }
 }
@@ -253,13 +253,13 @@ export async function POST(req: NextRequest) {
     // Rule-based real ATS scoring
     const ruleResult = scoreResume(textForScoring)
 
-    // Optionally enhance with Groq AI (only if we have real text)
-    const aiResult = hasText ? await groqEnhancedAnalysis(textForScoring, ruleResult.score) : null
+    // Optionally enhance with Gemini AI (only if we have real text)
+    const aiResult = hasText ? await geminiEnhancedAnalysis(textForScoring, ruleResult.score) : null
 
-    const finalScore  = aiResult?.score       ?? ruleResult.score
-    const strengths   = aiResult?.strengths   ?? ruleResult.strengths
+    const finalScore = aiResult?.score ?? ruleResult.score
+    const strengths = aiResult?.strengths ?? ruleResult.strengths
     const improvements = aiResult?.improvements ?? ruleResult.improvements
-    const skills      = aiResult?.skills       ?? ruleResult.skills
+    const skills = aiResult?.skills ?? ruleResult.skills
 
     const analysis = {
       strengths,
@@ -304,7 +304,7 @@ export async function POST(req: NextRequest) {
         },
         { upsert: true }
       )
-    } catch {}
+    } catch { }
 
     return NextResponse.json({
       message: "Resume analyzed successfully!",

@@ -26,7 +26,7 @@ const fakeJD = (overrides = {}) => ({
 
 beforeEach(() => {
   jest.clearAllMocks()
-  process.env.GROQ_API_KEY = "test-groq-key"
+  process.env.GEMINI_API_KEY = "test-gemini-key"
   // Reset global fetch mock
   global.fetch = undefined
 })
@@ -181,19 +181,19 @@ describe("jobDescriptionService.generateJobDescription", () => {
     ).rejects.toMatchObject({ statusCode: 400 })
   })
 
-  test("throws 503 if GROQ_API_KEY not set", async () => {
-    delete process.env.GROQ_API_KEY
+  test("throws 503 if GEMINI_API_KEY not set", async () => {
+    delete process.env.GEMINI_API_KEY
     await expect(
       jobDescriptionService.generateJobDescription({ jobTitle: "Dev" })
     ).rejects.toMatchObject({ statusCode: 503 })
   })
 
-  test("returns generated JD on successful Groq response", async () => {
+  test("returns generated JD on successful Gemini response", async () => {
     const fakeGenerated = { title: "Dev", description: "Great", responsibilities: [], requirements: [], skills: [], benefits: [] }
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({
-        choices: [{ message: { content: JSON.stringify(fakeGenerated) } }],
+        candidates: [{ content: { parts: [{ text: JSON.stringify(fakeGenerated) }] } }],
       }),
     })
 
@@ -202,7 +202,7 @@ describe("jobDescriptionService.generateJobDescription", () => {
     expect(global.fetch).toHaveBeenCalledTimes(1)
   })
 
-  test("throws 502 if Groq API returns non-ok response", async () => {
+  test("throws 502 if Gemini API returns non-ok response", async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: false,
       text: () => Promise.resolve("Rate limit exceeded"),
@@ -213,10 +213,10 @@ describe("jobDescriptionService.generateJobDescription", () => {
     ).rejects.toMatchObject({ statusCode: 502 })
   })
 
-  test("throws 502 if Groq returns empty content", async () => {
+  test("throws 502 if Gemini returns empty content", async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({ choices: [] }),
+      json: () => Promise.resolve({ candidates: [] }),
     })
 
     await expect(

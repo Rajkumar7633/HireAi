@@ -12,6 +12,7 @@
     "backfill:companies": "node scripts/backfill-company-links.js"
   },
   "dependencies": {
+    "@ai-sdk/google": "^3.0.83",
     "@ai-sdk/groq": "^2.0.20",
     "@aws-sdk/client-s3": "^3.896.0",
     "@aws-sdk/s3-request-presigner": "^3.896.0",

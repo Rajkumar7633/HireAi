@@ -19,15 +19,14 @@ function getChatLogModel() {
   return mongoose.model("AIChatLog", schema)
 }
 
-// ─── Groq conversational response ────────────────────────────────────────────
-async function getGroqResponse(userMessage: string, resumeText: string): Promise<string | null> {
-  const apiKey = process.env.GROQ_API_KEY
+// ─── Gemini conversational response ────────────────────────────────────────────
+async function getGeminiResponse(userMessage: string, resumeText: string): Promise<string | null> {
+  const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) return null
   try {
-    const { createGroq } = await import("@ai-sdk/groq")
+    const { google } = await import("@ai-sdk/google")
     const { generateText } = await import("ai")
-    const groq = createGroq({ apiKey })
-    const model = groq(process.env.GROQ_MODEL || "llama-3.3-70b-versatile")
+    const model = google(process.env.GEMINI_MODEL || "gemini-1.5-pro")
     const truncated = resumeText.slice(0, 3500)
     const { text } = await generateText({
       model,
@@ -41,12 +40,12 @@ ${truncated || "(no resume text provided — give general advice)"}
 CANDIDATE'S QUESTION: ${userMessage}
 
 Your response:`,
-      maxTokens: 700,
+      maxOutputTokens: 700,
       temperature: 0.7,
     })
     return text.trim() || null
   } catch (err) {
-    console.error("[Groq] conversational error:", err)
+    console.error("[Gemini] conversational error:", err)
     return null
   }
 }
@@ -62,16 +61,16 @@ function ruleBasedResponse(userMessage: string, resumeText: string): string {
   const wordCount = resumeText.split(/\s+/).filter(Boolean).length
   const metricsCount = (resumeText.match(/\d+[\s]?(%|percent|x|×|million|billion|k\b|users?|teams?|members?|engineers?)/gi) || []).length
 
-  const ACTION_VERBS = ["led","built","developed","designed","implemented","managed","created","improved",
-    "increased","reduced","launched","delivered","optimized","architected","deployed","automated","streamlined"]
+  const ACTION_VERBS = ["led", "built", "developed", "designed", "implemented", "managed", "created", "improved",
+    "increased", "reduced", "launched", "delivered", "optimized", "architected", "deployed", "automated", "streamlined"]
   const verbsFound = ACTION_VERBS.filter((v) => new RegExp(`\\b${v}`, "i").test(resumeText))
 
-  const TECH_SKILLS = ["javascript","typescript","python","java","c++","react","vue","angular","node",
-    "next.js","express","django","sql","postgresql","mongodb","redis","aws","gcp","azure","docker",
-    "kubernetes","git","ci/cd","graphql","rest","machine learning","tensorflow","pytorch"]
+  const TECH_SKILLS = ["javascript", "typescript", "python", "java", "c++", "react", "vue", "angular", "node",
+    "next.js", "express", "django", "sql", "postgresql", "mongodb", "redis", "aws", "gcp", "azure", "docker",
+    "kubernetes", "git", "ci/cd", "graphql", "rest", "machine learning", "tensorflow", "pytorch"]
   const skillsFound = TECH_SKILLS.filter((k) => resumeLower.includes(k))
 
-  const SECTIONS = ["experience","education","skills","projects","summary","certifications","achievements"]
+  const SECTIONS = ["experience", "education", "skills", "projects", "summary", "certifications", "achievements"]
   const sectionsFound = SECTIONS.filter((s) => resumeLower.includes(s))
 
   // ── ATS question ──────────────────────────────────────────────────────────
@@ -162,9 +161,9 @@ export async function POST(req: NextRequest) {
     // Use the client-supplied ID so both page and DB stay in sync
     const convoId = clientConvoId || `conv_${session.userId}_${Date.now()}`
 
-    // Generate AI response (Groq → rule-based fallback)
+    // Generate AI response (Gemini → rule-based fallback)
     const aiContent =
-      (await getGroqResponse(messageContent, safeResume)) ??
+      (await getGeminiResponse(messageContent, safeResume)) ??
       ruleBasedResponse(messageContent, safeResume)
 
     // Persist both messages to DB (non-blocking — stream starts immediately)

@@ -107,11 +107,11 @@ async function deleteJobDescription({ jobId, recruiterId }) {
 }
 
 /**
- * Generate a job description using Groq AI.
+ * Generate a job description using Gemini AI.
  */
 async function generateJobDescription({ jobTitle, company, keyRequirements, location, employmentType }) {
   if (!jobTitle) throw makeError("jobTitle is required")
-  if (!process.env.GROQ_API_KEY) throw makeError("AI service not configured", 503)
+  if (!process.env.GEMINI_API_KEY) throw makeError("AI service not configured", 503)
 
   const prompt = `You are an expert HR professional. Write a complete, professional job description.
 
@@ -135,30 +135,32 @@ Return a JSON object with EXACTLY these fields:
 
 Return only valid JSON.`
 
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${process.env.GEMINI_MODEL || "gemini-1.5-pro"}:generateContent?key=${process.env.GEMINI_API_KEY}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
     },
     body: JSON.stringify({
-      model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.7,
-      max_tokens: 1500,
-      response_format: { type: "json_object" },
+      contents: [{
+        parts: [{ text: prompt }]
+      }],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 1500,
+        responseMimeType: "application/json",
+      }
     }),
     signal: AbortSignal.timeout(25_000),
   })
 
   if (!response.ok) {
     const errText = await response.text().catch(() => "")
-    console.error("Groq API error:", errText)
+    console.error("Gemini API error:", errText)
     throw makeError("AI service error. Please try again.", 502)
   }
 
   const data = await response.json()
-  const content = data.choices?.[0]?.message?.content
+  const content = data.candidates?.[0]?.content?.parts?.[0]?.text
   if (!content) throw makeError("AI returned empty response", 502)
 
   return JSON.parse(content)

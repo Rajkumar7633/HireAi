@@ -1,4 +1,4 @@
-// NOTE: We avoid static imports of 'ai' and '@ai-sdk/groq' so the app works even
+// NOTE: We avoid static imports of 'ai' and '@ai-sdk/google' so the app works even
 // when those packages are not installed. We'll dynamically import them only if
 // available, otherwise we fall back to heuristic scoring.
 
@@ -52,13 +52,13 @@ function safeParseJSON(text: string): any {
 
 export class AIService {
   private static instance: AIService
-  private groqModel: any = null
+  private geminiModel: any = null
   private textGen: any = null
 
   private async ensureModel() {
-    if (this.groqModel && this.textGen) return { generateText: this.textGen, model: this.groqModel }
-    // Enable SDK if either flag is on OR a Groq API key is present
-    const hasKey = !!process.env.GROQ_API_KEY
+    if (this.geminiModel && this.textGen) return { generateText: this.textGen, model: this.geminiModel }
+    // Enable SDK if either flag is on OR a Gemini API key is present
+    const hasKey = !!process.env.GEMINI_API_KEY
     const explicitlyEnabled = process.env.ENABLE_AI_SDK === "true"
     const shouldEnable = explicitlyEnabled || hasKey
     if (!shouldEnable) return null
@@ -67,11 +67,11 @@ export class AIService {
       // eslint-disable-next-line @typescript-eslint/no-implied-eval
       const importDyn = new Function("m", "return import(m)") as (m: string) => Promise<any>
       const ai = await importDyn("ai")
-      const groqPkg = await importDyn("@ai-sdk/groq")
-      const modelId = process.env.GROQ_MODEL || "llama-3.3-70b-versatile"
-      this.groqModel = groqPkg.groq(modelId)
+      const googlePkg = await importDyn("@ai-sdk/google")
+      const modelId = process.env.GEMINI_MODEL || "gemini-1.5-pro"
+      this.geminiModel = googlePkg.google(modelId)
       this.textGen = ai.generateText
-      return { generateText: this.textGen, model: this.groqModel }
+      return { generateText: this.textGen, model: this.geminiModel }
     } catch (e) {
       // If dynamic import fails, return null to trigger fallbacks
       return null
@@ -126,7 +126,7 @@ export class AIService {
       const mdl = await this.ensureModel()
       if (!mdl) throw new Error("AI SDK unavailable")
       const { text } = await mdl.generateText({
-        model: this.groqModel,
+        model: this.geminiModel,
         prompt,
         temperature: 0.3,
       })
@@ -183,7 +183,7 @@ export class AIService {
       const mdl = await this.ensureModel()
       if (!mdl) throw new Error("AI SDK unavailable")
       const { text } = await mdl.generateText({
-        model: this.groqModel,
+        model: this.geminiModel,
         prompt,
         temperature: 0.3,
       })
@@ -242,7 +242,7 @@ export class AIService {
       const mdl = await this.ensureModel()
       if (!mdl) throw new Error("AI SDK unavailable")
       const { text } = await mdl.generateText({
-        model: this.groqModel,
+        model: this.geminiModel,
         prompt,
         temperature: 0.7,
       })
@@ -293,7 +293,7 @@ export class AIService {
       const mdl = await this.ensureModel()
       if (!mdl) throw new Error("AI SDK unavailable")
       const { text } = await mdl.generateText({
-        model: this.groqModel,
+        model: this.geminiModel,
         prompt,
         temperature: 0.3,
       })
