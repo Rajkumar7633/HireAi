@@ -386,7 +386,12 @@ export default function ApplyJobPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-sm font-medium text-gray-700">Relevant Skills (comma-separated)</Label>
-                  <Input className="h-9 text-sm" value={(profile.skills || []).join(", ")} onChange={e => setProfile(p => ({ ...p, skills: e.target.value.split(",").map(s => s.trim()).filter(Boolean) }))} placeholder="JavaScript, React, Node.js" />
+                  <Input 
+                    className="h-9 text-sm" 
+                    defaultValue={(profile.skills || []).join(", ")} 
+                    onChange={e => setProfile(p => ({ ...p, skills: e.target.value.split(",").map(s => s.trim()).filter(Boolean) }))}
+                    placeholder="JavaScript, React, Node.js" 
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-sm font-medium text-gray-700">Cover Note <span className="text-gray-400 font-normal">(optional)</span></Label>
