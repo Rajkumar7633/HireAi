@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import Resume from "@/models/Resume"
 import JobSeekerProfile from "@/models/JobSeekerProfile"
+import mongoose from "mongoose"
 import { writeFile, mkdir } from "fs/promises"
 import { join } from "path"
 import { existsSync } from "fs"
@@ -14,22 +15,25 @@ export const maxDuration = 60
 
 // ─── Text Extraction ──────────────────────────────────────────────────────────
 
+async function extractPdfText(buffer: Buffer): Promise<string> {
+  try {
+    const { PDFParse } = await import("pdf-parse")
+    const parser = new PDFParse({ data: buffer })
+    const result = await parser.getText({ first: 20 })
+    await parser.destroy()
+    const text = (result.text || "").trim()
+    console.log(`[pdf-parse] extracted ${text.length} chars`)
+    return text
+  } catch (err) {
+    console.error("PDF extraction error:", err)
+    return ""
+  }
+}
+
 async function extractText(buffer: Buffer, mimeType: string): Promise<string> {
   try {
     if (mimeType === "application/pdf") {
-      // pdfjs-dist is ESM-only; use dynamic import so Next.js doesn't bundle it.
-      const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs" as any)
-      const data = new Uint8Array(buffer)
-      const pdf = await getDocument({ data, useSystemFonts: true }).promise
-      let text = ""
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i)
-        const content = await page.getTextContent()
-        text += content.items.map((item: any) => item.str).join(" ") + "\n"
-      }
-      text = text.trim()
-      console.log(`[pdfjs-dist] extracted ${text.length} chars, ${pdf.numPages} pages`)
-      return text
+      return extractPdfText(buffer)
     }
 
     if (
@@ -235,6 +239,14 @@ export async function POST(req: NextRequest) {
 
     await connectDB()
 
+    if (!mongoose.Types.ObjectId.isValid(session.userId)) {
+      return NextResponse.json(
+        { message: "Invalid session. Please log out and sign in again." },
+        { status: 401 }
+      )
+    }
+    const userId = new mongoose.Types.ObjectId(session.userId)
+
     // Vercel serverless: only /tmp is writable — skip disk save if it fails
     const bytes = await resumeFile.arrayBuffer()
     const buffer = Buffer.from(bytes)
@@ -285,7 +297,7 @@ export async function POST(req: NextRequest) {
 
     // Persist to Resume collection
     const resume = new Resume({
-      userId: session.userId,
+      userId,
       fileName: resumeFile.name,
       fileUrl: process.env.VERCEL ? undefined : `/api/uploads/resumes/${savedName}`,
       rawText: parsedText || resumeFile.name,
@@ -305,7 +317,7 @@ export async function POST(req: NextRequest) {
     // Persist quick-access fields to JobSeekerProfile
     try {
       await JobSeekerProfile.findOneAndUpdate(
-        { userId: session.userId },
+        { userId },
         {
           $set: {
             atsScore: finalScore,
@@ -315,10 +327,17 @@ export async function POST(req: NextRequest) {
             lastUpdated: new Date(),
             ...(skills.length > 0 && { skills }),
           },
+          $setOnInsert: {
+            email: session.email || "user@example.com",
+            profileCompleteness: 0,
+            skillsVerified: 0,
+          },
         },
-        { upsert: true }
+        { upsert: true, runValidators: true }
       )
-    } catch { }
+    } catch (profileErr) {
+      console.warn("JobSeekerProfile update skipped:", profileErr)
+    }
 
     return NextResponse.json({
       message: "Resume analyzed successfully!",
@@ -342,8 +361,13 @@ export async function POST(req: NextRequest) {
       },
     })
   } catch (error) {
-    console.error("Resume upload error:", error)
-    return NextResponse.json({ message: "Internal server error. Please try again." }, { status: 500 })
+    const message = error instanceof Error ? error.message : "Unknown error"
+    console.error("Resume upload error:", message, error)
+    const hint =
+      message.includes("MONGODB") || message.includes("MongoServer")
+        ? "Database connection failed. Check MONGODB_URI on Vercel."
+        : "Internal server error. Please try again."
+    return NextResponse.json({ message: hint }, { status: 500 })
   }
 }
 

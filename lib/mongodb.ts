@@ -1,5 +1,6 @@
 // import mongoose from "mongoose"
 // Ensure all models are registered on cold start before any populate calls
+import mongoose from "mongoose"
 import "@/models/register"
 // const MONGODB_URI = process.env.MONGODB_URI
 
@@ -15,8 +16,6 @@ import "@/models/register"
 
 // // Only use valid Mongoose options
 // mongoose.set("bufferCommands", false)
-mongoose.set("strictPopulate", false)
-// Allow population of paths not explicitly in schema (helps during gradual schema alignment)
 mongoose.set("strictPopulate", false)
 
 // export async function connectDB() {
@@ -185,8 +184,6 @@ mongoose.set("strictPopulate", false)
 //   throw lastError || new Error(`Query ${queryName} failed after ${maxRetries} attempts`)
 // }
 
-
-import mongoose from "mongoose"
 
 const SKIP_DB_FOR_BUILD = process.env.DISABLE_DB_FOR_BUILD === "1"
 const MONGODB_URI = process.env.MONGODB_URI
