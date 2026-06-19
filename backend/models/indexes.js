@@ -10,12 +10,12 @@
 const mongoose = require("mongoose");
 
 async function ensureIndexes() {
-  const db = mongoose.connection.db;
-
-  // Wait until connected
-  if (!db) {
+  if (mongoose.connection.readyState !== 1) {
     await new Promise((resolve) => mongoose.connection.once("open", resolve));
   }
+
+  const db = mongoose.connection.db;
+  if (!db) throw new Error("MongoDB connection not ready");
 
   // ─── JobDescription ───────────────────────────────────────────────────────
   const jobs = db.collection("jobdescriptions");

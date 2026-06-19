@@ -237,10 +237,10 @@ app.use((err, req, res, _next) => {
 });
 
 // ─── Start server ──────────────────────────────────────────────────────────
-// Render/Vercel inject PORT — prefer it over BACKEND_PORT in production
-const PORT = process.env.PORT || process.env.BACKEND_PORT || 5001;
+// Render injects PORT — parse as number; bind 0.0.0.0 so Render detects the port
+const PORT = Number(process.env.PORT) || Number(process.env.BACKEND_PORT) || 5001;
 
-server.listen(PORT, () => {
+server.listen(PORT, "0.0.0.0", () => {
   console.log(`✅ HireAI backend running on port ${PORT}`);
   console.log(`🔌 Socket.io enabled`);
   console.log(`🗜️  Compression enabled`);
