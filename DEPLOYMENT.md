@@ -33,7 +33,7 @@ NEXT_PUBLIC_ADMIN_ENABLED=1
 Set these environment variables in Render dashboard:
 ```
 MONGODB_URI=mongodb+srv://RajKumar7633:Raj@76330Raj@cluster0.kd5li4c.mongodb.net/?appName=Cluster0
-REDIS_URL=redis://default:<password>@<host>:<port>
+REDIS_URL=redis://default:A655r7uky8w9z9keo062ar0wf3n0uao5sn7ruwyxjl60v4rkvnn@<host>:<port>
 JWT_SECRET=your-production-jwt-secret-here
 ENCRYPTION_KEY=your-production-encryption-key-here
 BACKEND_PORT=5001
