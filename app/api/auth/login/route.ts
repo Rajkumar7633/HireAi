@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { getBackendUrl } from "@/lib/backend-url"
 
+export const dynamic = "force-dynamic"
+
 const PERSONAL_EMAIL_DOMAINS = [
   "gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "aol.com",
   "icloud.com", "mail.com", "protonmail.com", "yandex.com", "zoho.com",
@@ -42,6 +44,13 @@ export async function POST(req: Request) {
 
     const data = await r.json()
     const response = NextResponse.json(data, { status: r.status })
+
+    // OTP step 1 — never set session cookies until code is verified
+    if (r.ok && data?.status === "otp_sent") {
+      response.cookies.delete("auth-token")
+      response.cookies.delete("refresh-token")
+      return response
+    }
 
     if (r.ok) {
       const token: string | undefined =

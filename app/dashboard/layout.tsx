@@ -168,8 +168,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   if (!session) {
     return (
-      <div className="flex items-center justify-center min-h-[50vh] bg-white">
+      <div className="flex flex-col items-center justify-center min-h-[50vh] bg-white gap-3">
         <Loader2 className="h-7 w-7 animate-spin text-violet-600" />
+        <p className="text-sm text-slate-500">Redirecting to sign in…</p>
       </div>
     );
   }

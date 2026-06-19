@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
-import { persistAuthToken } from "@/lib/client-auth"
+import { persistAuthToken, clearAuthToken } from "@/lib/client-auth"
 import {
   Loader2,
   Mail,
@@ -131,6 +131,7 @@ export default function LoginPage() {
       const data = await response.json()
 
       if (response.ok && data?.status === "otp_sent") {
+        clearAuthToken()
         setOtpPhase(true)
         setLoading(false)
         setError("")

@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
         path: "/",
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
-        maxAge: 60 * 20, // 20 minutes
+        maxAge: 60 * 60 * 24 * 7, // 7 days (matches login)
       })
     }
     if (r.ok && (data as any)?.refreshToken) {

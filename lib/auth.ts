@@ -136,6 +136,13 @@ export async function getSession(request: NextRequest): Promise<Session | null> 
       role: (raw.role ?? raw.user?.role) as Session["role"],
     }
   } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.message.includes("Dynamic server usage") ||
+        (error as { description?: string }).description?.includes("Dynamic server usage"))
+    ) {
+      return null
+    }
     console.error("getSession error:", error)
     return null
   }
