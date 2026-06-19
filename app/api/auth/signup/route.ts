@@ -1,5 +1,22 @@
 import { type NextRequest, NextResponse } from "next/server"
 
+// Block personal email providers for recruiters
+const PERSONAL_EMAIL_DOMAINS = [
+  "gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "aol.com",
+  "icloud.com", "mail.com", "protonmail.com", "yandex.com", "zoho.com",
+  "live.com", "msn.com", "comcast.net", "verizon.net", "att.net",
+  "sbcglobal.net", "bellsouth.net", "charter.net", "cox.net"
+]
+
+const isValidCompanyEmail = (email: string) => {
+  const emailLower = email.trim().toLowerCase()
+  const domain = emailLower.split("@")[1]
+  if (!domain) return false
+  // Block personal email domains
+  if (PERSONAL_EMAIL_DOMAINS.includes(domain)) return false
+  return true
+}
+
 export async function POST(request: NextRequest) {
   try {
     console.log("Signup attempt started")
@@ -14,6 +31,15 @@ export async function POST(request: NextRequest) {
 
     if (!["job_seeker", "recruiter", "admin", "college", "college_admin"].includes(role)) {
       return NextResponse.json({ message: "Invalid role" }, { status: 400 })
+    }
+
+    // Validate company email for recruiter role (block personal email providers)
+    if (role === "recruiter") {
+      if (!isValidCompanyEmail(email)) {
+        return NextResponse.json({
+          message: "Recruiters must use a company domain email (not @gmail.com, @yahoo.com, etc.)"
+        }, { status: 400 })
+      }
     }
 
     // Call backend API

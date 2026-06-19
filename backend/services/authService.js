@@ -20,6 +20,25 @@ const isValidPassword = (v) => typeof v === "string" && v.trim().length >= 6 && 
 const isValidOtp = (v) => /^[0-9]{6}$/.test(String(v || "").trim())
 const isValidCollegeEmail = (v) => typeof v === "string" && v.trim().toLowerCase().endsWith("@mmumullana.org")
 
+// Block personal email providers for recruiters - require company domain
+const PERSONAL_EMAIL_DOMAINS = [
+  "gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "aol.com", 
+  "icloud.com", "mail.com", "protonmail.com", "yandex.com", "zoho.com",
+  "live.com", "msn.com", "comcast.net", "verizon.net", "att.net",
+  "sbcglobal.net", "bellsouth.net", "charter.net", "cox.net"
+]
+
+const isValidCompanyEmail = (v) => {
+  if (!v || typeof v !== "string") return false
+  const email = v.trim().toLowerCase()
+  const domain = email.split("@")[1]
+  if (!domain) return false
+  // Block personal email domains
+  if (PERSONAL_EMAIL_DOMAINS.includes(domain)) return false
+  // Ensure it's a valid email format
+  return /.+@.+\..+/.test(email)
+}
+
 function buildTokenPayload(user) {
   return { userId: user.id, email: user.email, name: user.name, role: user.role }
 }
@@ -58,6 +77,15 @@ async function register({ email, password, role, name }) {
   if (requestedRole === "college_admin" || requestedRole === "college") {
     if (!isValidCollegeEmail(email)) {
       const err = new Error("College accounts must use @mmumullana.org email address")
+      err.statusCode = 400
+      throw err
+    }
+  }
+
+  // Validate company email for recruiter role (block personal email providers)
+  if (requestedRole === "recruiter") {
+    if (!isValidCompanyEmail(email)) {
+      const err = new Error("Recruiters must use a company domain email (not @gmail.com, @yahoo.com, etc.)")
       err.statusCode = 400
       throw err
     }
@@ -112,6 +140,15 @@ async function initiateLogin({ email, password }) {
     const err = new Error("No account found for this email. Please sign up.")
     err.statusCode = 404
     throw err
+  }
+
+  // Validate company email for recruiter login (block personal email providers)
+  if (user.role === "recruiter") {
+    if (!isValidCompanyEmail(cleanEmail)) {
+      const err = new Error("Recruiters must use a company domain email (not @gmail.com, @yahoo.com, etc.)")
+      err.statusCode = 400
+      throw err
+    }
   }
 
   const storedHash = user.password || user.passwordHash
