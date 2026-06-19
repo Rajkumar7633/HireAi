@@ -210,7 +210,10 @@ export default function LoginPage() {
         return
       }
       persistAuthToken(data.accessToken || data.token)
-      await refreshSession?.()
+      if (refreshSession) {
+        await refreshSession()
+      }
+      await new Promise((resolve) => setTimeout(resolve, 150))
       redirectByRole(router, data?.user?.role || "", redirectPath)
     } catch {
       setOtpError("Verification failed. Try again.")

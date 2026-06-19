@@ -48,8 +48,19 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [query, setQuery] = React.useState("");
 
   useEffect(() => {
-    if (!isLoading && !session) router.push("/login");
-  }, [session, isLoading, router]);
+    if (!isLoading && !session) {
+      const goLogin = async () => {
+        try {
+          sessionStorage.removeItem("auth-token")
+          await fetch("/api/auth/logout", { method: "POST", credentials: "include" })
+        } catch {
+          /* ignore */
+        }
+        router.push("/login")
+      }
+      goLogin()
+    }
+  }, [session, isLoading, router])
 
   // Force light theme on all dashboard pages + lock window scroll (main column scrolls only)
   useEffect(() => {

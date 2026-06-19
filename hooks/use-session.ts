@@ -53,12 +53,12 @@ export function useSession() {
       } else {
         if (response.status === 401 && allowRefresh) {
           try {
-            const refreshResponse = await authFetch("/api/auth/refresh", {
+            const refreshResponse = await fetch("/api/auth/refresh", {
               method: "POST",
+              credentials: "include",
               cache: "no-store",
-              headers: {
-                "Content-Type": "application/json",
-              },
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({}),
             })
 
             if (refreshResponse.ok) {
