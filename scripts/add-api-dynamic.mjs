@@ -22,13 +22,25 @@ for (const file of walk(ROOT)) {
 
   const lines = src.split("\n")
   let insertAt = 0
+  let inMultilineImport = false
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim()
-    if (line.startsWith("import ") || line.startsWith('import"')) {
+    const line = lines[i]
+    const trimmed = line.trim()
+    if (!inMultilineImport && trimmed.startsWith("import ")) {
+      if (trimmed.includes("{") && !trimmed.includes("}")) {
+        inMultilineImport = true
+        insertAt = i + 1
+        continue
+      }
       insertAt = i + 1
       continue
     }
-    if (line === "" && insertAt > 0) continue
+    if (inMultilineImport) {
+      if (trimmed.includes("} from ")) inMultilineImport = false
+      insertAt = i + 1
+      continue
+    }
+    if (trimmed === "" && insertAt > 0) continue
     break
   }
 

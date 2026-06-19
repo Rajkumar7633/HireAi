@@ -3,13 +3,13 @@ import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import Application from "@/models/Application"
 import {
-export { dynamic } from "@/lib/api-dynamic"
-
   getApplicationCompletedAt,
   getApplicationTestScore,
   isApplicationTestCompleted,
 } from "@/lib/test-submission"
 import { getCollegeAssignmentModel, getFlexTestModel } from "@/lib/flex-test"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 type CollegeAssignmentLean = {
   _id: unknown

@@ -3,12 +3,12 @@ import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import mongoose from "mongoose"
 import {
-export { dynamic } from "@/lib/api-dynamic"
-
   getCollegeAssignmentModel,
   getFlexTestModel,
   sanitizeTestForCandidate,
 } from "@/lib/flex-test"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function GET(
   req: NextRequest,

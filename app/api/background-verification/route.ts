@@ -4,13 +4,13 @@ import { connectDB } from "@/lib/mongodb"
 import Notification from "@/models/Notification"
 import BackgroundVerification, { VERIFICATION_COMPONENTS } from "@/models/BackgroundVerification"
 import {
-export { dynamic } from "@/lib/api-dynamic"
-
   computeOverallFromComponents,
   formatVerificationRow,
   initiateVerification,
   listVerificationsForRecruiter,
 } from "@/lib/background-verification"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 export async function GET(req: NextRequest) {
   try {

@@ -3,8 +3,6 @@ import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import ProctorEvent from "@/models/ProctorEvent"
 import {
-export { dynamic } from "@/lib/api-dynamic"
-
   getAssignedApplicationsForTest,
   testIdFilter,
 } from "@/lib/test-assignment-stats"
@@ -16,6 +14,8 @@ import {
   type ProctorEventRow,
 } from "@/lib/proctor-analytics"
 import mongoose from "mongoose"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 async function getTestSettings(testId: string) {
   const FlexTest =

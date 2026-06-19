@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
 import {
-export { dynamic } from "@/lib/api-dynamic"
-
   findAnswerForQuestion,
   isCodingQuestionType,
   normalizeOutput,
   resolveLanguageId,
   runCode,
 } from "@/lib/code-runner"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 const rateLimits = new Map<string, { count: number; resetAt: number }>()
 const RATE_LIMIT = 20

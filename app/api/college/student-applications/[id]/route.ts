@@ -5,11 +5,11 @@ import CollegeStudentRegistration from "@/models/CollegeStudentRegistration"
 import User from "@/models/User"
 import Notification from "@/models/Notification"
 import {
-export { dynamic } from "@/lib/api-dynamic"
-
   createCollegeStudentAccount,
   sendCollegeStudentWelcomeEmail,
 } from "@/lib/college-onboard-student"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 function requireCollege(session: Awaited<ReturnType<typeof getSession>>) {
   return session && (session.role === "college" || session.role === "college_admin")

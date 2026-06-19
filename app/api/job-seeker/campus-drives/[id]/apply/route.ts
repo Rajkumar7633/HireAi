@@ -7,12 +7,12 @@ import User from "@/models/User"
 import Notification from "@/models/Notification"
 import mongoose from "mongoose"
 import {
-export { dynamic } from "@/lib/api-dynamic"
-
   checkCampusDriveEligibility,
   type CampusDriveStudent,
 } from "@/lib/campus-drive-eligibility"
 import type { ICampusDrive } from "@/models/CampusDrive"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 type LeanStudent = CampusDriveStudent & {
   _id: mongoose.Types.ObjectId

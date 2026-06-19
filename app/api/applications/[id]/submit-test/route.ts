@@ -6,8 +6,6 @@ import Notification from "@/models/Notification"
 import JobDescription from "@/models/JobDescription"
 import mongoose from "mongoose"
 import {
-export { dynamic } from "@/lib/api-dynamic"
-
   findAnswerForQuestion,
   isCodingQuestionType,
   scoreCodingAnswer,
@@ -16,6 +14,8 @@ import { getTestSubmissionModel } from "@/lib/test-submission"
 import { getTestResultModelForWrite } from "@/lib/enrich-submission"
 import { getIO } from "@/lib/socket-server"
 import { computeIntegrityScore } from "@/lib/coding-test-security"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5001"
 

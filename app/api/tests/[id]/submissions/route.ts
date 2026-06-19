@@ -2,8 +2,6 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
 import { connectDB } from "@/lib/mongodb"
 import {
-export { dynamic } from "@/lib/api-dynamic"
-
   applicationToSubmissionRow,
   dedupeApplicationsByCandidate,
   getAssignedApplicationsForTest,
@@ -13,6 +11,8 @@ export { dynamic } from "@/lib/api-dynamic"
 import { enrichSubmissionRecord, populateSubmissionPeople } from "@/lib/enrich-submission"
 import { getTestSubmissionModel } from "@/lib/test-submission"
 import { dedupeByCandidate, getCandidateDedupeKey, mergeSubmissionRecords } from "@/lib/submission-utils"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5001"
 

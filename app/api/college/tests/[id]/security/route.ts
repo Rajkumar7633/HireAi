@@ -4,8 +4,6 @@ import { connectDB } from "@/lib/mongodb"
 import ProctorEvent from "@/models/ProctorEvent"
 import { mergeTestSecurity } from "@/lib/coding-test-security"
 import {
-export { dynamic } from "@/lib/api-dynamic"
-
   aggregateSecuritySummary,
   buildCandidateSecurityProfile,
   type ProctorEventRow,
@@ -16,6 +14,8 @@ import {
 } from "@/lib/college-test-stats"
 import { getTestSubmissionModel } from "@/lib/test-submission"
 import { testIdFilter } from "@/lib/test-assignment-stats"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 function requireCollege(session: Awaited<ReturnType<typeof getSession>>) {
   return session && (session.role === "college" || session.role === "college_admin")

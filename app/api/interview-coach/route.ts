@@ -4,14 +4,14 @@ import { connectDB } from "@/lib/mongodb"
 import { aiService } from "@/lib/ai-service"
 import mongoose from "mongoose"
 import {
-export { dynamic } from "@/lib/api-dynamic"
-
   type CoachCategory,
   type CoachDifficulty,
   buildStaticQuestions,
   extractSkillsFromDescription,
   scoreRating,
 } from "@/lib/interview-coach-utils"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 function getCoachSessionModel() {
   if (mongoose.models.InterviewCoachSession) return mongoose.models.InterviewCoachSession

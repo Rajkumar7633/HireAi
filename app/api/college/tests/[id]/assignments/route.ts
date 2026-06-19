@@ -1,11 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
 import {
-export { dynamic } from "@/lib/api-dynamic"
-
   assertCollegeOwnsTest,
   getCollegeAssignedCandidates,
 } from "@/lib/college-test-stats"
+export { dynamic } from "@/lib/api-dynamic"
+
 
 function requireCollege(session: Awaited<ReturnType<typeof getSession>>) {
   return session && (session.role === "college" || session.role === "college_admin")
