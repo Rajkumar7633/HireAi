@@ -31,19 +31,25 @@ function createTransporter() {
 }
 
 let transporter = null
-if (process.env.RESEND_API_KEY) {
-  console.log("✅ Email via Resend API (RESEND_API_KEY set)")
-} else if (hasSmtpConfig()) {
+if (hasSmtpConfig()) {
   transporter = createTransporter()
-  setTimeout(() => {
-    transporter.verify().then(() => {
-      console.log("✅ SMTP ready:", getSmtpSettings().host)
-    }).catch((err) => {
-      console.warn("⚠️  SMTP verify failed:", err.message, "— set RESEND_API_KEY on Render")
-    })
-  }, 2000)
+  if (!process.env.RESEND_API_KEY) {
+    setTimeout(() => {
+      transporter.verify().then(() => {
+        console.log("✅ SMTP ready:", getSmtpSettings().host)
+      }).catch((err) => {
+        console.warn("⚠️  SMTP verify failed:", err.message)
+      })
+    }, 2000)
+  }
+}
+
+if (process.env.RESEND_API_KEY) {
+  console.log("✅ Email: Resend API primary" + (transporter ? ", SMTP fallback" : ""))
+} else if (transporter) {
+  console.log("✅ Email via SMTP:", getSmtpSettings().host)
 } else {
-  console.warn("⚠️  Email not configured — set RESEND_API_KEY or SMTP_* on Render")
+  console.warn("⚠️  Email not configured — set Brevo/SendGrid SMTP_* or RESEND_API_KEY on Render")
 }
 
 async function sendViaResend({ to, subject, html }) {
@@ -86,7 +92,11 @@ const sendEmail = async ({ to, subject, html }) => {
       return await sendViaResend({ to, subject, html })
     } catch (err) {
       console.error("[email] Resend failed:", err.message)
-      if (!transporter) throw err
+      if (transporter) {
+        console.log("[email] Falling back to SMTP for", to)
+      } else {
+        throw err
+      }
     }
   }
 
