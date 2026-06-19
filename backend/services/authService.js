@@ -70,15 +70,24 @@ async function sendLoginOtpEmail(user, otp) {
 
 function hasSmtpConfig() {
   return (
-    !!process.env.EMAIL_SERVICE_HOST &&
-    !!process.env.EMAIL_SERVICE_USER &&
-    !!process.env.EMAIL_SERVICE_PASS
-  )
+    !!(
+      process.env.EMAIL_SERVICE_HOST ||
+      process.env.SMTP_HOST
+    ) &&
+    !!(
+      process.env.EMAIL_SERVICE_USER ||
+      process.env.SMTP_USER
+    ) &&
+    !!(
+      process.env.EMAIL_SERVICE_PASS ||
+      process.env.SMTP_PASS
+    )
+  ) || !!process.env.RESEND_API_KEY
 }
 
-/** OTP only when explicitly enabled AND SMTP is configured. Default = fast direct login. */
+/** OTP login is always on unless LOGIN_REQUIRE_OTP=false */
 function isOtpLoginEnabled() {
-  return process.env.LOGIN_REQUIRE_OTP === "true" && hasSmtpConfig()
+  return process.env.LOGIN_REQUIRE_OTP !== "false"
 }
 
 async function issueLoginTokens(user) {
@@ -212,13 +221,13 @@ async function initiateLogin({ email, password }) {
     throw err
   }
 
-  // Fast path: direct login (default). OTP only when LOGIN_REQUIRE_OTP=true + SMTP works.
+  // Direct login only when OTP explicitly disabled
   if (!isOtpLoginEnabled()) {
-    console.log(`[login] direct sign-in for ${user.email}`)
+    console.log(`[login] direct sign-in for ${user.email} (LOGIN_REQUIRE_OTP=false)`)
     return issueLoginTokens(user)
   }
 
-  // OTP path (optional extra security)
+  // OTP login: save code, show OTP screen, send email in background
   const otp = ("000000" + Math.floor(Math.random() * 1_000_000)).slice(-6)
   const otpHash = await bcrypt.hash(otp, 10)
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000)
@@ -235,14 +244,11 @@ async function initiateLogin({ email, password }) {
     console.log(`[otp] login code for ${user.email}: ${otp}`)
   }
 
-  try {
-    await sendLoginOtpEmail(user, otp)
-    console.log(`[otp] email sent to ${user.email}`)
-    return { status: "otp_sent", message: "Verification code sent to email" }
-  } catch (err) {
-    console.error(`[otp-email] FAILED for ${user.email}, using direct login:`, err.message)
-    return issueLoginTokens(user)
-  }
+  void sendLoginOtpEmail(user, otp)
+    .then(() => console.log(`[otp] email sent to ${user.email}`))
+    .catch((err) => console.error(`[otp-email] FAILED for ${user.email}:`, err.message))
+
+  return { status: "otp_sent", message: "Verification code sent to your email" }
 }
 
 /**

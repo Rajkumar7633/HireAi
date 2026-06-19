@@ -133,16 +133,16 @@ export default function LoginPage() {
       if (response.ok && data?.status === "otp_sent") {
         setOtpPhase(true)
         setLoading(false)
-        toast({ title: "Verification code sent", description: `Check ${email.trim()} and your spam folder for the 6-digit code.` })
+        setError("")
+        toast({
+          title: "Check your email",
+          description: `We sent a 6-digit code to ${email.trim()}. Enter it below to continue.`,
+        })
         return
       }
 
-      if (response.status === 503) {
-        setError(data.message || "Could not send verification email. Try again in a minute.")
-        return
-      }
-
-      if (response.ok) {
+      // Direct login only if backend explicitly returns tokens (LOGIN_REQUIRE_OTP=false)
+      if (response.ok && (data.token || data.accessToken)) {
         const token = data.token || data.accessToken || data.jwt || data.access_token
         if (token) persistAuthToken(token)
         toast({ title: "Welcome back!", description: "Signed in successfully." })
