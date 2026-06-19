@@ -237,7 +237,8 @@ app.use((err, req, res, _next) => {
 });
 
 // ─── Start server ──────────────────────────────────────────────────────────
-const PORT = process.env.BACKEND_PORT || process.env.PORT || 5001;
+// Render/Vercel inject PORT — prefer it over BACKEND_PORT in production
+const PORT = process.env.PORT || process.env.BACKEND_PORT || 5001;
 
 server.listen(PORT, () => {
   console.log(`✅ HireAI backend running on port ${PORT}`);
