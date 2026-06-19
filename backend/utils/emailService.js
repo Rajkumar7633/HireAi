@@ -31,17 +31,18 @@ function createTransporter() {
 }
 
 let transporter = null
-if (hasSmtpConfig()) {
+if (process.env.RESEND_API_KEY) {
+  console.log("✅ Email via Resend API (RESEND_API_KEY set)")
+} else if (hasSmtpConfig()) {
   transporter = createTransporter()
-  // Non-blocking verify — Gmail often times out from cloud hosts; Resend is preferred
   setTimeout(() => {
     transporter.verify().then(() => {
       console.log("✅ SMTP ready:", getSmtpSettings().host)
     }).catch((err) => {
-      console.warn("⚠️  SMTP verify skipped:", err.message, "— use RESEND_API_KEY on Render for reliable email")
+      console.warn("⚠️  SMTP verify failed:", err.message, "— set RESEND_API_KEY on Render")
     })
   }, 2000)
-} else if (!process.env.RESEND_API_KEY) {
+} else {
   console.warn("⚠️  Email not configured — set RESEND_API_KEY or SMTP_* on Render")
 }
 
@@ -65,7 +66,14 @@ async function sendViaResend({ to, subject, html }) {
 
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
-    throw new Error(data?.message || `Resend error ${res.status}`)
+    const msg = data?.message || `Resend error ${res.status}`
+    if (res.status === 403 && String(msg).includes("only send testing emails")) {
+      console.error(
+        "[email] Resend sandbox: onboarding@resend.dev only delivers to your Resend account email.",
+        "Verify a domain at https://resend.com/domains and set SMTP_FROM=HireAI <noreply@yourdomain.com>"
+      )
+    }
+    throw new Error(msg)
   }
   console.log("[email] Resend sent to %s — id: %s", to, data.id)
   return data

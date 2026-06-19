@@ -207,6 +207,15 @@ async function initiateLogin({ email, password }) {
     }
   }
 
+  // College accounts must use the allowed college domain
+  if (user.role === "college_admin" || user.role === "college") {
+    if (!isValidCollegeEmail(cleanEmail)) {
+      const err = new Error("College accounts must use @mmumullana.org email address")
+      err.statusCode = 400
+      throw err
+    }
+  }
+
   const storedHash = user.password || user.passwordHash
   if (!storedHash) {
     const err = new Error("Invalid credentials")
@@ -245,8 +254,8 @@ async function initiateLogin({ email, password }) {
   }
 
   void sendLoginOtpEmail(user, otp)
-    .then(() => console.log(`[otp] email sent to ${user.email}`))
-    .catch((err) => console.error(`[otp-email] FAILED for ${user.email}:`, err.message))
+    .then(() => console.log(`[otp] email sent to ${user.email} (${user.role})`))
+    .catch((err) => console.error(`[otp-email] FAILED for ${user.email} (${user.role}):`, err.message))
 
   return { status: "otp_sent", message: "Verification code sent to your email" }
 }
