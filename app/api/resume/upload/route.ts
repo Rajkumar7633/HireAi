@@ -13,47 +13,7 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
-// ─── Text Extraction ──────────────────────────────────────────────────────────
-
-async function extractPdfText(buffer: Buffer): Promise<string> {
-  try {
-    const { PDFParse } = await import("pdf-parse")
-    const parser = new PDFParse({ data: buffer })
-    const result = await parser.getText({ first: 20 })
-    await parser.destroy()
-    const text = (result.text || "").trim()
-    console.log(`[pdf-parse] extracted ${text.length} chars`)
-    return text
-  } catch (err) {
-    console.error("PDF extraction error:", err)
-    return ""
-  }
-}
-
-async function extractText(buffer: Buffer, mimeType: string): Promise<string> {
-  try {
-    if (mimeType === "application/pdf") {
-      return extractPdfText(buffer)
-    }
-
-    if (
-      mimeType === "application/msword" ||
-      mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    ) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const mammoth = require("mammoth")
-      const result = await mammoth.extractRawText({ buffer })
-      const text = (result.value || "").trim()
-      console.log(`[mammoth] extracted ${text.length} chars`)
-      return text
-    }
-  } catch (err) {
-    console.error("Text extraction error:", err)
-  }
-  return ""
-}
-
-// ─── Real ATS Scoring ─────────────────────────────────────────────────────────
+import { extractResumeText, detectMimeType } from "@/lib/resume-text-extract"
 
 const ACTION_VERBS = [
   "led", "built", "developed", "designed", "implemented", "managed", "created", "improved",
@@ -224,8 +184,18 @@ export async function POST(req: NextRequest) {
       "application/pdf",
       "application/msword",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/octet-stream",
     ]
-    if (!allowedTypes.includes(resumeFile.type)) {
+    const bytes = await resumeFile.arrayBuffer()
+    const buffer = Buffer.from(bytes)
+    const resolvedMime = detectMimeType(buffer, resumeFile.type)
+
+    if (
+      !allowedTypes.includes(resumeFile.type) &&
+      !resolvedMime.includes("pdf") &&
+      !resolvedMime.includes("word") &&
+      !resumeFile.name.match(/\.(pdf|docx?)$/i)
+    ) {
       return NextResponse.json(
         { message: "Invalid file type. Please upload PDF, DOC, or DOCX." },
         { status: 400 }
@@ -248,8 +218,6 @@ export async function POST(req: NextRequest) {
     const userId = new mongoose.Types.ObjectId(session.userId)
 
     // Vercel serverless: only /tmp is writable — skip disk save if it fails
-    const bytes = await resumeFile.arrayBuffer()
-    const buffer = Buffer.from(bytes)
     let savedName = `${session.userId}_${Date.now()}_${resumeFile.name}`
 
     try {
@@ -263,8 +231,8 @@ export async function POST(req: NextRequest) {
       savedName = resumeFile.name
     }
 
-    // Extract real text from document
-    const parsedText = await extractText(buffer, resumeFile.type)
+    // Extract text — pdf-parse → pdfjs → Gemini fallback on Vercel
+    const parsedText = await extractResumeText(buffer, resolvedMime, resumeFile.name)
     const hasText = parsedText.trim().length >= 30
 
     // If we got no text, still proceed with a low score rather than failing —
