@@ -258,11 +258,14 @@ async function initiateLogin({ email, password }) {
     console.log(`[otp] email sent to ${user.email} (${user.role})`)
   } catch (err) {
     console.error(`[otp-email] FAILED for ${user.email} (${user.role}):`, err.message)
-    const deliveryErr = new Error(
-      String(err.message || "").includes("only send testing emails")
-        ? `Could not send code to ${user.email}. Verify a sending domain on Resend (resend.com/domains).`
-        : `Could not send verification email to ${user.email}. Please try again.`
-    )
+    const msg = String(err.message || "")
+    let userMessage = `Could not send verification email to ${user.email}. Please try again.`
+    if (msg.includes("only send testing emails")) {
+      userMessage = `Could not send code to ${user.email}. Verify a sending domain on Resend (resend.com/domains) and set SMTP_FROM to that domain — not onboarding@resend.dev.`
+    } else if (msg.includes("domain is not verified") || msg.includes("yourdomain.com")) {
+      userMessage = `Email not configured: SMTP_FROM uses an unverified domain. On Render, set SMTP_FROM to a real verified domain (e.g. HireAI <noreply@mmumullana.org>) after adding it at resend.com/domains.`
+    }
+    const deliveryErr = new Error(userMessage)
     deliveryErr.statusCode = 503
     throw deliveryErr
   }
