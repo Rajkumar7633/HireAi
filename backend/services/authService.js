@@ -54,35 +54,24 @@ function signRefreshToken(payload) {
 
 async function sendLoginOtpEmail(user, otp) {
   const appName = process.env.NEXT_PUBLIC_COMPANY_NAME || "HireAI"
-  const timeoutMs = 15000
-
-  await Promise.race([
-    sendEmail({
-      to: user.email,
-      subject: `${appName} login code: ${otp}`,
-      html: buildLoginOtpEmail({ name: user.name, otp, expiresMinutes: 10 }),
-    }),
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Email send timed out after 15s")), timeoutMs)
-    ),
-  ])
+  await sendEmail({
+    to: user.email,
+    subject: `${appName} login code: ${otp}`,
+    html: buildLoginOtpEmail({ name: user.name, otp, expiresMinutes: 10 }),
+  })
 }
 
 function hasSmtpConfig() {
   return (
+    !!process.env.BREVO_API_KEY ||
+    !!process.env.SENDINBLUE_API_KEY ||
+    !!process.env.RESEND_API_KEY ||
     !!(
-      process.env.EMAIL_SERVICE_HOST ||
-      process.env.SMTP_HOST
-    ) &&
-    !!(
-      process.env.EMAIL_SERVICE_USER ||
-      process.env.SMTP_USER
-    ) &&
-    !!(
-      process.env.EMAIL_SERVICE_PASS ||
-      process.env.SMTP_PASS
+      (process.env.EMAIL_SERVICE_HOST || process.env.SMTP_HOST) &&
+      (process.env.EMAIL_SERVICE_USER || process.env.SMTP_USER) &&
+      (process.env.EMAIL_SERVICE_PASS || process.env.SMTP_PASS)
     )
-  ) || !!process.env.RESEND_API_KEY
+  )
 }
 
 /** OTP login is always on unless LOGIN_REQUIRE_OTP=false */
@@ -264,8 +253,8 @@ async function initiateLogin({ email, password }) {
       userMessage = `Could not send code to ${user.email}. Verify a sending domain on Resend (resend.com/domains) and set SMTP_FROM to that domain — not onboarding@resend.dev.`
     } else if (msg.includes("domain is not verified") || msg.includes("yourdomain.com")) {
       userMessage = `Email not configured: SMTP_FROM uses an unverified domain. On Render, set SMTP_FROM to a real verified domain (e.g. HireAI <noreply@mmumullana.org>) after adding it at resend.com/domains.`
-    } else if (msg.includes("Connection timeout") || msg.includes("ETIMEDOUT")) {
-      userMessage = `Email server timed out. On Render use Brevo only: delete RESEND_API_KEY and all EMAIL_SERVICE_* Gmail vars, set SMTP_HOST=smtp-relay.brevo.com and verify sender in Brevo.`
+    } else if (msg.includes("Connection timeout") || msg.includes("ETIMEDOUT") || msg.includes("BREVO_API_KEY")) {
+      userMessage = `Email failed: Render blocks SMTP on free tier. Add BREVO_API_KEY on Render (Brevo → SMTP & API → API Keys). Delete SMTP_HOST vars.`
     }
     const deliveryErr = new Error(userMessage)
     deliveryErr.statusCode = 503

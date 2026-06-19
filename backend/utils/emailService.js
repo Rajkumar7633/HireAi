@@ -1,6 +1,5 @@
 const nodemailer = require("nodemailer")
 
-// SMTP_* wins over EMAIL_SERVICE_* so Brevo on Render is not overridden by old Gmail vars
 function getSmtpSettings() {
   return {
     host: process.env.SMTP_HOST || process.env.EMAIL_SERVICE_HOST,
@@ -10,16 +9,42 @@ function getSmtpSettings() {
   }
 }
 
+function getBrevoApiKey() {
+  return process.env.BREVO_API_KEY || process.env.SENDINBLUE_API_KEY || null
+}
+
+function hasBrevoApiConfig() {
+  return !!getBrevoApiKey()
+}
+
 function hasSmtpConfig() {
   const { host, user, pass } = getSmtpSettings()
   return !!(host && user && pass)
 }
 
-function shouldUseSmtpOnly() {
-  if (process.env.EMAIL_PROVIDER === "smtp") return true
-  if (process.env.SMTP_HOST) return true
-  const host = (getSmtpSettings().host || "").toLowerCase()
-  return host.includes("brevo") || host.includes("sendgrid") || host.includes("mailgun")
+function isRenderOrServerless() {
+  return (
+    process.env.RENDER === "true" ||
+    process.env.NODE_ENV === "production" ||
+    process.env.VERCEL === "1"
+  )
+}
+
+function parseFromAddress(fromStr) {
+  const raw = (fromStr || "").trim()
+  const match = raw.match(/^(.+?)\s*<([^>]+)>$/)
+  if (match) return { name: match[1].trim().replace(/^"|"$/g, ""), email: match[2].trim() }
+  if (raw.includes("@")) return { name: "HireAI", email: raw }
+  const user = getSmtpSettings().user
+  return { name: "HireAI", email: user || "noreply@example.com" }
+}
+
+function getFromAddress() {
+  return (
+    process.env.SMTP_FROM ||
+    process.env.EMAIL_FROM ||
+    (getSmtpSettings().user ? `HireAI <${getSmtpSettings().user}>` : "HireAI <onboarding@resend.dev>")
+  )
 }
 
 function createTransporter() {
@@ -39,38 +64,65 @@ function createTransporter() {
 }
 
 let transporter = null
-if (hasSmtpConfig()) {
+if (hasSmtpConfig() && !isRenderOrServerless()) {
   transporter = createTransporter()
-  const { host } = getSmtpSettings()
-  if (shouldUseSmtpOnly() || !process.env.RESEND_API_KEY) {
-    setTimeout(() => {
-      transporter.verify().then(() => {
-        console.log("✅ SMTP ready:", host)
-      }).catch((err) => {
-        console.warn("⚠️  SMTP verify failed:", err.message)
-      })
-    }, 2000)
-  }
+  setTimeout(() => {
+    transporter.verify().then(() => {
+      console.log("✅ SMTP ready (local):", getSmtpSettings().host)
+    }).catch((err) => {
+      console.warn("⚠️  SMTP verify failed:", err.message)
+    })
+  }, 2000)
 }
 
-if (shouldUseSmtpOnly() && transporter) {
-  console.log("✅ Email via SMTP only:", getSmtpSettings().host)
-} else if (process.env.RESEND_API_KEY) {
-  console.log("✅ Email: Resend API primary" + (transporter ? ", SMTP fallback" : ""))
+if (hasBrevoApiConfig()) {
+  console.log("✅ Email via Brevo HTTP API (works on Render free tier)")
+} else if (isRenderOrServerless() && hasSmtpConfig()) {
+  console.warn(
+    "⚠️  Render blocks SMTP port 587 on free tier. Set BREVO_API_KEY (Brevo → SMTP & API → API Keys)."
+  )
 } else if (transporter) {
   console.log("✅ Email via SMTP:", getSmtpSettings().host)
+} else if (process.env.RESEND_API_KEY) {
+  console.log("✅ Email via Resend API")
 } else {
-  console.warn("⚠️  Email not configured — set Brevo SMTP_* on Render")
+  console.warn("⚠️  Email not configured — set BREVO_API_KEY on Render")
+}
+
+async function sendViaBrevoApi({ to, subject, html }) {
+  const apiKey = getBrevoApiKey()
+  if (!apiKey) throw new Error("BREVO_API_KEY not set")
+
+  const sender = parseFromAddress(getFromAddress())
+
+  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      "api-key": apiKey,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      sender,
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+    }),
+  })
+
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    throw new Error(data?.message || `Brevo API error ${res.status}`)
+  }
+  console.log("[email] Brevo API sent to %s — messageId: %s", to, data.messageId)
+  return data
 }
 
 async function sendViaResend({ to, subject, html }) {
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) return null
 
-  const from =
-    process.env.SMTP_FROM ||
-    process.env.EMAIL_FROM ||
-    "HireAI <onboarding@resend.dev>"
+  const from = getFromAddress()
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -83,8 +135,7 @@ async function sendViaResend({ to, subject, html }) {
 
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
-    const msg = data?.message || `Resend error ${res.status}`
-    throw new Error(msg)
+    throw new Error(data?.message || `Resend error ${res.status}`)
   }
   console.log("[email] Resend sent to %s — id: %s", to, data.id)
   return data
@@ -92,23 +143,23 @@ async function sendViaResend({ to, subject, html }) {
 
 async function sendViaSmtp({ to, subject, html }) {
   if (!transporter) {
-    throw new Error("SMTP not configured")
+    throw new Error("SMTP not available (blocked on Render free tier — use BREVO_API_KEY)")
   }
 
-  const from =
-    process.env.SMTP_FROM ||
-    process.env.EMAIL_FROM ||
-    `"HireAI" <${getSmtpSettings().user}>`
-
-  const info = await transporter.sendMail({ from, to, subject, html })
-  console.log("[email] SMTP sent to %s via %s — messageId: %s", to, getSmtpSettings().host, info.messageId)
+  const info = await transporter.sendMail({
+    from: getFromAddress(),
+    to,
+    subject,
+    html,
+  })
+  console.log("[email] SMTP sent to %s — messageId: %s", to, info.messageId)
   return info
 }
 
 const sendEmail = async ({ to, subject, html }) => {
-  // Brevo / explicit SMTP_HOST — skip Resend (avoids gmail.com domain errors + double attempts)
-  if (shouldUseSmtpOnly() && transporter) {
-    return sendViaSmtp({ to, subject, html })
+  // Brevo HTTP API — works on Render (SMTP port 587 is blocked on free tier)
+  if (hasBrevoApiConfig()) {
+    return sendViaBrevoApi({ to, subject, html })
   }
 
   if (process.env.RESEND_API_KEY) {
@@ -116,10 +167,7 @@ const sendEmail = async ({ to, subject, html }) => {
       return await sendViaResend({ to, subject, html })
     } catch (err) {
       console.error("[email] Resend failed:", err.message)
-      if (transporter) {
-        console.log("[email] Falling back to SMTP for", to)
-        return sendViaSmtp({ to, subject, html })
-      }
+      if (transporter) return sendViaSmtp({ to, subject, html })
       throw err
     }
   }
@@ -128,7 +176,7 @@ const sendEmail = async ({ to, subject, html }) => {
     return sendViaSmtp({ to, subject, html })
   }
 
-  console.warn("[email] SMTP not configured. Logging email instead of sending.")
+  console.warn("[email] Not configured. Logging instead of sending.")
   console.log("[email] To:", to, "| Subject:", subject)
   const otpMatch = String(html).match(/>(\d{6})</)
   if (otpMatch) console.log("[email] OTP (dev log):", otpMatch[1])
