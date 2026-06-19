@@ -60,14 +60,14 @@ export async function POST(request: NextRequest) {
       ...(resumeId ? { resumeId } : {}),
       applicationDate: new Date(),
       appliedAt: new Date(),
-      status: "Pending",
+      status: "Under Review",
       screeningAnswers: Array.isArray(screeningAnswers) ? screeningAnswers : undefined,
       applicationProfile: applicationProfile || undefined,
     })
 
     await application.save()
 
-    // Immediately run AI screening to auto-shortlist at submit time
+    // Run AI analysis for scoring but don't auto-decide status
     try {
       const requiredSkills: string[] = Array.isArray(jobDescription.skillsRequired) && jobDescription.skillsRequired.length > 0
         ? jobDescription.skillsRequired
@@ -83,12 +83,10 @@ export async function POST(request: NextRequest) {
         resumeText = resume.rawText || ""
       }
 
-      // If resume is required but missing text, leave as Pending
       if (resumeText || (jobDescription.applicationMode === "form_only")) {
         const analysis = await aiService.analyzeResume(resumeText, jobText, requiredSkills)
         const aiMatchScore = analysis.score
         const atsScore = analysis.atsScore
-        // Prefer per-job thresholds when available, otherwise env, otherwise defaults
         const jobShortlist = Number((jobDescription as any).aiShortlistThreshold)
         const jobAts = Number((jobDescription as any).aiMinAtsScore)
         let shortlistThreshold = 70
@@ -103,7 +101,6 @@ export async function POST(request: NextRequest) {
           const envAts = Number(process.env.AI_MIN_ATS_SCORE)
           if (!Number.isNaN(envAts)) minAtsScore = envAts
         }
-        const shouldShortlist = aiMatchScore >= shortlistThreshold && atsScore >= minAtsScore
 
         await Application.updateOne(
           { _id: application._id },
@@ -113,22 +110,17 @@ export async function POST(request: NextRequest) {
               atsScore,
               skillsMatched: analysis.skillsMatch || [],
               aiExplanation: (analysis.recommendations || []).slice(0, 2).join(" | "),
-              status: shouldShortlist ? "Shortlisted" : "Rejected",
-              shortlisted: shouldShortlist,
               missingSkills: (requiredSkills || []).filter((s) => !(analysis.skillsMatch || []).includes(s)),
-              ...(shouldShortlist ? { rejectionReason: undefined } : { rejectionReason: (analysis.weaknesses || [])[0] || "Does not meet requirements" }),
             },
           },
         )
 
-        // Reflect updated fields for response (optional freshness)
-        ;(application as any).aiMatchScore = aiMatchScore
-        ;(application as any).atsScore = atsScore
-        ;(application as any).status = shouldShortlist ? "Shortlisted" : "Rejected"
-        ;(application as any).shortlisted = shouldShortlist
+          // Reflect updated fields for response
+          ; (application as any).aiMatchScore = aiMatchScore
+          ; (application as any).atsScore = atsScore
       }
     } catch (e) {
-      console.error("Inline AI screening error (non-fatal):", e)
+      console.error("AI analysis error (non-fatal):", e)
       // Keep application as-is if AI analysis fails
     }
 
