@@ -483,7 +483,7 @@ export default function TestResultsPage() {
           <DialogHeader>
             <DialogTitle>Submission Detail</DialogTitle>
             <DialogDescription>
-              {detailSub?.candidateId?.name} — {detailSub?.candidateId?.email}
+              {detailSub?.candidateId?.name || "Unknown Candidate"} — {detailSub?.candidateId?.email || "No email"}
             </DialogDescription>
           </DialogHeader>
           {detailSub && (
