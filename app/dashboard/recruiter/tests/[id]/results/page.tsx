@@ -14,14 +14,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { SkillBar } from "@/components/ui/charts"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
 import {
   Loader2,
@@ -33,7 +25,6 @@ import {
   CheckCircle2,
   XCircle,
   RefreshCw,
-  Zap,
   BarChart3,
   Flag,
   ShieldCheck,
@@ -117,10 +108,8 @@ export default function TestResultsPage() {
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [analytics, setAnalytics] = useState<Analytics | null>(null)
   const [loading, setLoading] = useState(true)
-  const [autoSelecting, setAutoSelecting] = useState(false)
   const [sortBy, setSortBy] = useState<"score" | "date" | "plagiarism" | "integrity">("score")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
-  const [autoSelectOpen, setAutoSelectOpen] = useState(false)
   const [detailSub, setDetailSub] = useState<Submission | null>(null)
   const [statusUpdating, setStatusUpdating] = useState<string | null>(null)
 
@@ -160,30 +149,6 @@ export default function TestResultsPage() {
   useEffect(() => {
     fetchData()
   }, [fetchData])
-
-  const handleAutoSelect = async (minScore: number, topN: number) => {
-    setAutoSelecting(true)
-    try {
-      const res = await fetch(`/api/tests/${testId}/auto-select`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ minScore, maxPlagiarism: 40, topN }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        toast({ title: "Auto-select Complete", description: `${data.selectedCount} candidate(s) shortlisted.` })
-        fetchData()
-      } else {
-        const err = await res.json().catch(() => ({}))
-        toast({ title: "Auto-select Failed", description: (err as any).msg || "Unknown error.", variant: "destructive" })
-      }
-    } catch {
-      toast({ title: "Network Error", description: "Could not run auto-select.", variant: "destructive" })
-    } finally {
-      setAutoSelecting(false)
-      setAutoSelectOpen(false)
-    }
-  }
 
   const handleCandidateStatus = async (sub: Submission, newStatus: "Shortlisted" | "Rejected") => {
     const appId = sub.applicationId?._id
@@ -270,33 +235,6 @@ export default function TestResultsPage() {
           <Button variant="outline" size="sm" onClick={fetchData}>
             <RefreshCw className="mr-2 h-4 w-4" /> Refresh
           </Button>
-          <Dialog open={autoSelectOpen} onOpenChange={setAutoSelectOpen}>
-            <DialogTrigger asChild>
-              <Button
-                size="sm"
-                className="bg-purple-600 hover:bg-purple-700"
-                disabled={autoSelecting || submissions.length === 0}
-              >
-                {autoSelecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Zap className="mr-2 h-4 w-4" />}
-                Auto-Select Top Candidates
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Auto-Select Top Candidates</DialogTitle>
-                <DialogDescription>
-                  Shortlists the top 3 candidates with score ≥ 70% and plagiarism ≤ 40%, updates their
-                  status to <strong>Shortlisted</strong>, and sends a congratulations email automatically.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="flex justify-end gap-2 mt-4">
-                <Button variant="outline" onClick={() => setAutoSelectOpen(false)}>Cancel</Button>
-                <Button onClick={() => handleAutoSelect(70, 3)} className="bg-purple-600 hover:bg-purple-700">
-                  Confirm &amp; Shortlist
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
         </div>
       </div>
 
