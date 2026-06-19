@@ -104,7 +104,24 @@ describe("authService.initiateLogin", () => {
       .rejects.toMatchObject({ statusCode: 400 })
   })
 
-  test("sends OTP email and returns otp_sent on valid credentials", async () => {
+  test("returns tokens directly when OTP is not required", async () => {
+    const user = mockUser()
+    User.findOne.mockResolvedValue(user)
+    bcrypt.compare.mockResolvedValue(true)
+
+    const result = await authService.initiateLogin({ email: "test@example.com", password: "pass123" })
+
+    expect(result.accessToken).toBeDefined()
+    expect(result.user.email).toBe("test@example.com")
+    expect(user.save).toHaveBeenCalled()
+  })
+
+  test("sends OTP email when LOGIN_REQUIRE_OTP=true and SMTP configured", async () => {
+    process.env.LOGIN_REQUIRE_OTP = "true"
+    process.env.EMAIL_SERVICE_HOST = "smtp.gmail.com"
+    process.env.EMAIL_SERVICE_USER = "test@example.com"
+    process.env.EMAIL_SERVICE_PASS = "secret"
+
     const user = mockUser()
     User.findOne.mockResolvedValue(user)
     bcrypt.compare.mockResolvedValue(true)
@@ -113,7 +130,11 @@ describe("authService.initiateLogin", () => {
 
     expect(result.status).toBe("otp_sent")
     expect(sendEmail).toHaveBeenCalledTimes(1)
-    expect(user.save).toHaveBeenCalled()
+
+    delete process.env.LOGIN_REQUIRE_OTP
+    delete process.env.EMAIL_SERVICE_HOST
+    delete process.env.EMAIL_SERVICE_USER
+    delete process.env.EMAIL_SERVICE_PASS
   })
 })
 
