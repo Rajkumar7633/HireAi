@@ -112,4 +112,28 @@ function buildPasswordChangedEmail({ name }) {
   });
 }
 
-module.exports = { buildPasswordResetEmail, buildPasswordChangedEmail };
+module.exports = { buildPasswordResetEmail, buildPasswordChangedEmail, buildLoginOtpEmail };
+
+function buildLoginOtpEmail({ name, otp, expiresMinutes = 10 }) {
+  const APP_NAME = process.env.NEXT_PUBLIC_COMPANY_NAME || "HireAI";
+  const greeting = name ? `Hi ${name},` : "Hi there,";
+  const bodyHtml = `
+    <h2 style="margin:0 0 12px;font-size:20px;color:#0f172a;">Your sign-in verification code</h2>
+    <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#475569;">${greeting}<br/>Use this code to complete your ${APP_NAME} login. It expires in <strong>${expiresMinutes} minutes</strong>.</p>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 20px;background:#faf5ff;border:1px solid #e9d5ff;border-radius:14px;">
+      <tr>
+        <td style="padding:24px;text-align:center;">
+          <p style="margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#7c3aed;">Verification code</p>
+          <div style="display:inline-block;font-size:36px;font-weight:800;letter-spacing:0.35em;color:#5b21b6;padding:14px 24px;background:#fff;border-radius:12px;border:2px dashed #c4b5fd;">${otp}</div>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0;font-size:13px;color:#64748b;">If you didn't try to sign in, you can ignore this email.</p>`;
+
+  return emailShell({
+    preheader: `Your ${APP_NAME} login code is ${otp}. Expires in ${expiresMinutes} minutes.`,
+    title: `Sign in to ${APP_NAME}`,
+    bodyHtml,
+    footerNote: "Never share this code with anyone.",
+  });
+}

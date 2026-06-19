@@ -11,7 +11,7 @@ const jwt = require("jsonwebtoken")
 const crypto = require("crypto")
 const User = require("../models/User")
 const sendEmail = require("../utils/emailService")
-const { buildPasswordResetEmail, buildPasswordChangedEmail } = require("../utils/password-reset-email")
+const { buildPasswordResetEmail, buildPasswordChangedEmail, buildLoginOtpEmail } = require("../utils/password-reset-email")
 const { getAppUrl } = require("../utils/app-url")
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -50,6 +50,22 @@ function signAccessToken(payload) {
 
 function signRefreshToken(payload) {
   return jwt.sign({ ...payload, type: "refresh" }, process.env.JWT_SECRET, { expiresIn: "14d" })
+}
+
+async function sendLoginOtpEmail(user, otp) {
+  const appName = process.env.NEXT_PUBLIC_COMPANY_NAME || "HireAI"
+  const timeoutMs = 15000
+
+  await Promise.race([
+    sendEmail({
+      to: user.email,
+      subject: `${appName} login code: ${otp}`,
+      html: buildLoginOtpEmail({ name: user.name, otp, expiresMinutes: 10 }),
+    }),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Email send timed out after 15s")), timeoutMs)
+    ),
+  ])
 }
 
 // ─── Service functions ────────────────────────────────────────────────────────
@@ -180,12 +196,17 @@ async function initiateLogin({ email, password }) {
     console.log(`[otp] login code for ${user.email}: ${otp}`)
   }
 
-  // Do not block login on SMTP — OTP email sends in background (avoids Render/Vercel timeouts)
-  void sendEmail({
-    to: user.email,
-    subject: "Your HireAI Login Code",
-    html: `<p>Your verification code is <b>${otp}</b>. It expires in 10 minutes.</p>`,
-  }).catch((err) => console.error("[otp-email] send failed:", err?.message || err))
+  try {
+    await sendLoginOtpEmail(user, otp)
+    console.log(`[otp] email sent to ${user.email}`)
+  } catch (err) {
+    console.error(`[otp-email] FAILED for ${user.email}:`, err.message)
+    const error = new Error(
+      "Could not send verification email. Check your spam folder, wait one minute, and try again."
+    )
+    error.statusCode = 503
+    throw error
+  }
 
   return { status: "otp_sent", message: "Verification code sent to email" }
 }

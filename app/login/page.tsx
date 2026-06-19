@@ -86,6 +86,7 @@ export default function LoginPage() {
   const [otpCode, setOtpCode] = useState("")
   const [verifying, setVerifying] = useState(false)
   const [otpError, setOtpError] = useState("")
+  const [otpResending, setOtpResending] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
   const [focusedField, setFocusedField] = useState<string | null>(null)
@@ -132,7 +133,12 @@ export default function LoginPage() {
       if (response.ok && data?.status === "otp_sent") {
         setOtpPhase(true)
         setLoading(false)
-        toast({ title: "Verification code sent", description: "Check your email for the 6-digit code." })
+        toast({ title: "Verification code sent", description: `Check ${email.trim()} and your spam folder for the 6-digit code.` })
+        return
+      }
+
+      if (response.status === 503) {
+        setError(data.message || "Could not send verification email. Try again in a minute.")
         return
       }
 
@@ -150,6 +156,34 @@ export default function LoginPage() {
       setError("Network error. Please try again.")
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleResendOtp = async () => {
+    if (!password) {
+      setOtpError("Go back and enter your password to resend the code.")
+      return
+    }
+    setOtpResending(true)
+    setOtpError("")
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: email.trim(), password }),
+      })
+      const data = await response.json()
+      if (response.ok && data?.status === "otp_sent") {
+        toast({ title: "Code resent", description: "Check your inbox and spam folder." })
+        setOtpCode("")
+      } else {
+        setOtpError(data.message || "Could not resend code. Try again.")
+      }
+    } catch {
+      setOtpError("Network error. Try again.")
+    } finally {
+      setOtpResending(false)
     }
   }
 
@@ -330,6 +364,14 @@ export default function LoginPage() {
                       <Label className="text-center block text-slate-300">Verification code</Label>
                       <OtpInput value={otpCode} onChange={setOtpCode} />
                       {otpError && <p className="text-center text-sm text-red-400">{otpError}</p>}
+                      <button
+                        type="button"
+                        onClick={handleResendOtp}
+                        disabled={otpResending}
+                        className="w-full text-center text-xs text-violet-300 hover:text-white disabled:opacity-50"
+                      >
+                        {otpResending ? "Sending new code..." : "Didn't get a code? Resend"}
+                      </button>
                       <button
                         type="button"
                         onClick={() => { setOtpPhase(false); setOtpCode(""); setOtpError("") }}

@@ -9,27 +9,44 @@ function hasSmtpConfig() {
   )
 }
 
-let transporter = null
-if (hasSmtpConfig()) {
-  transporter = nodemailer.createTransport({
+function createTransporter() {
+  const port = Number(process.env.EMAIL_SERVICE_PORT)
+  const secure = port === 465
+
+  return nodemailer.createTransport({
     host: process.env.EMAIL_SERVICE_HOST,
-    port: Number(process.env.EMAIL_SERVICE_PORT),
-    secure: String(process.env.EMAIL_SERVICE_PORT) === "465",
+    port,
+    secure,
+    requireTLS: !secure,
     auth: {
       user: process.env.EMAIL_SERVICE_USER,
       pass: process.env.EMAIL_SERVICE_PASS,
     },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
   })
+}
+
+let transporter = null
+if (hasSmtpConfig()) {
+  transporter = createTransporter()
+  transporter.verify().then(() => {
+    console.log("✅ SMTP ready:", process.env.EMAIL_SERVICE_HOST)
+  }).catch((err) => {
+    console.error("❌ SMTP verification failed:", err.message)
+  })
+} else {
+  console.warn("⚠️  SMTP not configured — set EMAIL_SERVICE_HOST/PORT/USER/PASS on Render")
 }
 
 const sendEmail = async ({ to, subject, html }) => {
   try {
     if (!transporter) {
-      // Dev fallback: no SMTP configured. Log the email and pretend success.
       console.warn("[email] SMTP not configured. Logging email instead of sending.")
       console.log("[email] To:", to)
       console.log("[email] Subject:", subject)
-      console.log("[email] HTML:\n", html)
+      console.log("[email] Body preview:", String(html).slice(0, 200))
       return { messageId: "mock-dev-message-id", mocked: true }
     }
 
@@ -44,19 +61,14 @@ const sendEmail = async ({ to, subject, html }) => {
       subject,
       html,
     })
-    console.log("Message sent: %s", info.messageId)
-    if (process.env.EMAIL_SERVICE_HOST === "smtp.ethereal.email") {
-      console.log("Preview URL: %s", nodemailer.getTestMessageUrl(info))
-    }
+    console.log("[email] Sent to %s — messageId: %s", to, info.messageId)
     return info
   } catch (error) {
-    console.error("Error sending email:", error)
+    console.error("[email] Send failed to", to, "—", error.message)
     if (process.env.STRICT_EMAIL === "1") {
-      throw new Error("Failed to send email")
+      throw new Error("Failed to send email: " + error.message)
     }
-    // Dev fallback: treat as sent to avoid blocking flows when SMTP rejects
-    console.warn("[email] Treating send failure as success (dev fallback). Set STRICT_EMAIL=1 to enforce.")
-    return { messageId: "mock-dev-on-failure", mocked: true, error: String(error?.message || error) }
+    throw error
   }
 }
 
