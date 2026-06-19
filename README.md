@@ -80,7 +80,7 @@ Authentication uses **JWT** (HttpOnly cookies) with **email OTP** login via the 
 | Profile & profile setup | `profile`, `profile-setup` | ✅ Existing |
 | Resume builder | `resume-builder` | ✅ Existing |
 | Resume chatbot (AI) | `resume-chatbot`, `resume-chatbot-simple` | ✅ Existing |
-| Applications | `applications` | ✅ Existing |
+| Applications | `applications` | ✅ **Enhanced** — improved UI, status tracking |
 | Job matches (AI) | `matches` | ✅ Existing |
 | **Skill gap analyzer** | `skill-gap` | ✅ **Enhanced** — role presets, AI analysis, history, export |
 | **Interview coach** | `interview-coach` | ✅ **Enhanced** — STAR, filler detection, session stats |
@@ -89,11 +89,14 @@ Authentication uses **JWT** (HttpOnly cookies) with **email OTP** login via the 
 | Assessments | `assessments` | ✅ Existing |
 | Campus drives (apply) | `campus-drives` | ✅ Existing |
 | Video interviews | `video-interviews` | ✅ Existing |
+| **Offer letters** | `offer-letters` | ✅ **New** — view, download, track offers |
+| **Meetings** | `meetings`, `meetings/[id]` | ✅ **New** — LiveKit video meetings |
 | Social feed & connections | `social/*` | ✅ Existing |
 | LinkedIn/GitHub import | `social-import` | ✅ Existing |
 | My college | `my-college` | ✅ Existing |
 | Status portal | `status-portal` | ✅ Existing |
 | Skills assessments | `skills` | ✅ Existing |
+| **History** | `history` | ✅ **New** — activity timeline |
 
 ### Recruiter (`/dashboard/recruiter`)
 
@@ -103,39 +106,45 @@ Authentication uses **JWT** (HttpOnly cookies) with **email OTP** login via the 
 | Jobs & job descriptions | `jobs`, `job-descriptions` | ✅ Existing |
 | AI job description tailor | `job-description-tailor` | ✅ Existing |
 | Candidates & talent pool | `candidates`, `talent-pool` | ✅ Existing |
-| AI matching & screening | `ai-matching`, `ai-screening` | ✅ Existing |
+| AI matching & screening | `ai-matching`, `ai-screening` | ✅ **Enhanced** — improved matching, shortlist generation |
 | **Coding tests** | `tests`, `tests/create/coding` | ✅ **Enhanced** — create with security suite toggles |
 | **Test analytics** | `tests/[id]/analytics` | ✅ **Enhanced** — KPIs, leaderboard, **live security dashboard** |
 | **Test assign** | `tests/[id]/assign` | ✅ **Enhanced** — email invite flow |
 | Assessments | `assessments` | ✅ Existing |
 | **Campus Drive Hub** | `campus-drives` | ✅ **New** — browse colleges, send/receive proposals |
-| Video interviews | `video-interviews` | ✅ Existing |
+| Video interviews | `video-interviews` | ✅ **Enhanced** — improved UI, feedback wizard |
 | AI interview | `ai-interview` | ✅ Existing |
-| Offer letters | `offer-letters` | ✅ Existing |
+| **Offer letters** | `offer-letters`, `offer-letters/create` | ✅ **Enhanced** — PDF generation, tracking |
 | Interview scorecards | `interview-scorecards` | ✅ Existing |
 | Candidate benchmark | `benchmark/[id]` | ✅ Existing |
 | Analytics (basic + advanced) | `analytics`, `analytics/advanced` | ✅ Existing |
-| Background verification | `background-verification` | ✅ Existing |
-| Email templates | `email-templates` | ✅ Existing |
+| **Background verification** | `background-verification` | ✅ **Enhanced** — multi-provider, analytics |
+| **Email templates** | `email-templates` | ✅ **Enhanced** — customizable templates, logs, settings |
 | Collaboration | `collaboration` | ✅ Existing |
+| **History** | `history` | ✅ **New** — activity timeline |
 
 ### College (`/dashboard/college`)
 
 | Feature | Route | Status |
 |---------|-------|--------|
-| Dashboard | `/dashboard/college` | ✅ Existing |
-| Students & onboarding | `students`, `onboard-student` | ✅ Existing |
-| **Campus drives** | `campus-drives`, `create`, `[id]` | ✅ Existing |
-| **Partnerships & invites** | `partnerships` | ✅ **Enhanced** — browse companies, bidirectional invites |
-| Placements | `placements` | ✅ Existing |
+| Dashboard | `/dashboard/college` | ✅ **Enhanced** — real analytics data, notifications dropdown |
+| Students & onboarding | `students`, `onboard-student`, `students/[id]` | ✅ Existing |
+| **Campus drives** | `campus-drives`, `create`, `[id]` | ✅ **Enhanced** — full CRUD, tabbed interface, eligibility criteria |
+| **Partnerships & invites** | `partnerships` | ✅ **Enhanced** — browse companies, bidirectional invites, performance tracking |
+| **Placements** | `placements` | ✅ **New** — offer tracking, status management, document management |
+| **Interviews** | `interviews` | ✅ **New** — scheduling, result tracking, feedback, analytics |
+| **Analytics** | `analytics` | ✅ **New** — comprehensive placement analytics, trends, at-risk students |
 | Placement analytics | `placement-analytics` | ✅ Existing |
 | Student tracking (multi-year) | `student-tracking` | ✅ Existing |
 | Bulk operations | `bulk-operations` | ✅ Existing |
 | Assign tests | `assign-tests` | ✅ Existing |
 | Leaderboard | `leaderboard` | ✅ Existing |
-| Interviews | `interviews` | ✅ Existing |
+| Drive shortlist | `drive-shortlist` | ✅ Existing |
 | Support requests | `support-requests` | ✅ Existing |
-| Analytics & reports | `analytics`, `reports` | ✅ Existing |
+| Reports | `reports` | ✅ Existing |
+| **Meetings** | `meetings`, `meetings/[id]` | ✅ **New** — LiveKit video meetings for placement cells |
+| Tests | `tests`, `tests/[id]`, `tests/create` | ✅ Existing |
+| Profile | `profile` | ✅ Existing |
 
 ### Shared / All roles
 
@@ -203,11 +212,21 @@ Work completed in recent development cycles:
 - **Auto-publish:** accepting a proposal creates a live campus drive for students + notifies eligible students
 - **Direction tracking:** `createdByRole`, `createdByUserId`, notification-based backfill for legacy rows
 
+### College Dashboard Updates
+
+- **Analytics Dashboard:** `/dashboard/college/analytics` — comprehensive placement analytics with real data, overview stats, department/branch distribution, placement status, readiness distribution, monthly trends, drive performance, top packages, at-risk student identification
+- **Placements Tracking:** `/dashboard/college/placements` — student placement tracking with offer details, offer status management (Accepted, Pending, Rejected, Deferred), package and location tracking, document management, interview rounds tracking
+- **Interview Management:** `/dashboard/college/interviews` — interview scheduling with date, time, venue, interview type categorization (Technical, HR, GD, Aptitude), status and result tracking, feedback management, analytics dashboard
+- **Campus Drives:** `/dashboard/college/campus-drives` — full CRUD operations for campus drives, tabbed interface (Upcoming, Ongoing, Completed, All), drive creation dialog with eligibility criteria, student registration and interview scheduling
+- **Partnerships:** `/dashboard/college/partnerships` — partnership management with company details, performance tracking (drives conducted, students placed), notes system for partnership communication, tabbed interface by status (Active, Pending, Inactive, All)
+- **Notifications Integration:** real-time notifications dropdown in header, unread count indicator, priority-based color coding, mark as read functionality, mark all as read option
+
 ### Notification Center
 
 - Full redesign at `/dashboard/notifications`
 - Categories, filters, stats, bulk mark read/delete, deep links per role
 - Bell component + SSE hooks
+- Real-time notifications with priority-based color coding
 
 ### Interview Coach (Job Seeker)
 
@@ -221,7 +240,7 @@ Work completed in recent development cycles:
 
 ### Auth, Password Recovery & Legal Pages
 
-- **Login** (`/login`) — split layout, OTP boxes, remember me, social “coming soon”, `AuthPageBackdrop` (CSS + light canvas, no Three.js)
+- **Login** (`/login`) — split layout, OTP boxes, remember me, social "coming soon", `AuthPageBackdrop` (CSS + light canvas, no Three.js)
 - **Signup** (`/signup`) — 3-step wizard (profile → security → role), password strength, secure password generator, role cards
 - **Forgot password** (`/auth/forgot-password`) — branded email with reset link + 6-digit OTP
 - **Reset password** (`/auth/reset-password`) — strength meter, OTP boxes, resend countdown
@@ -267,6 +286,85 @@ Recruiters configure security when creating tests at `/dashboard/recruiter/tests
 - Password reset via link or OTP (`/api/auth/forgot-password`, `/api/auth/reset-password`)
 - HttpOnly `auth-token` cookie + refresh token
 - Normalized `userId` in session for consistent MongoDB queries
+
+### Background Verification System
+
+- **Route:** `/dashboard/recruiter/background-verification`
+- **API:** `GET/POST /api/background-verification`, `GET /api/background-verification/[id]`, `GET /api/background-verification/candidates`, `GET /api/background-verification/stats`, `GET /api/background-verification/export`
+- Multi-provider background verification with candidate tracking
+- Verification status management, document uploads, verification reports
+- Analytics dashboard with verification statistics and trends
+
+### Email Templates & Communication
+
+- **Route:** `/dashboard/recruiter/email-templates`
+- **API:** `GET/POST /api/communication/email-templates`, `GET/POST /api/communication/email-templates/[id]`, `GET /api/communication/email/logs`, `GET/POST /api/communication/email/settings`
+- Customizable email templates for various platform events
+- Email logs and tracking for sent emails
+- Email settings configuration (SMTP, branding, defaults)
+- Status change email automation with template-based notifications
+
+### Offer Letter Management
+
+- **Route:** `/dashboard/recruiter/offer-letters`, `/dashboard/job-seeker/offer-letters`
+- **API:** `GET/POST /api/offer-letter`, `GET/POST /api/offer-letter/[id]`, `GET /api/offer-letter/[id]/download`
+- PDF generation for offer letters
+- Offer letter creation, tracking, and management
+- Downloadable PDFs for candidates
+- Offer status tracking (Sent, Viewed, Accepted, Rejected, Expired)
+
+### LiveKit Integration for Meetings
+
+- **Route:** `/dashboard/college/meetings`, `/dashboard/job-seeker/meetings`
+- **API:** `GET/POST /api/college/meetings`, `GET /api/college/meetings/[id]`, `GET /api/college/meetings/[id]/join`, `GET /api/college/meetings/livekit-token`
+- Teams-style video meetings for college placement cells
+- Real-time video conferencing with LiveKit
+- Meeting scheduling and management
+- Join room functionality with token-based authentication
+
+### Interview Feedback Wizard
+
+- **Component:** `components/interview-feedback-wizard.tsx`
+- **API:** `POST /api/video-interviews/[id]/feedback`
+- Structured interview feedback collection
+- Multi-step wizard for comprehensive feedback
+- Feedback categories: technical, communication, cultural fit
+- Auto-sync with interview records
+
+### Activity Timeline & History
+
+- **Route:** `/dashboard/history`
+- **API:** `GET /api/history`
+- Comprehensive activity timeline for all user actions
+- History tracking for applications, interviews, tests, placements
+- Filterable by date, type, and status
+- Export functionality for activity reports
+
+### AI Matching & Screening Enhancements
+
+- **Route:** `/dashboard/recruiter/ai-matching`
+- **API:** `GET/POST /api/ai/matching`, `GET /api/ai/matching/shortlist`
+- Enhanced AI-powered candidate matching
+- Shortlist generation with AI scoring
+- Improved job-candidate compatibility analysis
+- Real-time matching with live updates
+
+### Video Interview Enhancements
+
+- **Route:** `/dashboard/recruiter/video-interviews`
+- **API:** `GET/POST /api/video-interviews`, `GET/POST /api/video-interviews/[id]`, `POST /api/video-interviews/[id]/feedback`
+- Improved video interview room with better UI
+- Enhanced feedback collection and management
+- Better recording and playback functionality
+- Integration with interview feedback wizard
+
+### Coding Test Security & Validation
+
+- **API:** `POST /api/code/validate-hidden`
+- Hidden test case validation for coding tests
+- Security checks for code submissions
+- Integrity scoring for test submissions
+- Automated plagiarism detection
 
 ---
 
@@ -466,6 +564,7 @@ HireAi/
 | POST | `/api/proctoring/event` | Record proctor violation/snapshot |
 | GET | `/api/proctoring/event` | List proctor events (recruiter) |
 | POST | `/api/code/execute` | Run code (Judge0) |
+| POST | `/api/code/validate-hidden` | Validate hidden test cases |
 
 ### Job seeker tools
 
@@ -474,6 +573,60 @@ HireAi/
 | GET/POST | `/api/skill-gap` | Skill gap analysis |
 | GET/POST/DELETE | `/api/interview-coach` | Interview practice sessions |
 | GET/POST | `/api/notifications` | Notification center |
+| GET/POST | `/api/applications/[id]/start-test` | Start assigned test |
+| POST | `/api/applications/[id]/submit-test` | Submit test results |
+
+### Background verification
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET/POST | `/api/background-verification` | List/create verifications |
+| GET | `/api/background-verification/[id]` | Get verification details |
+| GET | `/api/background-verification/candidates` | Get candidate verifications |
+| GET | `/api/background-verification/stats` | Verification statistics |
+| GET | `/api/background-verification/export` | Export verification data |
+
+### Email & communication
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET/POST | `/api/communication/email-templates` | List/create email templates |
+| GET/POST | `/api/communication/email-templates/[id]` | Manage template |
+| GET | `/api/communication/email/logs` | Email delivery logs |
+| GET/POST | `/api/communication/email/settings` | Email settings |
+| POST | `/api/communication/email/send` | Send email |
+
+### Offer letters
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET/POST | `/api/offer-letter` | List/create offer letters |
+| GET/POST | `/api/offer-letter/[id]` | Manage offer letter |
+| GET | `/api/offer-letter/[id]/download` | Download PDF |
+
+### Meetings (LiveKit)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET/POST | `/api/college/meetings` | List/create meetings |
+| GET | `/api/college/meetings/[id]` | Get meeting details |
+| GET | `/api/college/meetings/[id]/join` | Join meeting room |
+| GET | `/api/college/meetings/livekit-token` | Get LiveKit token |
+
+### History & activity
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/history` | Get activity timeline |
+
+### Admin
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/admin/stats` | Platform statistics |
+| GET | `/api/admin/users` | User management |
+| GET/POST | `/api/admin/moderation` | User moderation |
+| GET | `/api/admin/security` | Security events |
 
 ### Legacy backend (Express)
 
@@ -522,4 +675,4 @@ For bugs and feature requests, open an issue on the repository.
 
 ---
 
-*Last updated: auth UX overhaul, password recovery, terms/privacy, live proctoring (BlazeFace + COCO-SSD), security analytics dashboard, Three.js removed.*
+*Last updated: college dashboard enhancements (analytics, placements, interviews, partnerships), background verification system, email templates & communication, offer letter management with PDF generation, LiveKit integration for meetings, interview feedback wizard, activity timeline & history, AI matching enhancements, video interview improvements, coding test security & validation, admin dashboard updates.*
