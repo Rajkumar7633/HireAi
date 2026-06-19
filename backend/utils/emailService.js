@@ -33,8 +33,13 @@ const sendEmail = async ({ to, subject, html }) => {
       return { messageId: "mock-dev-message-id", mocked: true }
     }
 
+    const from =
+      process.env.SMTP_FROM ||
+      process.env.EMAIL_FROM ||
+      `"HireAI" <${process.env.EMAIL_SERVICE_USER}>`
+
     const info = await transporter.sendMail({
-      from: `"HireAI" <${process.env.EMAIL_SERVICE_USER}>`,
+      from,
       to,
       subject,
       html,

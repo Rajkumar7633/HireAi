@@ -4,9 +4,10 @@
 
 const APP_NAME = process.env.NEXT_PUBLIC_COMPANY_NAME || "HireAI";
 const BRAND_COLOR = process.env.NEXT_PUBLIC_BRAND_COLOR || "#7c3aed";
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+const { getAppUrl } = require("./app-url");
 
 function emailShell({ preheader, title, bodyHtml, footerNote }) {
+  const APP_URL = getAppUrl();
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -51,6 +52,7 @@ function emailShell({ preheader, title, bodyHtml, footerNote }) {
 }
 
 function buildPasswordResetEmail({ name, email, resetUrl, otp, expiresMinutes = 15 }) {
+  const APP_URL = getAppUrl();
   const greeting = name ? `Hi ${name},` : "Hi there,";
   const resetPageUrl = `${APP_URL}/auth/reset-password?email=${encodeURIComponent(email || "")}`;
   const bodyHtml = `
@@ -94,6 +96,7 @@ function buildPasswordResetEmail({ name, email, resetUrl, otp, expiresMinutes = 
 }
 
 function buildPasswordChangedEmail({ name }) {
+  const APP_URL = getAppUrl();
   const greeting = name ? `Hi ${name},` : "Hi there,";
   const bodyHtml = `
     <h2 style="margin:0 0 12px;font-size:20px;color:#0f172a;">Password updated successfully</h2>

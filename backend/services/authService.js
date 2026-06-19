@@ -12,6 +12,7 @@ const crypto = require("crypto")
 const User = require("../models/User")
 const sendEmail = require("../utils/emailService")
 const { buildPasswordResetEmail, buildPasswordChangedEmail } = require("../utils/password-reset-email")
+const { getAppUrl } = require("../utils/app-url")
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -366,7 +367,7 @@ async function forgotPassword({ email }) {
   }
   await user.save()
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+  const appUrl = getAppUrl()
   const resetUrl = `${appUrl}/auth/reset-password?token=${rawToken}&email=${encodeURIComponent(cleanEmail)}`
 
   if (process.env.NODE_ENV !== "production") {
