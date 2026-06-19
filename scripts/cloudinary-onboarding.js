@@ -10,7 +10,7 @@ const { v2: cloudinary } = require("cloudinary");
 cloudinary.config({
   cloud_name: "dbewx3gae",
   api_key: "227253862341918",
-  api_secret: "YOUR_API_SECRET", // ← replace this with your API secret from Cloudinary console
+  api_secret: "YOUR_API_SECRET", // ← replace locally to re-run; set on Render/Vercel for production
   secure: true,
 });
 
