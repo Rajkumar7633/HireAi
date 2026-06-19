@@ -35,6 +35,11 @@ require("./models/indexes").ensureIndexes().catch((e) =>
 const app = express();
 const server = http.createServer(app);
 
+// ─── Health check endpoint for keep-alive ────────────────────────────────────
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
 // ─── Security headers (helmet) ─────────────────────────────────────────────
 app.use(
   helmet({
@@ -240,6 +245,18 @@ server.listen(PORT, () => {
   console.log(`🗜️  Compression enabled`);
   console.log(`🛡️  Helmet security headers enabled`);
 });
+
+// ─── Keep-alive mechanism (ping every 2 minutes) ─────────────────────────────
+setInterval(async () => {
+  try {
+    const response = await fetch(`http://localhost:${PORT}/health`);
+    if (response.ok) {
+      console.log(`🔄 Keep-alive ping successful at ${new Date().toISOString()}`);
+    }
+  } catch (error) {
+    console.error(`❌ Keep-alive ping failed at ${new Date().toISOString()}:`, error.message);
+  }
+}, 2 * 60 * 1000); // 2 minutes
 
 // ─── Graceful shutdown ─────────────────────────────────────────────────────
 const shutdown = (signal) => {

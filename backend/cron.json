@@ -1,0 +1,5 @@
+{
+  "schedule": "*/2 * * * *",
+  "command": "curl -X GET https://your-backend-url.onrender.com/health",
+  "description": "Keep backend alive by pinging health endpoint every 2 minutes"
+}
