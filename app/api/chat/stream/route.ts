@@ -29,7 +29,7 @@ async function getGeminiResponse(userMessage: string, resumeText: string): Promi
     const model = google(process.env.GEMINI_MODEL || "gemini-1.5-pro")
     const truncated = resumeText.slice(0, 3500)
     const { text } = await generateText({
-      model,
+      model: model as any,
       prompt: `You are an expert resume coach and career advisor. You have access to the candidate's resume below.
 Answer their question in a helpful, specific, conversational way. Be direct and actionable.
 Use bullet points or numbered lists where appropriate. Do NOT return JSON. Max 300 words.
@@ -170,9 +170,10 @@ export async function POST(req: NextRequest) {
     connectDB()
       .then(() => {
         const AIChatLog = getChatLogModel()
+        const now = new Date()
         return AIChatLog.insertMany([
-          { userId: session.userId, conversationId: convoId, role: "user", content: messageContent.trim() },
-          { userId: session.userId, conversationId: convoId, role: "assistant", content: aiContent },
+          { userId: session.userId, conversationId: convoId, role: "user", content: messageContent.trim(), createdAt: now, updatedAt: now },
+          { userId: session.userId, conversationId: convoId, role: "assistant", content: aiContent, createdAt: now, updatedAt: now },
         ])
       })
       .catch((err) => console.error("[AIChatLog] persist error:", err))
