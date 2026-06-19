@@ -264,6 +264,8 @@ async function initiateLogin({ email, password }) {
       userMessage = `Could not send code to ${user.email}. Verify a sending domain on Resend (resend.com/domains) and set SMTP_FROM to that domain — not onboarding@resend.dev.`
     } else if (msg.includes("domain is not verified") || msg.includes("yourdomain.com")) {
       userMessage = `Email not configured: SMTP_FROM uses an unverified domain. On Render, set SMTP_FROM to a real verified domain (e.g. HireAI <noreply@mmumullana.org>) after adding it at resend.com/domains.`
+    } else if (msg.includes("Connection timeout") || msg.includes("ETIMEDOUT")) {
+      userMessage = `Email server timed out. On Render use Brevo only: delete RESEND_API_KEY and all EMAIL_SERVICE_* Gmail vars, set SMTP_HOST=smtp-relay.brevo.com and verify sender in Brevo.`
     }
     const deliveryErr = new Error(userMessage)
     deliveryErr.statusCode = 503

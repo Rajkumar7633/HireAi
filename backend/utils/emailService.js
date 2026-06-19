@@ -1,17 +1,25 @@
 const nodemailer = require("nodemailer")
 
+// SMTP_* wins over EMAIL_SERVICE_* so Brevo on Render is not overridden by old Gmail vars
 function getSmtpSettings() {
   return {
-    host: process.env.EMAIL_SERVICE_HOST || process.env.SMTP_HOST,
-    port: Number(process.env.EMAIL_SERVICE_PORT || process.env.SMTP_PORT || 587),
-    user: process.env.EMAIL_SERVICE_USER || process.env.SMTP_USER,
-    pass: process.env.EMAIL_SERVICE_PASS || process.env.SMTP_PASS,
+    host: process.env.SMTP_HOST || process.env.EMAIL_SERVICE_HOST,
+    port: Number(process.env.SMTP_PORT || process.env.EMAIL_SERVICE_PORT || 587),
+    user: process.env.SMTP_USER || process.env.EMAIL_SERVICE_USER,
+    pass: process.env.SMTP_PASS || process.env.EMAIL_SERVICE_PASS,
   }
 }
 
 function hasSmtpConfig() {
   const { host, user, pass } = getSmtpSettings()
   return !!(host && user && pass)
+}
+
+function shouldUseSmtpOnly() {
+  if (process.env.EMAIL_PROVIDER === "smtp") return true
+  if (process.env.SMTP_HOST) return true
+  const host = (getSmtpSettings().host || "").toLowerCase()
+  return host.includes("brevo") || host.includes("sendgrid") || host.includes("mailgun")
 }
 
 function createTransporter() {
@@ -24,19 +32,20 @@ function createTransporter() {
     secure,
     requireTLS: !secure,
     auth: { user, pass },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
+    connectionTimeout: 30000,
+    greetingTimeout: 30000,
+    socketTimeout: 45000,
   })
 }
 
 let transporter = null
 if (hasSmtpConfig()) {
   transporter = createTransporter()
-  if (!process.env.RESEND_API_KEY) {
+  const { host } = getSmtpSettings()
+  if (shouldUseSmtpOnly() || !process.env.RESEND_API_KEY) {
     setTimeout(() => {
       transporter.verify().then(() => {
-        console.log("✅ SMTP ready:", getSmtpSettings().host)
+        console.log("✅ SMTP ready:", host)
       }).catch((err) => {
         console.warn("⚠️  SMTP verify failed:", err.message)
       })
@@ -44,12 +53,14 @@ if (hasSmtpConfig()) {
   }
 }
 
-if (process.env.RESEND_API_KEY) {
+if (shouldUseSmtpOnly() && transporter) {
+  console.log("✅ Email via SMTP only:", getSmtpSettings().host)
+} else if (process.env.RESEND_API_KEY) {
   console.log("✅ Email: Resend API primary" + (transporter ? ", SMTP fallback" : ""))
 } else if (transporter) {
   console.log("✅ Email via SMTP:", getSmtpSettings().host)
 } else {
-  console.warn("⚠️  Email not configured — set Brevo/SendGrid SMTP_* or RESEND_API_KEY on Render")
+  console.warn("⚠️  Email not configured — set Brevo SMTP_* on Render")
 }
 
 async function sendViaResend({ to, subject, html }) {
@@ -73,39 +84,15 @@ async function sendViaResend({ to, subject, html }) {
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
     const msg = data?.message || `Resend error ${res.status}`
-    if (res.status === 403 && String(msg).includes("only send testing emails")) {
-      console.error(
-        "[email] Resend sandbox: onboarding@resend.dev only delivers to your Resend account email.",
-        "Verify a domain at https://resend.com/domains and set SMTP_FROM=HireAI <noreply@yourdomain.com>"
-      )
-    }
     throw new Error(msg)
   }
   console.log("[email] Resend sent to %s — id: %s", to, data.id)
   return data
 }
 
-const sendEmail = async ({ to, subject, html }) => {
-  // Resend (HTTP) works on Render; Gmail SMTP often times out on cloud hosts
-  if (process.env.RESEND_API_KEY) {
-    try {
-      return await sendViaResend({ to, subject, html })
-    } catch (err) {
-      console.error("[email] Resend failed:", err.message)
-      if (transporter) {
-        console.log("[email] Falling back to SMTP for", to)
-      } else {
-        throw err
-      }
-    }
-  }
-
+async function sendViaSmtp({ to, subject, html }) {
   if (!transporter) {
-    console.warn("[email] SMTP not configured. Logging email instead of sending.")
-    console.log("[email] To:", to, "| Subject:", subject)
-    const otpMatch = String(html).match(/>(\d{6})</)
-    if (otpMatch) console.log("[email] OTP (dev log):", otpMatch[1])
-    return { messageId: "mock-dev-message-id", mocked: true }
+    throw new Error("SMTP not configured")
   }
 
   const from =
@@ -114,8 +101,38 @@ const sendEmail = async ({ to, subject, html }) => {
     `"HireAI" <${getSmtpSettings().user}>`
 
   const info = await transporter.sendMail({ from, to, subject, html })
-  console.log("[email] Sent to %s — messageId: %s", to, info.messageId)
+  console.log("[email] SMTP sent to %s via %s — messageId: %s", to, getSmtpSettings().host, info.messageId)
   return info
+}
+
+const sendEmail = async ({ to, subject, html }) => {
+  // Brevo / explicit SMTP_HOST — skip Resend (avoids gmail.com domain errors + double attempts)
+  if (shouldUseSmtpOnly() && transporter) {
+    return sendViaSmtp({ to, subject, html })
+  }
+
+  if (process.env.RESEND_API_KEY) {
+    try {
+      return await sendViaResend({ to, subject, html })
+    } catch (err) {
+      console.error("[email] Resend failed:", err.message)
+      if (transporter) {
+        console.log("[email] Falling back to SMTP for", to)
+        return sendViaSmtp({ to, subject, html })
+      }
+      throw err
+    }
+  }
+
+  if (transporter) {
+    return sendViaSmtp({ to, subject, html })
+  }
+
+  console.warn("[email] SMTP not configured. Logging email instead of sending.")
+  console.log("[email] To:", to, "| Subject:", subject)
+  const otpMatch = String(html).match(/>(\d{6})</)
+  if (otpMatch) console.log("[email] OTP (dev log):", otpMatch[1])
+  return { messageId: "mock-dev-message-id", mocked: true }
 }
 
 module.exports = sendEmail
