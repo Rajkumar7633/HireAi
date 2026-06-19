@@ -253,11 +253,25 @@ async function initiateLogin({ email, password }) {
     console.log(`[otp] login code for ${user.email}: ${otp}`)
   }
 
-  void sendLoginOtpEmail(user, otp)
-    .then(() => console.log(`[otp] email sent to ${user.email} (${user.role})`))
-    .catch((err) => console.error(`[otp-email] FAILED for ${user.email} (${user.role}):`, err.message))
+  try {
+    await sendLoginOtpEmail(user, otp)
+    console.log(`[otp] email sent to ${user.email} (${user.role})`)
+  } catch (err) {
+    console.error(`[otp-email] FAILED for ${user.email} (${user.role}):`, err.message)
+    const deliveryErr = new Error(
+      String(err.message || "").includes("only send testing emails")
+        ? `Could not send code to ${user.email}. Verify a sending domain on Resend (resend.com/domains).`
+        : `Could not send verification email to ${user.email}. Please try again.`
+    )
+    deliveryErr.statusCode = 503
+    throw deliveryErr
+  }
 
-  return { status: "otp_sent", message: "Verification code sent to your email" }
+  return {
+    status: "otp_sent",
+    message: `Verification code sent to ${user.email}`,
+    email: user.email,
+  }
 }
 
 /**
